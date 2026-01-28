@@ -24,27 +24,27 @@ Qoa es un sistema multi-tenant que sirve a:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Qoa Platform                             │
+│                         Qoa Platform                            │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌─────────┐      ┌─────────┐      ┌─────────┐                │
-│   │  CPG A  │      │  CPG B  │      │  CPG C  │   ← Marcas     │
-│   └────┬────┘      └────┬────┘      └────┬────┘                │
+│                                                                 │
+│   ┌─────────┐      ┌─────────┐      ┌─────────┐                 │
+│   │  CPG A  │      │  CPG B  │      │  CPG C  │   ← Marcas      │
+│   └────┬────┘      └────┬────┘      └────┬────┘                 │
 │        │                │                │                      │
 │        └───────┬────────┴────────┬───────┘                      │
-│                │                 │                               │
-│                ▼                 ▼                               │
+│                │                 │                              │
+│                ▼                 ▼                              │
 │          ┌──────────┐      ┌──────────┐                         │
 │          │  PDV 1   │      │  PDV 2   │   ← PDVs (many-to-many) │
 │          └────┬─────┘      └────┬─────┘                         │
-│               │                 │                                │
-│               └────────┬────────┘                                │
-│                        │                                         │
-│                        ▼                                         │
-│               ┌─────────────────┐                                │
+│               │                 │                               │
+│               └────────┬────────┘                               │
+│                        │                                        │
+│                        ▼                                        │
+│               ┌─────────────────┐                               │
 │               │   Consumidores  │   ← Siempre vía PDV           │
-│               └─────────────────┘                                │
-│                                                                  │
+│               └─────────────────┘                               │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -84,7 +84,7 @@ rewards         → Por campaign (hereda brand_id)
 
 ```
 ┌──────────────────────────────────────────────┐
-│                   Request                     │
+│                   Request                    │
 └──────────────────┬───────────────────────────┘
                    │
                    ▼
@@ -210,5 +210,7 @@ Los consumidores pueden participar en múltiples programas a través de diferent
 
 ## Referencias
 
-- [Multi-tenancy Patterns - Microsoft](https://docs.microsoft.com/en-us/azure/architecture/patterns/multitenancy)
+- [Multi-tenancy Patterns - Microsoft](https://learn.microsoft.com/en-us/azure/architecture/guide/multitenant/approaches/overview)
+- [Multi-tenant Database Architecture Patterns Explained](https://www.bytebase.com/blog/multi-tenant-database-architecture-patterns-explained/)
+- [Multi-tenant Architecture: A Complete Guide (Basic to Advanced)](https://dev.to/tak089/multi-tenant-architecture-a-complete-guide-basic-to-advanced-119o)
 - [Row Level Security - PostgreSQL](https://www.postgresql.org/docs/current/ddl-rowsecurity.html)
