@@ -8,8 +8,8 @@
 
 ### Documentos de Overview
 - [x] `docs/01-overview/glosario.md` - Términos del dominio
-- [ ] `docs/01-overview/vision.md` - Qué SI y NO hace el MVP
-- [ ] `docs/01-overview/alcance.md` - Scope de "Conectados"
+- [x] `docs/01-overview/vision.md` - Qué SI y NO hace el MVP
+- [x] `docs/01-overview/alcance.md` - Scope de "Conectados"
 
 ### Arquitectura
 - [ ] `docs/02-architecture/nfrs.md` - Requerimientos no funcionales
@@ -102,6 +102,8 @@
 |-------|--------|
 | 2026-01-28 | Creación del plan inicial y estructura de documentación |
 | 2026-01-28 | Completado glosario de términos del dominio |
+| 2026-01-28 | Completado documento de visión del MVP |
+| 2026-01-28 | Completado documento de alcance del MVP |
 
 ---
 
