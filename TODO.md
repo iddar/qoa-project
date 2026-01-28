@@ -18,10 +18,10 @@
 
 ## Fase 2: Decisiones Arquitectónicas (ADRs)
 
-- [ ] `docs/adr/0001-estilo-arquitectura.md` - Modular Monolith vs Microservicios
-- [ ] `docs/adr/0002-base-de-datos.md` - PostgreSQL como BD principal
-- [ ] `docs/adr/0003-autenticacion.md` - Magic link, JWT, API Keys
-- [ ] `docs/adr/0004-mensajeria.md` - BullMQ/Redis para eventos
+- [x] `docs/adr/0001-estilo-arquitectura.md` - Modular Monolith vs Microservicios
+- [x] `docs/adr/0002-base-de-datos.md` - PostgreSQL como BD principal
+- [x] `docs/adr/0003-autenticacion.md` - Magic link, JWT, API Keys
+- [x] `docs/adr/0004-mensajeria.md` - BullMQ/Redis para eventos
 - [ ] `docs/adr/0005-integracion-whatsapp.md` - Proveedor WhatsApp
 - [ ] `docs/adr/0006-generacion-qr.md` - Estrategia de códigos QR
 - [ ] `docs/adr/0007-multi-tenancy.md` - Modelo multi-tenant
@@ -105,6 +105,10 @@
 | 2026-01-28 | Completado documento de visión del MVP |
 | 2026-01-28 | Completado documento de alcance del MVP |
 | 2026-01-28 | Completado NFRs (requerimientos no funcionales) |
+| 2026-01-28 | ADR-0001: Modular Monolith aprobado |
+| 2026-01-28 | ADR-0002: PostgreSQL aprobado |
+| 2026-01-28 | ADR-0003: Autenticación (OTP, JWT, API Keys) aprobado |
+| 2026-01-28 | ADR-0004: Mensajería y eventos aprobado |
 
 ---
 
