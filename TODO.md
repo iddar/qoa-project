@@ -22,9 +22,9 @@
 - [x] `docs/adr/0002-base-de-datos.md` - PostgreSQL como BD principal
 - [x] `docs/adr/0003-autenticacion.md` - Magic link, JWT, API Keys
 - [x] `docs/adr/0004-mensajeria.md` - BullMQ/Redis para eventos
-- [ ] `docs/adr/0005-integracion-whatsapp.md` - Proveedor WhatsApp
-- [ ] `docs/adr/0006-generacion-qr.md` - Estrategia de códigos QR
-- [ ] `docs/adr/0007-multi-tenancy.md` - Modelo multi-tenant
+- [x] `docs/adr/0005-integracion-whatsapp.md` - Proveedor WhatsApp
+- [x] `docs/adr/0006-generacion-qr.md` - Estrategia de códigos QR
+- [x] `docs/adr/0007-multi-tenancy.md` - Modelo multi-tenant
 
 ---
 
@@ -109,6 +109,9 @@
 | 2026-01-28 | ADR-0002: PostgreSQL aprobado |
 | 2026-01-28 | ADR-0003: Autenticación (OTP, JWT, API Keys) aprobado |
 | 2026-01-28 | ADR-0004: Mensajería y eventos aprobado |
+| 2026-01-28 | ADR-0005: Integración WhatsApp aprobado |
+| 2026-01-28 | ADR-0006: Generación QR aprobado |
+| 2026-01-28 | ADR-0007: Multi-tenancy aprobado |
 
 ---
 
