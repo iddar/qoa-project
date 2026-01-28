@@ -7,7 +7,7 @@
 ## Fase 1: Especificación Fundacional
 
 ### Documentos de Overview
-- [ ] `docs/01-overview/glosario.md` - Términos del dominio
+- [x] `docs/01-overview/glosario.md` - Términos del dominio
 - [ ] `docs/01-overview/vision.md` - Qué SI y NO hace el MVP
 - [ ] `docs/01-overview/alcance.md` - Scope de "Conectados"
 
@@ -101,6 +101,7 @@
 | Fecha | Avance |
 |-------|--------|
 | 2026-01-28 | Creación del plan inicial y estructura de documentación |
+| 2026-01-28 | Completado glosario de términos del dominio |
 
 ---
 
