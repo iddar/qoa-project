@@ -25,6 +25,7 @@
 - [x] `docs/adr/0005-integracion-whatsapp.md` - Proveedor WhatsApp
 - [x] `docs/adr/0006-generacion-qr.md` - Estrategia de códigos QR
 - [x] `docs/adr/0007-multi-tenancy.md` - Modelo multi-tenant
+- [x] `docs/adr/0008-modelo-campanias.md` - Campañas y acumulación
 
 ---
 
@@ -112,6 +113,7 @@
 | 2026-01-28 | ADR-0005: Integración WhatsApp aprobado |
 | 2026-01-28 | ADR-0006: Generación QR aprobado |
 | 2026-01-28 | ADR-0007: Multi-tenancy aprobado |
+| 2026-01-28 | ADR-0008: Modelo de campañas y acumulación aprobado |
 
 ---
 
