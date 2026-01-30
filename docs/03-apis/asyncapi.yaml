@@ -1,0 +1,636 @@
+asyncapi: 3.0.0
+info:
+  title: Qoa Events API
+  version: 1.0.0
+  description: |
+    Eventos de dominio de la plataforma Qoa.
+
+    ## Nomenclatura
+    Los eventos siguen el patrón: `{domain}.{entity}.{action}.v{version}`
+
+    ## Transporte
+    Los eventos se publican internamente via Redis Streams y pueden ser
+    consumidos externamente via Webhooks.
+
+    ## Garantías
+    - **Entrega**: At-least-once (los consumidores deben ser idempotentes)
+    - **Orden**: No garantizado entre diferentes eventos
+    - **Durabilidad**: Eventos persisten en PostgreSQL (outbox pattern)
+
+defaultContentType: application/json
+
+channels:
+  users:
+    address: users
+    messages:
+      userCreated:
+        $ref: '#/components/messages/UserCreated'
+      userVerified:
+        $ref: '#/components/messages/UserVerified'
+      userUpdated:
+        $ref: '#/components/messages/UserUpdated'
+
+  stores:
+    address: stores
+    messages:
+      storeCreated:
+        $ref: '#/components/messages/StoreCreated'
+      storeUpdated:
+        $ref: '#/components/messages/StoreUpdated'
+
+  campaigns:
+    address: campaigns
+    messages:
+      campaignCreated:
+        $ref: '#/components/messages/CampaignCreated'
+      campaignActivated:
+        $ref: '#/components/messages/CampaignActivated'
+      campaignPaused:
+        $ref: '#/components/messages/CampaignPaused'
+      campaignEnded:
+        $ref: '#/components/messages/CampaignEnded'
+      thresholdReached:
+        $ref: '#/components/messages/ThresholdReached'
+
+  cards:
+    address: cards
+    messages:
+      cardCreated:
+        $ref: '#/components/messages/CardCreated'
+      cardBalanceUpdated:
+        $ref: '#/components/messages/CardBalanceUpdated'
+
+  transactions:
+    address: transactions
+    messages:
+      transactionCreated:
+        $ref: '#/components/messages/TransactionCreated'
+      transactionProcessed:
+        $ref: '#/components/messages/TransactionProcessed'
+
+  rewards:
+    address: rewards
+    messages:
+      rewardRedeemed:
+        $ref: '#/components/messages/RewardRedeemed'
+
+operations:
+  onUserCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/users'
+    messages:
+      - $ref: '#/channels/users/messages/userCreated'
+
+  onUserVerified:
+    action: receive
+    channel:
+      $ref: '#/channels/users'
+    messages:
+      - $ref: '#/channels/users/messages/userVerified'
+
+  onTransactionCreated:
+    action: receive
+    channel:
+      $ref: '#/channels/transactions'
+    messages:
+      - $ref: '#/channels/transactions/messages/transactionCreated'
+
+  onThresholdReached:
+    action: receive
+    channel:
+      $ref: '#/channels/campaigns'
+    messages:
+      - $ref: '#/channels/campaigns/messages/thresholdReached'
+
+  onRewardRedeemed:
+    action: receive
+    channel:
+      $ref: '#/channels/rewards'
+    messages:
+      - $ref: '#/channels/rewards/messages/rewardRedeemed'
+
+components:
+  messages:
+    # ===== Users =====
+    UserCreated:
+      name: users.user.created.v1
+      title: Usuario creado
+      summary: Se emite cuando un nuevo usuario se registra
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/UserCreatedPayload'
+
+    UserVerified:
+      name: users.user.verified.v1
+      title: Usuario verificado
+      summary: Se emite cuando un usuario verifica su OTP exitosamente
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/UserVerifiedPayload'
+
+    UserUpdated:
+      name: users.user.updated.v1
+      title: Usuario actualizado
+      summary: Se emite cuando se actualiza el perfil de un usuario
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/UserUpdatedPayload'
+
+    # ===== Stores =====
+    StoreCreated:
+      name: stores.store.created.v1
+      title: Tienda creada
+      summary: Se emite cuando se crea una nueva tienda
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/StoreCreatedPayload'
+
+    StoreUpdated:
+      name: stores.store.updated.v1
+      title: Tienda actualizada
+      summary: Se emite cuando se actualiza una tienda
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/StoreUpdatedPayload'
+
+    # ===== Campaigns =====
+    CampaignCreated:
+      name: campaigns.campaign.created.v1
+      title: Campaña creada
+      summary: Se emite cuando se crea una nueva campaña
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CampaignCreatedPayload'
+
+    CampaignActivated:
+      name: campaigns.campaign.activated.v1
+      title: Campaña activada
+      summary: Se emite cuando una campaña pasa a estado activo
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CampaignStatusChangedPayload'
+
+    CampaignPaused:
+      name: campaigns.campaign.paused.v1
+      title: Campaña pausada
+      summary: Se emite cuando una campaña se pausa
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CampaignStatusChangedPayload'
+
+    CampaignEnded:
+      name: campaigns.campaign.ended.v1
+      title: Campaña finalizada
+      summary: Se emite cuando una campaña termina (manual o por fecha)
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CampaignStatusChangedPayload'
+
+    ThresholdReached:
+      name: campaigns.threshold.reached.v1
+      title: Threshold alcanzado
+      summary: Se emite cuando un usuario alcanza el threshold de una campaña
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/ThresholdReachedPayload'
+
+    # ===== Cards =====
+    CardCreated:
+      name: cards.card.created.v1
+      title: Tarjeta creada
+      summary: Se emite cuando se crea una nueva tarjeta
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CardCreatedPayload'
+
+    CardBalanceUpdated:
+      name: cards.card.balance_updated.v1
+      title: Balance actualizado
+      summary: Se emite cuando el balance de una tarjeta cambia
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CardBalanceUpdatedPayload'
+
+    # ===== Transactions =====
+    TransactionCreated:
+      name: transactions.transaction.created.v1
+      title: Transacción creada
+      summary: Se emite cuando se registra una nueva transacción
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TransactionCreatedPayload'
+
+    TransactionProcessed:
+      name: transactions.transaction.processed.v1
+      title: Transacción procesada
+      summary: Se emite cuando se terminan de evaluar todas las campañas para una transacción
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/TransactionProcessedPayload'
+
+    # ===== Rewards =====
+    RewardRedeemed:
+      name: rewards.reward.redeemed.v1
+      title: Recompensa canjeada
+      summary: Se emite cuando un usuario canjea una recompensa
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/RewardRedeemedPayload'
+
+  schemas:
+    # ===== Common =====
+    EventMetadata:
+      type: object
+      required:
+        - eventId
+        - eventType
+        - version
+        - occurredAt
+        - traceId
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: ID único del evento
+        eventType:
+          type: string
+          description: Tipo completo del evento
+        version:
+          type: string
+          description: Versión del schema
+          example: 'v1'
+        occurredAt:
+          type: string
+          format: date-time
+          description: Timestamp de cuando ocurrió el evento
+        traceId:
+          type: string
+          description: ID para correlación de trazas
+        tenantId:
+          type: string
+          description: ID del tenant (CPG o Store)
+
+    # ===== Users Payloads =====
+    UserCreatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - userId
+            - phone
+          properties:
+            userId:
+              type: string
+            phone:
+              type: string
+            registeredVia:
+              type: string
+              enum: [qr_scan, direct, invitation]
+            storeId:
+              type: string
+              description: Tienda donde se registró (si aplica)
+
+    UserVerifiedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - userId
+          properties:
+            userId:
+              type: string
+            channel:
+              type: string
+              enum: [whatsapp, sms]
+
+    UserUpdatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - userId
+            - changes
+          properties:
+            userId:
+              type: string
+            changes:
+              type: object
+              description: Campos que cambiaron
+
+    # ===== Stores Payloads =====
+    StoreCreatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - storeId
+            - name
+          properties:
+            storeId:
+              type: string
+            name:
+              type: string
+            code:
+              type: string
+
+    StoreUpdatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - storeId
+            - changes
+          properties:
+            storeId:
+              type: string
+            changes:
+              type: object
+
+    # ===== Campaigns Payloads =====
+    CampaignCreatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - campaignId
+            - cpgId
+            - name
+          properties:
+            campaignId:
+              type: string
+            cpgId:
+              type: string
+            name:
+              type: string
+            accumulationType:
+              type: string
+              enum: [stamps, points, amount]
+            threshold:
+              type: integer
+
+    CampaignStatusChangedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - campaignId
+            - previousStatus
+            - newStatus
+          properties:
+            campaignId:
+              type: string
+            previousStatus:
+              type: string
+              enum: [draft, active, paused, ended]
+            newStatus:
+              type: string
+              enum: [draft, active, paused, ended]
+            reason:
+              type: string
+              description: Razón del cambio (si aplica)
+
+    ThresholdReachedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - userId
+            - cardId
+            - campaignId
+            - balance
+            - threshold
+          properties:
+            userId:
+              type: string
+            cardId:
+              type: string
+            campaignId:
+              type: string
+            balance:
+              type: integer
+              description: Balance actual
+            threshold:
+              type: integer
+              description: Threshold de la campaña
+            canRedeem:
+              type: boolean
+              description: Si puede canjear ahora
+
+    # ===== Cards Payloads =====
+    CardCreatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - cardId
+            - userId
+            - campaignId
+          properties:
+            cardId:
+              type: string
+            userId:
+              type: string
+            campaignId:
+              type: string
+            storeId:
+              type: string
+
+    CardBalanceUpdatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - cardId
+            - userId
+            - previousBalance
+            - newBalance
+            - change
+          properties:
+            cardId:
+              type: string
+            userId:
+              type: string
+            previousBalance:
+              type: integer
+            newBalance:
+              type: integer
+            change:
+              type: integer
+              description: Positivo = acumulación, negativo = canje
+            reason:
+              type: string
+              enum: [transaction, redemption, adjustment, expiration]
+            transactionId:
+              type: string
+              description: ID de la transacción (si aplica)
+            redemptionId:
+              type: string
+              description: ID del canje (si aplica)
+
+    # ===== Transactions Payloads =====
+    TransactionCreatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - transactionId
+            - userId
+            - storeId
+            - items
+          properties:
+            transactionId:
+              type: string
+            userId:
+              type: string
+            storeId:
+              type: string
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  brandId:
+                    type: string
+                  quantity:
+                    type: integer
+                  amount:
+                    type: number
+            totalAmount:
+              type: number
+
+    TransactionProcessedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - transactionId
+            - accumulations
+          properties:
+            transactionId:
+              type: string
+            accumulations:
+              type: array
+              items:
+                type: object
+                properties:
+                  cardId:
+                    type: string
+                  campaignId:
+                    type: string
+                  accumulated:
+                    type: integer
+                  newBalance:
+                    type: integer
+                  thresholdReached:
+                    type: boolean
+
+    # ===== Rewards Payloads =====
+    RewardRedeemedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - redemptionId
+            - userId
+            - cardId
+            - rewardId
+            - cost
+          properties:
+            redemptionId:
+              type: string
+            userId:
+              type: string
+            cardId:
+              type: string
+            campaignId:
+              type: string
+            rewardId:
+              type: string
+            rewardName:
+              type: string
+            cost:
+              type: integer
+              description: Puntos/estampas usados
+            previousBalance:
+              type: integer
+            newBalance:
+              type: integer

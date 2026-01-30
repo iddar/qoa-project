@@ -1,0 +1,1363 @@
+openapi: 3.1.0
+info:
+  title: Qoa API
+  description: |
+    API REST para la plataforma de lealtad Qoa.
+
+    ## Autenticación
+    - **JWT**: Para usuarios autenticados (consumidores, tenderos, admins)
+    - **API Key**: Para integraciones B2B
+
+    Ver [autenticacion.md](./autenticacion.md) para flujos detallados.
+
+    ## Errores
+    Todos los errores siguen el formato estándar documentado en [errores.md](./errores.md).
+  version: 1.0.0
+  contact:
+    name: Equipo Qoa
+    email: api@qoa.app
+
+servers:
+  - url: https://api.qoa.app/v1
+    description: Producción
+  - url: https://api.staging.qoa.app/v1
+    description: Staging
+
+tags:
+  - name: Auth
+    description: Autenticación y tokens
+  - name: Users
+    description: Gestión de usuarios/consumidores
+  - name: Stores
+    description: Puntos de venta (PDVs)
+  - name: Brands
+    description: Marcas de CPGs
+  - name: Campaigns
+    description: Campañas de lealtad
+  - name: Cards
+    description: Tarjetas de consumidores
+  - name: Transactions
+    description: Registro de compras
+  - name: Rewards
+    description: Catálogo y canje de recompensas
+
+paths:
+  # ==================== AUTH ====================
+  /auth/otp/request:
+    post:
+      tags: [Auth]
+      summary: Solicitar OTP
+      description: Envía un código OTP al teléfono especificado
+      operationId: requestOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+[1-9]\d{1,14}$'
+                  example: '+521234567890'
+                  description: Teléfono en formato E.164
+                channel:
+                  type: string
+                  enum: [whatsapp, sms]
+                  default: whatsapp
+      responses:
+        '200':
+          description: OTP enviado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OtpResponse'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/otp/verify:
+    post:
+      tags: [Auth]
+      summary: Verificar OTP
+      description: Verifica el código OTP y retorna tokens de autenticación
+      operationId: verifyOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [otpId, code]
+              properties:
+                otpId:
+                  type: string
+                  example: 'otp_abc123'
+                code:
+                  type: string
+                  pattern: '^\d{6}$'
+                  example: '123456'
+      responses:
+        '200':
+          description: Autenticación exitosa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login con email/password
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refrescar tokens
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Tokens renovados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Cerrar sesión
+      operationId: logout
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '204':
+          description: Sesión cerrada
+
+  # ==================== USERS ====================
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Obtener usuario actual
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Usuario actual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+    patch:
+      tags: [Users]
+      summary: Actualizar perfil
+      operationId: updateCurrentUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /users/me/cards:
+    get:
+      tags: [Users]
+      summary: Listar mis tarjetas
+      description: Retorna todas las tarjetas del usuario actual (su wallet)
+      operationId: getMyCards
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de tarjetas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardListResponse'
+
+  # ==================== STORES ====================
+  /stores:
+    get:
+      tags: [Stores]
+      summary: Listar tiendas
+      operationId: listStores
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de tiendas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreListResponse'
+
+    post:
+      tags: [Stores]
+      summary: Crear tienda
+      operationId: createStore
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreCreate'
+      responses:
+        '201':
+          description: Tienda creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreResponse'
+
+  /stores/{storeId}:
+    get:
+      tags: [Stores]
+      summary: Obtener tienda
+      operationId: getStore
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+      responses:
+        '200':
+          description: Detalle de tienda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /stores/{storeId}/qr:
+    get:
+      tags: [Stores]
+      summary: Obtener QR de registro
+      description: Retorna el código QR para que consumidores se registren en esta tienda
+      operationId: getStoreQr
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [svg, png, base64]
+            default: svg
+      responses:
+        '200':
+          description: QR de registro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QrResponse'
+
+  # ==================== BRANDS ====================
+  /brands:
+    get:
+      tags: [Brands]
+      summary: Listar marcas
+      operationId: listBrands
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: cpgId
+          in: query
+          schema:
+            type: string
+          description: Filtrar por CPG
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de marcas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandListResponse'
+
+  # ==================== CAMPAIGNS ====================
+  /campaigns:
+    get:
+      tags: [Campaigns]
+      summary: Listar campañas
+      operationId: listCampaigns
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, active, paused, ended]
+        - name: cpgId
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de campañas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignListResponse'
+
+    post:
+      tags: [Campaigns]
+      summary: Crear campaña
+      operationId: createCampaign
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCreate'
+      responses:
+        '201':
+          description: Campaña creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+
+  /campaigns/{campaignId}:
+    get:
+      tags: [Campaigns]
+      summary: Obtener campaña
+      operationId: getCampaign
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      responses:
+        '200':
+          description: Detalle de campaña
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+
+    patch:
+      tags: [Campaigns]
+      summary: Actualizar campaña
+      operationId: updateCampaign
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignUpdate'
+      responses:
+        '200':
+          description: Campaña actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+
+  /campaigns/{campaignId}/activate:
+    post:
+      tags: [Campaigns]
+      summary: Activar campaña
+      operationId: activateCampaign
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      responses:
+        '200':
+          description: Campaña activada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+
+  # ==================== CARDS ====================
+  /cards:
+    post:
+      tags: [Cards]
+      summary: Crear tarjeta
+      description: Crea una tarjeta para un usuario en una campaña
+      operationId: createCard
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CardCreate'
+      responses:
+        '201':
+          description: Tarjeta creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /cards/{cardId}:
+    get:
+      tags: [Cards]
+      summary: Obtener tarjeta
+      operationId: getCard
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/cardIdParam'
+      responses:
+        '200':
+          description: Detalle de tarjeta con balance
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardDetailResponse'
+
+  /cards/{cardId}/qr:
+    get:
+      tags: [Cards]
+      summary: Obtener QR de tarjeta
+      description: Retorna el código QR firmado para esta tarjeta
+      operationId: getCardQr
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/cardIdParam'
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [svg, png, base64]
+            default: svg
+      responses:
+        '200':
+          description: QR de tarjeta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QrResponse'
+
+  # ==================== TRANSACTIONS ====================
+  /transactions:
+    get:
+      tags: [Transactions]
+      summary: Listar transacciones
+      operationId: listTransactions
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: userId
+          in: query
+          schema:
+            type: string
+        - name: storeId
+          in: query
+          schema:
+            type: string
+        - name: cardId
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de transacciones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionListResponse'
+
+    post:
+      tags: [Transactions]
+      summary: Registrar transacción
+      description: Registra una compra y evalúa campañas aplicables
+      operationId: createTransaction
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionCreate'
+      responses:
+        '201':
+          description: Transacción creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
+
+  /transactions/{transactionId}:
+    get:
+      tags: [Transactions]
+      summary: Obtener transacción
+      operationId: getTransaction
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/transactionIdParam'
+      responses:
+        '200':
+          description: Detalle de transacción
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionDetailResponse'
+
+  # ==================== REWARDS ====================
+  /rewards:
+    get:
+      tags: [Rewards]
+      summary: Listar recompensas
+      operationId: listRewards
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: campaignId
+          in: query
+          schema:
+            type: string
+        - name: available
+          in: query
+          schema:
+            type: boolean
+          description: Solo recompensas disponibles
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de recompensas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardListResponse'
+
+  /rewards/{rewardId}:
+    get:
+      tags: [Rewards]
+      summary: Obtener recompensa
+      operationId: getReward
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/rewardIdParam'
+      responses:
+        '200':
+          description: Detalle de recompensa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardResponse'
+
+  /rewards/{rewardId}/redeem:
+    post:
+      tags: [Rewards]
+      summary: Canjear recompensa
+      operationId: redeemReward
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/rewardIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cardId]
+              properties:
+                cardId:
+                  type: string
+                  description: Tarjeta desde la cual canjear
+      responses:
+        '200':
+          description: Recompensa canjeada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedemptionResponse'
+        '422':
+          $ref: '#/components/responses/BusinessRuleViolation'
+
+# ==================== COMPONENTS ====================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  parameters:
+    limitParam:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    cursorParam:
+      name: cursor
+      in: query
+      schema:
+        type: string
+      description: Cursor para paginación
+    storeIdParam:
+      name: storeId
+      in: path
+      required: true
+      schema:
+        type: string
+    campaignIdParam:
+      name: campaignId
+      in: path
+      required: true
+      schema:
+        type: string
+    cardIdParam:
+      name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+    transactionIdParam:
+      name: transactionId
+      in: path
+      required: true
+      schema:
+        type: string
+    rewardIdParam:
+      name: rewardId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    Unauthorized:
+      description: No autenticado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: UNAUTHORIZED
+              message: Autenticación requerida
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Conflicto
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    RateLimited:
+      description: Rate limit excedido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+    BusinessRuleViolation:
+      description: Regla de negocio violada
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    # ===== Common =====
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    Meta:
+      type: object
+      properties:
+        requestId:
+          type: string
+        traceId:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: string
+          nullable: true
+
+    # ===== Auth =====
+    OtpResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            otpId:
+              type: string
+            expiresAt:
+              type: string
+              format: date-time
+            channel:
+              type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            expiresIn:
+              type: integer
+            user:
+              $ref: '#/components/schemas/User'
+
+    # ===== User =====
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [consumer, store_staff, store_admin, cpg_admin, qoa_admin]
+        isNew:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    UserResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/User'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== Store =====
+    Store:
+      type: object
+      properties:
+        id:
+          type: string
+        code:
+          type: string
+          description: Código único para QR
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    StoreCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        address:
+          type: string
+        phone:
+          type: string
+
+    StoreResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Store'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    StoreListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Store'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== Brand =====
+    Brand:
+      type: object
+      properties:
+        id:
+          type: string
+        cpgId:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+
+    BrandListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Brand'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== Campaign =====
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+        cpgId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        accumulationType:
+          type: string
+          enum: [stamps, points, amount]
+        accumulationScope:
+          type: string
+          enum: [store_brand, store_cpg, brand_only, cpg_only]
+        threshold:
+          type: integer
+          description: Cantidad para canjear
+        brandIds:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: null = todas las brands del CPG
+        status:
+          type: string
+          enum: [draft, active, paused, ended]
+        validityType:
+          type: string
+          enum: [indefinite, date_range]
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CampaignCreate:
+      type: object
+      required: [cpgId, name, accumulationType, accumulationScope, threshold, startsAt]
+      properties:
+        cpgId:
+          type: string
+        name:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        accumulationType:
+          type: string
+          enum: [stamps, points, amount]
+        accumulationScope:
+          type: string
+          enum: [store_brand, store_cpg, brand_only, cpg_only]
+        threshold:
+          type: integer
+          minimum: 1
+        brandIds:
+          type: array
+          items:
+            type: string
+        validityType:
+          type: string
+          enum: [indefinite, date_range]
+          default: indefinite
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+
+    CampaignUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        endsAt:
+          type: string
+          format: date-time
+
+    CampaignResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Campaign'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Campaign'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== Card =====
+    Card:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        campaignId:
+          type: string
+        storeId:
+          type: string
+          nullable: true
+          description: null si scope no requiere store
+        code:
+          type: string
+          description: Código único de la tarjeta
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    CardWithBalance:
+      allOf:
+        - $ref: '#/components/schemas/Card'
+        - type: object
+          properties:
+            balance:
+              type: object
+              properties:
+                current:
+                  type: integer
+                threshold:
+                  type: integer
+                unit:
+                  type: string
+                  enum: [stamps, points, amount]
+            campaign:
+              $ref: '#/components/schemas/Campaign'
+
+    CardCreate:
+      type: object
+      required: [userId, campaignId]
+      properties:
+        userId:
+          type: string
+        campaignId:
+          type: string
+        storeId:
+          type: string
+          description: Requerido si el scope de la campaña lo necesita
+
+    CardResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Card'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CardDetailResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CardWithBalance'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CardListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardWithBalance'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== Transaction =====
+    TransactionItem:
+      type: object
+      properties:
+        brandId:
+          type: string
+        quantity:
+          type: integer
+        amount:
+          type: number
+          format: decimal
+        metadata:
+          type: object
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        storeId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionItem'
+        totalAmount:
+          type: number
+          format: decimal
+        createdAt:
+          type: string
+          format: date-time
+
+    TransactionWithAccumulations:
+      allOf:
+        - $ref: '#/components/schemas/Transaction'
+        - type: object
+          properties:
+            accumulations:
+              type: array
+              items:
+                type: object
+                properties:
+                  cardId:
+                    type: string
+                  campaignId:
+                    type: string
+                  accumulated:
+                    type: integer
+                  newBalance:
+                    type: integer
+
+    TransactionCreate:
+      type: object
+      required: [userId, storeId, items]
+      properties:
+        userId:
+          type: string
+        storeId:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [brandId]
+            properties:
+              brandId:
+                type: string
+              quantity:
+                type: integer
+                minimum: 1
+                default: 1
+              amount:
+                type: number
+                format: decimal
+              metadata:
+                type: object
+        metadata:
+          type: object
+          description: Datos adicionales de la transacción
+
+    TransactionResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/TransactionWithAccumulations'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    TransactionDetailResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/TransactionWithAccumulations'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    TransactionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== Reward =====
+    Reward:
+      type: object
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        cost:
+          type: integer
+          description: Costo en puntos/estampas
+        stock:
+          type: integer
+          nullable: true
+          description: null = ilimitado
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    RewardResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Reward'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    RewardListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reward'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    RedemptionResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            redemptionId:
+              type: string
+            reward:
+              $ref: '#/components/schemas/Reward'
+            card:
+              $ref: '#/components/schemas/CardWithBalance'
+            redeemedAt:
+              type: string
+              format: date-time
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== QR =====
+    QrResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            url:
+              type: string
+              description: URL codificada en el QR
+            code:
+              type: string
+              description: Código manual alternativo
+            qr:
+              type: string
+              description: QR en el formato solicitado (SVG, PNG base64, etc.)
+            expiresAt:
+              type: string
+              format: date-time
+              nullable: true
+        meta:
+          $ref: '#/components/schemas/Meta'

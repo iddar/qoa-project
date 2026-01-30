@@ -26,15 +26,16 @@
 - [x] `docs/adr/0006-generacion-qr.md` - Estrategia de códigos QR
 - [x] `docs/adr/0007-multi-tenancy.md` - Modelo multi-tenant
 - [x] `docs/adr/0008-modelo-campanias.md` - Campañas y acumulación
+- [x] `docs/adr/0009-stack-implementacion.md` - Stack técnico y patrones
 
 ---
 
 ## Fase 3: Diseño de APIs
 
-- [ ] `docs/03-apis/openapi.yaml` - REST API completa
-- [ ] `docs/03-apis/asyncapi.yaml` - Eventos del sistema
-- [ ] `docs/03-apis/autenticacion.md` - Flujos de auth
-- [ ] `docs/03-apis/errores.md` - Catálogo de códigos de error
+- [x] `docs/03-apis/openapi.yaml` - REST API completa
+- [x] `docs/03-apis/asyncapi.yaml` - Eventos del sistema
+- [x] `docs/03-apis/autenticacion.md` - Flujos de auth
+- [x] `docs/03-apis/errores.md` - Catálogo de códigos de error
 
 ---
 
@@ -114,6 +115,8 @@
 | 2026-01-28 | ADR-0006: Generación QR aprobado |
 | 2026-01-28 | ADR-0007: Multi-tenancy aprobado |
 | 2026-01-28 | ADR-0008: Modelo de campañas y acumulación aprobado |
+| 2026-01-29 | ADR-0009: Stack de implementación (Bun, Elysia, Transactional Outbox) aprobado |
+| 2026-01-29 | Fase 3 completada: OpenAPI, AsyncAPI, flujos de auth, catálogo de errores |
 
 ---
 
