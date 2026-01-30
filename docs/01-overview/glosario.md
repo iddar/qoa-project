@@ -23,7 +23,7 @@ Marca o fabricante de bienes de consumo empaquetados. Patrocina campañas de lea
 Identificador único del usuario dentro de Qoa. Cada consumidor tiene una sola tarjeta universal que agrupa todas sus participaciones en diferentes programas.
 
 ### Wallet
-Representación virtual que agrupa los puntos, estampas y actividad del consumidor. Contiene las tarjetas individuales asociadas a cada establecimiento y/o marca.
+Representación virtual que agrupa los puntos, estampas y actividad del consumidor. Contiene las tarjetas individuales asociadas a cada establecimiento y/   o marca.
 
 ### PDV (Punto de Venta)
 Establecimiento comercial (tienda) donde se realizan las transacciones. Cada PDV tiene un QR de registro único para que los consumidores se afilien.

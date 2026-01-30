@@ -1,22 +1,102 @@
-# 04-data
+# Fase 4: Modelo de Datos
 
-Esta carpeta contiene la documentación de datos, incluyendo modelo de datos, diccionario y eventos.
+> Esquema de base de datos para la plataforma Qoa.
 
-## Cómo rellenar
+---
 
-### Modelo de Datos
-- Crea `modelo-datos.md` con:
-  - Diagramas de entidad-relación (ERD).
-  - Esquemas de bases de datos.
-  - Relaciones entre entidades.
+## Documentos de esta fase
 
-### Diccionario de Datos
-- Crea `diccionario.md` con:
-  - Definiciones de tablas, columnas, tipos de datos.
-  - Restricciones y claves.
+| Documento | Descripción | Estado |
+|-----------|-------------|--------|
+| [modelo-datos.md](./modelo-datos.md) | Diagrama ER y relaciones | ✅ Completo |
+| [diccionario.md](./diccionario.md) | Descripción detallada de tablas y columnas | ✅ Completo |
+| [indices.md](./indices.md) | Índices para performance | ✅ Completo |
+| [eventos.md](./eventos.md) | Mapeo de eventos de dominio a tablas | ✅ Completo |
 
-### Eventos
-- Crea `eventos.md` con:
-  - Lista de eventos del sistema.
-  - Esquemas de eventos (usando AsyncAPI si aplica).
-  - Flujos de eventos.
+---
+
+## Resumen del modelo
+
+### Entidades de negocio
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                      ENTIDADES CORE                            │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│   ┌─────────┐         ┌─────────┐         ┌─────────┐          │
+│   │  CPGs   │────────▶│ Brands  │◀────────│Campaigns│          │
+│   └─────────┘   1:N   └─────────┘   N:M   └─────────┘          │
+│        │                                       │               │
+│        │ N:M                                   │               │
+│        ▼                                       ▼               │
+│   ┌─────────┐                            ┌─────────┐           │
+│   │ Stores  │                            │ Rewards │           │
+│   └─────────┘                            └─────────┘           │
+│        │                                       ▲               │
+│        │                                       │               │
+│        ▼                                       │               │
+│   ┌─────────┐         ┌─────────┐         ┌─────────┐          │
+│   │  Users  │────────▶│  Cards  │────────▶│Redemp-  │          │
+│   └─────────┘   1:N   └─────────┘   1:N   │ tions   │          │
+│        │                   │              └─────────┘          │
+│        │                   │                                   │
+│        ▼                   ▼                                   │
+│   ┌─────────────────────────────┐                              │
+│   │       Transactions          │                              │
+│   │  ┌───────────────────────┐  │                              │
+│   │  │  Transaction Items    │  │                              │
+│   │  └───────────────────────┘  │                              │
+│   └─────────────────────────────┘                              │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Entidades de infraestructura
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                   INFRAESTRUCTURA                              │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐      │
+│   │ api_keys    │     │outbox_events│     │    jobs     │      │
+│   └─────────────┘     └─────────────┘     └──────┬──────┘      │
+│                                                  │             │
+│                                                  ▼             │
+│   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐      │
+│   │ processed_  │     │  webhook_   │     │  job_runs   │      │
+│   │   events    │     │  endpoints  │     └─────────────┘      │
+│   └─────────────┘     └──────┬──────┘                          │
+│                              │                                 │
+│                              ▼                                 │
+│                       ┌─────────────┐                          │
+│                       │  webhook_   │                          │
+│                       │ deliveries  │                          │
+│                       └─────────────┘                          │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Principios de diseño
+
+| Principio | Implementación |
+|-----------|----------------|
+| **Multi-tenancy** | Columnas `cpg_id`, `store_id` en tablas relevantes |
+| **Soft delete** | Columna `deleted_at` donde aplique |
+| **Auditoría** | Columnas `created_at`, `updated_at` en todas las tablas |
+| **UUIDs** | IDs tipo UUID v7 (ordenables por tiempo) |
+| **Eventos** | Tabla `outbox_events` para Transactional Outbox |
+
+---
+
+## Referencias
+
+- [ADR-0002: Base de datos](../adr/0002-base-de-datos.md)
+- [ADR-0007: Multi-tenancy](../adr/0007-multi-tenancy.md)
+- [ADR-0008: Modelo de Campañas](../adr/0008-modelo-campanias.md)
+- [ADR-0009: Stack de Implementación](../adr/0009-stack-implementacion.md)
+- [OpenAPI](../03-apis/openapi.yaml)
+- [AsyncAPI](../03-apis/asyncapi.yaml)

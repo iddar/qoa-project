@@ -41,10 +41,10 @@
 
 ## Fase 4: Modelo de Datos
 
-- [ ] `docs/04-data/modelo-datos.md` - Diagrama ER
-- [ ] `docs/04-data/diccionario.md` - Descripción de tablas/columnas
-- [ ] `docs/04-data/indices.md` - Índices para performance
-- [ ] `docs/04-data/eventos.md` - Eventos de dominio
+- [x] `docs/04-data/modelo-datos.md` - Diagrama ER
+- [x] `docs/04-data/diccionario.md` - Descripción de tablas/columnas
+- [x] `docs/04-data/indices.md` - Índices para performance
+- [x] `docs/04-data/eventos.md` - Eventos de dominio
 
 ---
 
@@ -117,6 +117,7 @@
 | 2026-01-28 | ADR-0008: Modelo de campañas y acumulación aprobado |
 | 2026-01-29 | ADR-0009: Stack de implementación (Bun, Elysia, Transactional Outbox) aprobado |
 | 2026-01-29 | Fase 3 completada: OpenAPI, AsyncAPI, flujos de auth, catálogo de errores |
+| 2026-01-29 | Fase 4 completada: Modelo ER, diccionario de datos, índices, eventos de dominio |
 
 ---
 

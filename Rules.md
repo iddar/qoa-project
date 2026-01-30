@@ -34,7 +34,7 @@ A) “Core Docs” (lo primero que construyes)
 	1.	Visión y alcance
 
 	•	Objetivo del producto (1 página)
-	•	Qué sí hace / qué NO hace
+	•	Qué sí hace / qué NO hace	
 	•	Stakeholders y casos de uso principales
 
 	2.	Requerimientos no funcionales (NFRs)
