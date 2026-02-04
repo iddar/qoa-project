@@ -77,9 +77,9 @@ Consult `references/drizzle-kit-cli.md` for CLI invocations and `references/migr
 Tips:
 - Always close pools on process exit to avoid hanging tests.
 - When mixing HTTP handlers, instantiate the client once per process (Bun global) to reuse connections.
-- Use `drizzle-orm/bun-sql` whenever you already rely on Bun's native `SQL` driver; it autoselects Postgres/MySQL/SQLite adapters based on the connection string and exposes casing helpers (e.g., `casing: "snake_case"`) for ergonomic column access. citeturn0search6
-- For Bun SQL, you can skip the explicit `SQL` client and call `drizzle(process.env.DATABASE_URL!)` directly when `DATABASE_URL` uses a supported Postgres/MySQL/SQLite URI; fall back to `new SQL()` when you need manual adapter selection. citeturn0search6
-- Bun 1.2.0 has a known issue with concurrent SQL statements; keep multi-query workloads sequential or follow the upstream GitHub issue before turning on parallel query execution. citeturn0search7
+- Use `drizzle-orm/bun-sql` whenever you rely on Bun's native `SQL` driver; import the adapter and either pass a `DATABASE_URL` string or supply an explicit `SQL` client when you need manual control. citeturn0search2
+- For Bun SQL, you can skip the explicit `SQL` client and call `drizzle(process.env.DATABASE_URL!)` directly when `DATABASE_URL` uses a supported Postgres/MySQL/SQLite URI; fall back to `new SQL()` when you need manual adapter selection. citeturn0search2
+- Bun 1.2.0 has a known issue with concurrent SQL statements; keep multi-query workloads sequential or follow the upstream GitHub issue before turning on parallel query execution. citeturn0search9
 
 ## Migrations & Change Management
 

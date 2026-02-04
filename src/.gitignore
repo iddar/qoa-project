@@ -20,7 +20,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.development.local
 .env.test.local
 .env.production.local
-.env.local
+# Keep a checked-in .env.local with sample defaults for Docker/dev parity
+!.env.local
 
 # caches
 .eslintcache
