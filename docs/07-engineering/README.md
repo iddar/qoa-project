@@ -20,3 +20,4 @@ Esta carpeta contiene los estándares internos de ingeniería, incluyendo git, P
   - `eventos-estandares.md`: AsyncAPI, naming (domain.entity.action.v1).
   - `logging-tracing.md`: Correlation ID, logs estructurados, métricas.
   - `decisiones.md`: ADR para elecciones clave (DB, arquitectura, etc.).
+- `plan-desarrollo.md` ya resume etapas, TODOs y entregables de código/tests/API.
