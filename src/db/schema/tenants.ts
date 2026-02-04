@@ -21,7 +21,5 @@ export const tenants = pgTable(
       .notNull()
       .default(sql`now()`)
   },
-  (table) => ({
-    slugIdx: uniqueIndex("tenants_slug_idx").on(table.slug)
-  })
+  (table) => [uniqueIndex("tenants_slug_idx").on(table.slug)]
 );
