@@ -334,6 +334,48 @@ ON campaign_code_captures (card_id, campaign_id, created_at DESC);
 
 ---
 
+### Auditoría de Campañas
+
+**Historial completo por campaña**
+```sql
+SELECT *
+FROM campaign_audit_logs
+WHERE campaign_id = $1
+ORDER BY created_at DESC;
+```
+```sql
+CREATE INDEX campaign_audit_logs_campaign_idx
+ON campaign_audit_logs (campaign_id, created_at DESC);
+```
+
+**Reconstrucción de una versión específica**
+```sql
+SELECT *
+FROM campaign_audit_logs
+WHERE campaign_id = $1
+AND version <= $2
+ORDER BY version ASC;
+```
+```sql
+CREATE INDEX campaign_audit_logs_campaign_version_idx
+ON campaign_audit_logs (campaign_id, version);
+```
+
+**Actividad reciente por actor**
+```sql
+SELECT *
+FROM campaign_audit_logs
+WHERE actor_id = $1
+ORDER BY created_at DESC
+LIMIT 50;
+```
+```sql
+CREATE INDEX campaign_audit_logs_actor_idx
+ON campaign_audit_logs (actor_id, created_at DESC);
+```
+
+---
+
 ### Acumulaciones
 
 **Balance de una tarjeta**

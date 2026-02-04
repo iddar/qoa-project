@@ -281,6 +281,20 @@ Este workflow deja un rastro auditable de la revisión (sin nuevas tablas) y evi
 
 ---
 
+## Auditoría fina de campañas
+
+Para poder explicar cualquier ajuste realizado sobre campañas, añadimos un mecanismo de registro detallado con las siguientes características:
+
+1. **Diff por campo:** cada evento guarda qué campo cambió, el valor anterior (`old_value`) y el nuevo (`new_value`). Para colecciones (tiers, policies, scope) usamos rutas tipo `tiers[1].threshold_value`.
+2. **Contexto del actor:** el log incluye `actor_id`, `actor_type` (usuario, api_key, sistema) y un `reason` opcional capturado en la UI para documentar el motivo del cambio.
+3. **Versionado lineal:** `campaigns.version` se incrementa en cada update exitoso; el log almacena la versión resultante para poder reconstruir snapshots y generar diffs acumulados.
+4. **Append-only:** los registros viven en `campaign_audit_logs`, una tabla inmutable con `created_at` y no se permite update/delete (solo inserts). Cualquier corrección se hace con una nueva entrada que deje constancia.
+5. **Integración con flags:** cuando un cambio reinicia `reviewed` o `confirmed`, el log añade esas columnas al diff automáticamente para facilitar auditorías regulatorias.
+
+Este mecanismo permite responder quién cambió qué y cuándo, facilita rollbacks lógicos y soporta compliance sin duplicar versiones completas de la campaña.
+
+---
+
 ## Coexistencia de Múltiples Policies
 
 ### Regla Fundamental: AND

@@ -393,6 +393,7 @@ Campañas de lealtad.
 | accumulation_type | enum | stamps, points, amount |
 | accumulation_scope | enum | store_brand, store_cpg, brand_only, cpg_only |
 | capture_mode | enum | transaction, code, hybrid |
+| version | integer | Incremental para auditoría |
 | ready_for_review | boolean | Flag operativo para solicitar revisión (default false) |
 | reviewed | boolean | Flag de QA interna (default false) |
 | confirmed | boolean | Flag de confirmación final para poder activar |
@@ -486,6 +487,24 @@ Registro operacional de los códigos capturados por los usuarios.
 | rejection_reason | text | Motivo de rechazo (nullable) |
 | metadata | jsonb | Evidencia (foto, canal, device) |
 | created_at | timestamptz | |
+
+### campaign_audit_logs
+
+Histórico inmutable de cambios aplicados a una campaña.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid | PK |
+| campaign_id | uuid | FK → campaigns |
+| version | integer | Versión resultante después del cambio |
+| field_path | text | Ruta del campo modificado (`tiers[1].threshold_value`) |
+| old_value | jsonb | Valor previo (nullable) |
+| new_value | jsonb | Valor nuevo (nullable) |
+| actor_id | uuid | Identificador del actor (usuario o API key) |
+| actor_type | text | Tipo de actor (`user`, `api_key`, `system`) |
+| reason | text | Motivo declarado (nullable) |
+| metadata | jsonb | Datos adicionales (ej: request_id) |
+| created_at | timestamptz | Timestamp del cambio |
 
 ### campaign_tiers
 

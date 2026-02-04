@@ -232,6 +232,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 | accumulation_type | accumulation_type | NO | - | - |
 | accumulation_scope | accumulation_scope | YES | NULL | Legacy, se mantiene para compatibilidad |
 | capture_mode | capture_mode | NO | 'transaction' | Define la fuente (tickets/códigos) |
+| version | integer | NO | 1 | Incrementa en cada cambio |
 | ready_for_review | boolean | NO | false | Señal de que el owner pide revisión |
 | reviewed | boolean | NO | false | Revisión aprobada por Qoa |
 | confirmed | boolean | NO | false | Confirmación operativa para ir a producción |
@@ -255,6 +256,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 - `ends_at > starts_at` cuando ambos están presentes
 - `status = 'active'` requiere `ready_for_review = reviewed = confirmed = true`
 - Cambios en `scope`, `tiers`, `policies`, `capture_mode` o `accumulation_type` reinician `reviewed` y `confirmed` a `false`
+- `version` incrementa en +1 en cada actualización de la campaña; no se permite decrementar
 
 **Nota:** El scope de productos y stores se define en tablas relacionadas.
 
@@ -406,6 +408,38 @@ Intentos de registro enviados por los usuarios (una fila por código capturado).
 - `campaign_code_captures_card_id_fkey` REFERENCES cards(id) ON DELETE CASCADE
 - `campaign_code_captures_campaign_code_id_fkey` REFERENCES campaign_codes(id) ON DELETE CASCADE
 - `campaign_code_captures_transaction_id_fkey` REFERENCES transactions(id) ON DELETE SET NULL
+
+---
+
+### campaign_audit_logs
+
+Logs append-only que documentan cada cambio en campañas.
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | uuid_generate_v7() | PK |
+| campaign_id | uuid | NO | - | FK → campaigns(id) |
+| version | integer | NO | - | Debe ser ≥ 1 |
+| field_path | text | NO | - | Ruta del campo (`tiers[1].threshold_value`) |
+| old_value | jsonb | YES | - | Valor anterior |
+| new_value | jsonb | YES | - | Valor nuevo |
+| actor_id | uuid | YES | - | Referencia al usuario/API |
+| actor_type | varchar(20) | NO | 'user' | Enum lógico: user, api_key, system |
+| reason | text | YES | - | Nota del cambio |
+| metadata | jsonb | YES | '{}' | Datos extra (request_id, ip) |
+| created_at | timestamptz | NO | now() | - |
+
+**Índices:**
+- `campaign_audit_logs_pkey` PRIMARY KEY (id)
+- `campaign_audit_logs_campaign_version_idx` INDEX (campaign_id, version)
+- `campaign_audit_logs_created_idx` INDEX (created_at DESC)
+
+**Foreign Keys:**
+- `campaign_audit_logs_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+
+**Reglas:**
+- No se permiten UPDATE/DELETE (enforced at application level)
+- `version` debe coincidir con `campaigns.version` posterior al cambio
 
 ---
 
