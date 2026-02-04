@@ -97,13 +97,13 @@
 
 **Stack Tecnológico:**
 - **Runtime:** Node.js 20 / Bun
-- **Framework:** Fastify o Hono
+- **Framework:** Elysia
 - **ORM:** Drizzle ORM
 - **BD:** PostgreSQL 16
 - **Cache/Queue:** Redis + BullMQ
 - **WhatsApp:** Twilio o 360Dialog
-- **Validación:** Zod
-- **Testing:** Vitest
+- **Validación:** elysia incluye typeBox { t }  optional: Zod
+- **Testing:** Bun test
 
 **Sprints:**
 

@@ -9,14 +9,14 @@ Este plan divide la construcción del sistema en etapas consecutivas. Cada etapa
 **Objetivo:** tener cimientos listos para desarrollar y validar.
 
 - **Código:** scaffolding del repo, `bun` + `tsconfig`, estructura `/src/modules`, orquestador Docker para Postgres/Redis.
-- **Tests:** configurar Vitest + integración en CI, definir helpers de factories/mocks.
+- **Tests:** configurar Bun test + integración en CI, definir helpers de factories/mocks.
 - **API docs:** baseline de `openapi.yaml` con componentes comunes (auth, error responses).
 
 **TODOs**
-- [ ] Crear template de módulo (controller, service, repo, schema).
-- [ ] Configurar lint (Biome/ESLint) + format en CI.
-- [ ] Inicializar `docs/03-apis/openapi.yaml` con info general y esquemas `Error`, `Pagination`.
-- [ ] Auditar `docs/03-apis/*` contra el modelo de datos antes de iniciar desarrollo.
+- [x] Crear template de módulo (controller, service, repo, schema).
+- [x] Configurar lint (Oxclint y Oxfmt) + format en CI.
+- [x] Inicializar `docs/03-apis/openapi.yaml` con info general y esquemas `Error`, `Pagination`.
+- [x] Auditar `docs/03-apis/*` contra el modelo de datos antes de iniciar desarrollo.
 
 ---
 
