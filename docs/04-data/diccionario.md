@@ -28,7 +28,7 @@ CREATE TYPE campaign_status AS ENUM ('draft', 'active', 'paused', 'ended');
 -- Tipo de acumulación
 CREATE TYPE accumulation_type AS ENUM ('stamps', 'points', 'amount');
 
--- Scope de acumulación
+-- Scope de acumulación (legacy, mantener para compatibilidad)
 CREATE TYPE accumulation_scope AS ENUM (
   'store_brand',   -- Por PDV + brands específicas
   'store_cpg',     -- Por PDV + cualquier brand del CPG
@@ -38,6 +38,45 @@ CREATE TYPE accumulation_scope AS ENUM (
 
 -- Vigencia de campaña
 CREATE TYPE validity_type AS ENUM ('indefinite', 'date_range');
+
+-- Tipo de threshold para tiers
+CREATE TYPE threshold_type AS ENUM (
+  'cumulative',      -- Subes de nivel y te quedas (permanente)
+  'per_period',      -- Se evalúa por período, puede bajar
+  'reset_on_redeem'  -- Al canjear vuelve a 0
+);
+
+-- Tipo de beneficio
+CREATE TYPE benefit_type AS ENUM (
+  'discount',      -- Descuento (porcentual o fijo)
+  'reward',        -- Acceso a recompensa específica
+  'multiplier',    -- Multiplicador de puntos
+  'free_product'   -- Producto gratis
+);
+
+-- Tipo de policy
+CREATE TYPE policy_type AS ENUM (
+  'max_accumulations',  -- Límite de acumulaciones
+  'min_amount',         -- Monto mínimo requerido
+  'min_quantity',       -- Cantidad mínima de productos
+  'cooldown'            -- Tiempo de espera entre acumulaciones
+);
+
+-- Scope de policy
+CREATE TYPE policy_scope_type AS ENUM (
+  'campaign',  -- Aplica a toda la campaña
+  'brand',     -- Aplica a una marca específica
+  'product'    -- Aplica a un producto específico
+);
+
+-- Período de policy
+CREATE TYPE policy_period AS ENUM (
+  'transaction',  -- Por transacción
+  'day',          -- Por día
+  'week',         -- Por semana
+  'month',        -- Por mes
+  'lifetime'      -- Lifetime del usuario en la campaña
+);
 
 -- Estado de canje
 CREATE TYPE redemption_status AS ENUM ('pending', 'completed', 'cancelled');
@@ -94,6 +133,30 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 
 ---
 
+### products
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | uuid_generate_v7() | PK |
+| brand_id | uuid | NO | - | FK → brands(id) |
+| sku | varchar(50) | NO | - | - |
+| name | varchar(200) | NO | - | - |
+| status | entity_status | NO | 'active' | - |
+| created_at | timestamptz | NO | now() | - |
+| updated_at | timestamptz | YES | - | - |
+
+**Índices:**
+- `products_pkey` PRIMARY KEY (id)
+- `products_brand_id_idx` INDEX (brand_id)
+- `products_sku_idx` UNIQUE (sku)
+
+**Foreign Keys:**
+- `products_brand_id_fkey` REFERENCES brands(id) ON DELETE CASCADE
+
+**Jerarquía:** CPG → Brand → Product
+
+---
+
 ### stores
 
 | Columna | Tipo | Nullable | Default | Constraints |
@@ -101,6 +164,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 | id | uuid | NO | uuid_generate_v7() | PK |
 | code | varchar(10) | NO | - | UNIQUE |
 | name | varchar(200) | NO | - | - |
+| type | varchar(50) | YES | - | - |
 | address | text | YES | - | - |
 | phone | varchar(20) | YES | - | - |
 | status | entity_status | NO | 'active' | - |
@@ -110,27 +174,13 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 **Índices:**
 - `stores_pkey` PRIMARY KEY (id)
 - `stores_code_key` UNIQUE (code)
+- `stores_type_idx` INDEX (type) WHERE type IS NOT NULL
 
 **Reglas:**
 - `code` se genera automáticamente (6-8 caracteres alfanuméricos)
+- `type` es el tipo de tienda (tiendita, minisuper, cadena, etc.)
 
----
-
-### store_brands
-
-| Columna | Tipo | Nullable | Default | Constraints |
-|---------|------|----------|---------|-------------|
-| store_id | uuid | NO | - | FK → stores(id) |
-| cpg_id | uuid | NO | - | FK → cpgs(id) |
-| created_at | timestamptz | NO | now() | - |
-
-**Índices:**
-- `store_brands_pkey` PRIMARY KEY (store_id, cpg_id)
-- `store_brands_cpg_id_idx` INDEX (cpg_id)
-
-**Foreign Keys:**
-- `store_brands_store_id_fkey` REFERENCES stores(id) ON DELETE CASCADE
-- `store_brands_cpg_id_fkey` REFERENCES cpgs(id) ON DELETE CASCADE
+**Nota:** Los stores son entidades independientes, no dependen de CPGs.
 
 ---
 
@@ -168,8 +218,6 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 | name | varchar(200) | NO | - | - |
 | description | text | YES | - | - |
 | accumulation_type | accumulation_type | NO | - | - |
-| accumulation_scope | accumulation_scope | NO | - | - |
-| threshold | integer | NO | - | CHECK (threshold > 0) |
 | validity_type | validity_type | NO | 'indefinite' | - |
 | starts_at | timestamptz | NO | - | - |
 | ends_at | timestamptz | YES | - | - |
@@ -189,9 +237,13 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 - Si `validity_type = 'date_range'` entonces `ends_at` NO puede ser NULL
 - `ends_at > starts_at` cuando ambos están presentes
 
+**Nota:** El scope de productos y stores se define en tablas relacionadas.
+
 ---
 
 ### campaign_brands
+
+Tabla de relación N:M para definir qué brands participan en una campaña.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
@@ -210,7 +262,148 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 
 ---
 
+### campaign_products
+
+Tabla de relación N:M para definir qué productos específicos participan en una campaña.
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| campaign_id | uuid | NO | - | FK → campaigns(id) |
+| product_id | uuid | NO | - | FK → products(id) |
+
+**Índices:**
+- `campaign_products_pkey` PRIMARY KEY (campaign_id, product_id)
+
+**Foreign Keys:**
+- `campaign_products_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+- `campaign_products_product_id_fkey` REFERENCES products(id) ON DELETE CASCADE
+
+**Regla de negocio:**
+- Si `campaign_products` está vacío, aplica a TODOS los productos de las brands seleccionadas
+
+---
+
+### campaign_store_types
+
+Tabla para definir en qué tipos de stores aplica una campaña.
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| campaign_id | uuid | NO | - | FK → campaigns(id) |
+| store_type | varchar(50) | NO | - | - |
+
+**Índices:**
+- `campaign_store_types_pkey` PRIMARY KEY (campaign_id, store_type)
+
+**Foreign Keys:**
+- `campaign_store_types_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+
+**Regla de negocio:**
+- Si `campaign_store_types` está vacío, aplica en CUALQUIER tipo de store
+
+---
+
+### campaign_tiers
+
+Niveles de progresión dentro de una campaña (ej: Normal, Bronce, Plata, Oro).
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | uuid_generate_v7() | PK |
+| campaign_id | uuid | NO | - | FK → campaigns(id) |
+| name | varchar(100) | NO | - | - |
+| threshold_value | integer | NO | - | CHECK (threshold_value >= 0) |
+| threshold_type | threshold_type | NO | - | - |
+| order | integer | NO | - | CHECK (order > 0) |
+| created_at | timestamptz | NO | now() | - |
+
+**Índices:**
+- `campaign_tiers_pkey` PRIMARY KEY (id)
+- `campaign_tiers_campaign_id_idx` INDEX (campaign_id)
+- `campaign_tiers_campaign_order_key` UNIQUE (campaign_id, order)
+
+**Foreign Keys:**
+- `campaign_tiers_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+
+**threshold_type:**
+- `cumulative`: Acumulas y te quedas en el nivel (tiers permanentes)
+- `per_period`: Se evalúa por período (ej: compras este mes)
+- `reset_on_redeem`: Al canjear vuelve a 0 (tarjeta de sellos clásica)
+
+---
+
+### tier_benefits
+
+Beneficios asociados a cada nivel. Un tier puede tener múltiples beneficios.
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | uuid_generate_v7() | PK |
+| tier_id | uuid | NO | - | FK → campaign_tiers(id) |
+| benefit_type | benefit_type | NO | - | - |
+| config | jsonb | NO | '{}' | - |
+| created_at | timestamptz | NO | now() | - |
+
+**Índices:**
+- `tier_benefits_pkey` PRIMARY KEY (id)
+- `tier_benefits_tier_id_idx` INDEX (tier_id)
+
+**Foreign Keys:**
+- `tier_benefits_tier_id_fkey` REFERENCES campaign_tiers(id) ON DELETE CASCADE
+
+**Ejemplos de config por tipo:**
+- `discount`: `{"percent": 10}` o `{"fixed": 50}`
+- `reward`: `{"reward_id": "uuid"}`
+- `multiplier`: `{"factor": 2}` (2x puntos)
+- `free_product`: `{"product_id": "uuid", "quantity": 1}`
+
+---
+
+### campaign_policies
+
+Restricciones y reglas de acumulación con scope granular.
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | uuid_generate_v7() | PK |
+| campaign_id | uuid | NO | - | FK → campaigns(id) |
+| policy_type | policy_type | NO | - | - |
+| scope_type | policy_scope_type | NO | 'campaign' | - |
+| scope_id | uuid | YES | - | - |
+| period | policy_period | NO | - | - |
+| value | integer | NO | - | CHECK (value > 0) |
+| config | jsonb | YES | - | - |
+| active | boolean | NO | true | - |
+| created_at | timestamptz | NO | now() | - |
+
+**Índices:**
+- `campaign_policies_pkey` PRIMARY KEY (id)
+- `campaign_policies_campaign_id_idx` INDEX (campaign_id)
+- `campaign_policies_active_idx` INDEX (campaign_id) WHERE active = true
+
+**Foreign Keys:**
+- `campaign_policies_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+
+**Validaciones:**
+- Si `scope_type = 'campaign'` entonces `scope_id` DEBE ser NULL
+- Si `scope_type = 'brand'` entonces `scope_id` es FK a brands(id)
+- Si `scope_type = 'product'` entonces `scope_id` es FK a products(id)
+
+**Ejemplos de policies:**
+
+| policy_type | scope_type | scope_id | period | value | Descripción |
+|-------------|------------|----------|--------|-------|-------------|
+| max_accumulations | campaign | null | day | 1 | Máx 1 acumulación/día |
+| max_accumulations | product | prod_123 | day | 1 | Máx 1 del producto X/día |
+| max_accumulations | brand | brand_456 | transaction | 2 | Máx 2 de marca Y/txn |
+| min_amount | campaign | null | transaction | 50 | Compra mínima $50 |
+| cooldown | campaign | null | day | 24 | Esperar 24h entre acumulaciones |
+
+---
+
 ### cards
+
+Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
@@ -219,6 +412,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | store_id | uuid | YES | - | FK → stores(id) |
 | code | varchar(20) | NO | - | UNIQUE |
+| current_tier_id | uuid | YES | - | FK → campaign_tiers(id) |
 | status | entity_status | NO | 'active' | - |
 | created_at | timestamptz | NO | now() | - |
 
@@ -233,10 +427,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 - `cards_user_id_fkey` REFERENCES users(id) ON DELETE CASCADE
 - `cards_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
 - `cards_store_id_fkey` REFERENCES stores(id) ON DELETE SET NULL
-
-**Regla de negocio:**
-- `store_id` es requerido si `campaign.accumulation_scope` es `store_brand` o `store_cpg`
-- `store_id` es NULL si el scope es `brand_only` o `cpg_only`
+- `cards_current_tier_id_fkey` REFERENCES campaign_tiers(id) ON DELETE SET NULL
 
 ---
 
@@ -336,7 +527,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 |---------|------|----------|---------|-------------|
 | id | uuid | NO | uuid_generate_v7() | PK |
 | transaction_id | uuid | NO | - | FK → transactions(id) |
-| brand_id | uuid | NO | - | FK → brands(id) |
+| product_id | uuid | NO | - | FK → products(id) |
 | quantity | integer | NO | 1 | CHECK (quantity > 0) |
 | amount | decimal(12,2) | YES | - | CHECK (amount >= 0) |
 | metadata | jsonb | YES | '{}' | - |
@@ -344,11 +535,13 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 **Índices:**
 - `transaction_items_pkey` PRIMARY KEY (id)
 - `transaction_items_transaction_id_idx` INDEX (transaction_id)
-- `transaction_items_brand_id_idx` INDEX (brand_id)
+- `transaction_items_product_id_idx` INDEX (product_id)
 
 **Foreign Keys:**
 - `transaction_items_transaction_id_fkey` REFERENCES transactions(id) ON DELETE CASCADE
-- `transaction_items_brand_id_fkey` REFERENCES brands(id) ON DELETE CASCADE
+- `transaction_items_product_id_fkey` REFERENCES products(id) ON DELETE CASCADE
+
+**Nota:** Referencia a `product_id` (no brand_id) para granularidad a nivel de SKU.
 
 ---
 

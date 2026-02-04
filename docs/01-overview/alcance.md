@@ -98,14 +98,54 @@ El PDV tiene acceso a:
 | Productos gratis | Sí |
 | Descuentos | Sí |
 | Beneficios especiales | Sí |
-| Acceso a niveles | Sí (básico) |
+| Niveles con beneficios (tiers) | Sí (completo) |
 
 Flujo de canje:
-1. Consumidor alcanza threshold
-2. Sistema notifica disponibilidad
+1. Consumidor alcanza threshold o tier
+2. Sistema notifica disponibilidad y beneficios
 3. Consumidor solicita canje
 4. PDV/Sistema valida y entrega
-5. Balance se actualiza
+5. Balance se actualiza (y tier si aplica reset_on_redeem)
+
+---
+
+## Sistema de Niveles (Tiers)
+
+**Completo en MVP.**
+
+El sistema soporta tres mecánicas de niveles:
+
+| Mecánica | Comportamiento | Ejemplo |
+|----------|----------------|---------|
+| **Cumulative** | Subes y te quedas permanentemente | Club Oro |
+| **Per Period** | Se evalúa por período, puede bajar | Top del mes |
+| **Reset on Redeem** | Al canjear vuelve a 0 | Tarjeta de sellos |
+
+Cada nivel puede tener múltiples beneficios:
+- Descuentos (porcentuales o fijos)
+- Multiplicadores de puntos
+- Acceso a recompensas exclusivas
+- Productos gratis
+
+---
+
+## Sistema de Políticas (Policies)
+
+**Completo en MVP.**
+
+Las políticas permiten control granular sobre la acumulación:
+
+| Tipo | Descripción | Ejemplo |
+|------|-------------|---------|
+| **max_accumulations** | Límite de acumulaciones | Máx 1 por día |
+| **min_amount** | Monto mínimo | Compra mínima $50 |
+| **min_quantity** | Cantidad mínima | Al menos 2 productos |
+| **cooldown** | Tiempo de espera | 24h entre compras |
+
+Las políticas pueden aplicarse a nivel de:
+- Campaña completa
+- Brand específica
+- Producto específico
 
 ---
 
@@ -156,7 +196,9 @@ Flujo de canje:
 | **PDVs** | 500+ (sin límite superior definido) |
 | **Consumidores por PDV** | Sin límite |
 | **Campañas simultáneas** | Múltiples por CPG |
-| **PLIs por campaña** | Sin límite |
+| **Productos por campaña** | Sin límite (scope jerárquico CPG → Brand → Product) |
+| **Tiers por campaña** | Sin límite |
+| **Policies por campaña** | Sin límite |
 | **Transacciones/día** | Diseñar para alta demanda |
 
 ---
@@ -167,10 +209,12 @@ Flujo de canje:
 |---------------|--------|-------------|
 | Procesamiento de pagos | Excluido | TBD |
 | Apps nativas | Excluido | Post-MVP |
-| Gamificación avanzada | Excluido | Fase 2 |
+| Gamificación avanzada (retos, badges, leaderboards) | Excluido | Fase 2 |
 | Machine Learning / Predicciones | Excluido | Fase 2 |
 | Integración con redes sociales | Excluido | TBD |
 | Marketplace de recompensas | Excluido | Fase 2 |
+
+**Nota:** Los tiers básicos (niveles de progresión con beneficios) SÍ están incluidos. La gamificación avanzada se refiere a mecánicas adicionales como retos diarios, badges coleccionables, y leaderboards públicos.
 
 ---
 

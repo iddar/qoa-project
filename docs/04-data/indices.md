@@ -35,14 +35,61 @@ WHERE revoked_at IS NULL;
 
 ---
 
+### Productos (Jerarquía)
+
+**Productos de una brand**
+```sql
+SELECT * FROM products
+WHERE brand_id = $1 AND status = 'active';
+```
+```sql
+CREATE INDEX products_brand_active_idx
+ON products (brand_id)
+WHERE status = 'active';
+```
+
+**Buscar producto por SKU**
+```sql
+SELECT * FROM products WHERE sku = $1;
+```
+- Índice: `products_sku_idx` UNIQUE (sku) ✅ Ya existe
+
+**Obtener jerarquía completa (product → brand → cpg)**
+```sql
+SELECT p.*, b.name as brand_name, b.cpg_id, c.name as cpg_name
+FROM products p
+JOIN brands b ON b.id = p.brand_id
+JOIN cpgs c ON c.id = b.cpg_id
+WHERE p.id = $1;
+```
+- Índice: `products_pkey` PRIMARY KEY ✅ Ya existe
+
+---
+
+### Stores
+
+**Stores por tipo**
+```sql
+SELECT * FROM stores
+WHERE type = $1 AND status = 'active';
+```
+```sql
+CREATE INDEX stores_type_active_idx
+ON stores (type)
+WHERE status = 'active' AND type IS NOT NULL;
+```
+
+---
+
 ### Tarjetas del usuario (Wallet)
 
 **Listar tarjetas activas de un usuario**
 ```sql
-SELECT c.*, b.current, camp.name
+SELECT c.*, b.current, camp.name, ct.name as tier_name
 FROM cards c
 JOIN balances b ON b.card_id = c.id
 JOIN campaigns camp ON camp.id = c.campaign_id
+LEFT JOIN campaign_tiers ct ON ct.id = c.current_tier_id
 WHERE c.user_id = $1 AND c.status = 'active';
 ```
 ```sql
@@ -79,6 +126,16 @@ CREATE INDEX transactions_store_created_idx
 ON transactions (store_id, created_at DESC);
 ```
 
+**Items de una transacción con productos**
+```sql
+SELECT ti.*, p.name as product_name, p.sku, b.name as brand_name
+FROM transaction_items ti
+JOIN products p ON p.id = ti.product_id
+JOIN brands b ON b.id = p.brand_id
+WHERE ti.transaction_id = $1;
+```
+- Índice: `transaction_items_transaction_id_idx` ✅ Ya existe
+
 ---
 
 ### Campañas
@@ -99,18 +156,128 @@ WHERE status = 'active';
 
 **Campañas activas para evaluación de transacción**
 ```sql
+-- Obtener campañas que aplican para un producto específico
 SELECT c.* FROM campaigns c
 WHERE c.status = 'active'
 AND c.starts_at <= $1
 AND (c.ends_at IS NULL OR c.ends_at >= $1)
-AND c.cpg_id IN (SELECT cpg_id FROM brands WHERE id = $2);
+AND c.cpg_id = (SELECT cpg_id FROM brands WHERE id = (SELECT brand_id FROM products WHERE id = $2))
+AND (
+  -- Sin restricción de brands (aplica a todo el CPG)
+  NOT EXISTS (SELECT 1 FROM campaign_brands cb WHERE cb.campaign_id = c.id)
+  OR
+  -- O la brand del producto está en el scope
+  EXISTS (SELECT 1 FROM campaign_brands cb
+          WHERE cb.campaign_id = c.id
+          AND cb.brand_id = (SELECT brand_id FROM products WHERE id = $2))
+)
+AND (
+  -- Sin restricción de productos (aplica a todos)
+  NOT EXISTS (SELECT 1 FROM campaign_products cp WHERE cp.campaign_id = c.id)
+  OR
+  -- O el producto está en el scope
+  EXISTS (SELECT 1 FROM campaign_products cp
+          WHERE cp.campaign_id = c.id AND cp.product_id = $2)
+);
 ```
 ```sql
--- El índice campaigns_cpg_active_idx ayuda aquí
--- Además, índice en brands:
-CREATE INDEX brands_cpg_status_idx
-ON brands (cpg_id)
-WHERE status = 'active';
+-- Índices de soporte para scope de campañas
+CREATE INDEX campaign_brands_brand_id_idx ON campaign_brands (brand_id);
+CREATE INDEX campaign_products_product_id_idx ON campaign_products (product_id);
+CREATE INDEX campaign_store_types_store_type_idx ON campaign_store_types (store_type);
+```
+
+**Verificar si store type aplica a campaña**
+```sql
+SELECT EXISTS (
+  SELECT 1 FROM campaign_store_types
+  WHERE campaign_id = $1 AND store_type = $2
+) OR NOT EXISTS (
+  SELECT 1 FROM campaign_store_types WHERE campaign_id = $1
+);
+```
+- Índice: `campaign_store_types_pkey` PRIMARY KEY ✅ Ya existe
+
+---
+
+### Campaign Tiers
+
+**Tiers de una campaña (ordenados)**
+```sql
+SELECT ct.*,
+  (SELECT json_agg(tb.*) FROM tier_benefits tb WHERE tb.tier_id = ct.id) as benefits
+FROM campaign_tiers ct
+WHERE ct.campaign_id = $1
+ORDER BY ct.order;
+```
+```sql
+CREATE INDEX campaign_tiers_campaign_order_idx
+ON campaign_tiers (campaign_id, "order");
+```
+
+**Calcular tier actual según balance**
+```sql
+SELECT * FROM campaign_tiers
+WHERE campaign_id = $1 AND threshold_value <= $2
+ORDER BY threshold_value DESC
+LIMIT 1;
+```
+```sql
+CREATE INDEX campaign_tiers_campaign_threshold_idx
+ON campaign_tiers (campaign_id, threshold_value DESC);
+```
+
+---
+
+### Campaign Policies
+
+**Policies activas de una campaña**
+```sql
+SELECT * FROM campaign_policies
+WHERE campaign_id = $1 AND active = true;
+```
+```sql
+CREATE INDEX campaign_policies_campaign_active_idx
+ON campaign_policies (campaign_id)
+WHERE active = true;
+```
+
+**Evaluar policy por scope**
+```sql
+-- Verificar si una acumulación viola alguna policy
+SELECT * FROM campaign_policies
+WHERE campaign_id = $1
+AND active = true
+AND (
+  -- Policies a nivel campaña
+  (scope_type = 'campaign')
+  OR
+  -- Policies a nivel brand
+  (scope_type = 'brand' AND scope_id = $2)
+  OR
+  -- Policies a nivel product
+  (scope_type = 'product' AND scope_id = $3)
+);
+```
+```sql
+CREATE INDEX campaign_policies_scope_idx
+ON campaign_policies (campaign_id, scope_type, scope_id)
+WHERE active = true;
+```
+
+**Contar acumulaciones para verificar límites**
+```sql
+-- Acumulaciones de un usuario para una campaña en un período
+SELECT COUNT(*) FROM accumulations a
+JOIN transaction_items ti ON ti.id = a.transaction_item_id
+JOIN transactions t ON t.id = ti.transaction_id
+WHERE a.card_id = $1
+AND a.campaign_id = $2
+AND t.created_at >= $3 AND t.created_at < $4;
+```
+```sql
+CREATE INDEX accumulations_card_campaign_idx
+ON accumulations (card_id, campaign_id);
 ```
 
 ---
@@ -125,9 +292,10 @@ SELECT * FROM balances WHERE card_id = $1;
 
 **Historial de acumulaciones de una tarjeta**
 ```sql
-SELECT a.*, ti.brand_id, t.created_at
+SELECT a.*, ti.product_id, p.name as product_name, t.created_at
 FROM accumulations a
 JOIN transaction_items ti ON ti.id = a.transaction_item_id
+JOIN products p ON p.id = ti.product_id
 JOIN transactions t ON t.id = ti.transaction_id
 WHERE a.card_id = $1
 ORDER BY a.created_at DESC;
@@ -223,13 +391,23 @@ WHERE status = 'pending';
 |-------|--------|----------|-----------|
 | users | users_phone_key | phone | UNIQUE |
 | users | users_email_key | email | UNIQUE, WHERE NOT NULL |
+| products | products_sku_idx | sku | UNIQUE |
+| products | products_brand_active_idx | brand_id | WHERE status = 'active' |
+| stores | stores_type_active_idx | type | WHERE status = 'active' |
 | cards | cards_user_active_idx | user_id | WHERE status = 'active' |
 | cards | cards_code_key | code | UNIQUE |
 | transactions | transactions_user_created_idx | user_id, created_at DESC | - |
 | transactions | transactions_store_created_idx | store_id, created_at DESC | - |
 | campaigns | campaigns_cpg_active_idx | cpg_id, starts_at | WHERE status = 'active' |
-| brands | brands_cpg_status_idx | cpg_id | WHERE status = 'active' |
+| campaign_brands | campaign_brands_brand_id_idx | brand_id | - |
+| campaign_products | campaign_products_product_id_idx | product_id | - |
+| campaign_store_types | campaign_store_types_store_type_idx | store_type | - |
+| campaign_tiers | campaign_tiers_campaign_order_idx | campaign_id, order | - |
+| campaign_tiers | campaign_tiers_campaign_threshold_idx | campaign_id, threshold_value DESC | - |
+| campaign_policies | campaign_policies_campaign_active_idx | campaign_id | WHERE active = true |
+| campaign_policies | campaign_policies_scope_idx | campaign_id, scope_type, scope_id | WHERE active = true |
 | accumulations | accumulations_card_created_idx | card_id, created_at DESC | - |
+| accumulations | accumulations_card_campaign_idx | card_id, campaign_id | - |
 | rewards | rewards_campaign_available_idx | campaign_id | WHERE status = 'active' |
 | redemptions | redemptions_card_created_idx | card_id, created_at DESC | - |
 

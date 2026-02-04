@@ -162,7 +162,9 @@
 | `campaigns.campaign.activated.v1` | `campaigns` | UPDATE (status → active) | Campaña activada |
 | `campaigns.campaign.paused.v1` | `campaigns` | UPDATE (status → paused) | Campaña pausada |
 | `campaigns.campaign.ended.v1` | `campaigns` | UPDATE (status → ended) | Campaña finalizada |
-| `campaigns.threshold.reached.v1` | `balances` | UPDATE (current ≥ threshold) | Usuario alcanzó threshold |
+| `campaigns.threshold.reached.v1` | `balances` | UPDATE (current ≥ threshold) | Usuario alcanzó threshold (legacy) |
+| `campaigns.tier.reached.v1` | `cards` | UPDATE (current_tier_id) | Usuario alcanzó nuevo tier |
+| `campaigns.tier.reset.v1` | `cards` | Redemption con reset_on_redeem | Tier reseteado tras canje |
 
 #### campaigns.campaign.created.v1
 
@@ -248,6 +250,84 @@
 | Consumer Group | Acción | Prioridad |
 |----------------|--------|-----------|
 | notifier | Enviar notificación "¡Tienes una recompensa!" | Alta |
+| webhooks | Publicar a endpoints suscritos | Media |
+
+---
+
+#### campaigns.tier.reached.v1
+
+**Emitido cuando:** Un usuario alcanza un nuevo nivel (tier) en una campaña
+
+**Tabla origen:** `cards` (actualización de current_tier_id)
+
+**Payload:**
+```json
+{
+  "metadata": { ... },
+  "data": {
+    "userId": "usr_123",
+    "cardId": "crd_456",
+    "campaignId": "cmp_789",
+    "previousTierId": "tier_001",
+    "previousTierName": "Bronce",
+    "newTierId": "tier_002",
+    "newTierName": "Plata",
+    "currentBalance": 500,
+    "benefits": [
+      {
+        "type": "discount",
+        "config": { "percent": 10 }
+      },
+      {
+        "type": "multiplier",
+        "config": { "factor": 1.5 }
+      }
+    ]
+  }
+}
+```
+
+**Handlers:**
+
+| Consumer Group | Acción | Prioridad |
+|----------------|--------|-----------|
+| notifier | Enviar notificación "¡Subiste a nivel Plata!" | Alta |
+| notifier | Informar sobre nuevos beneficios | Alta |
+| webhooks | Publicar a endpoints suscritos | Media |
+| analytics | Registrar progresión de tier | Baja |
+
+---
+
+#### campaigns.tier.reset.v1
+
+**Emitido cuando:** El tier de un usuario se resetea tras un canje (mecánica reset_on_redeem)
+
+**Tabla origen:** `cards` (post redemption con threshold_type = reset_on_redeem)
+
+**Payload:**
+```json
+{
+  "metadata": { ... },
+  "data": {
+    "userId": "usr_123",
+    "cardId": "crd_456",
+    "campaignId": "cmp_789",
+    "redemptionId": "rdm_012",
+    "previousTierId": "tier_complete",
+    "previousTierName": "Completa",
+    "newTierId": "tier_progress",
+    "newTierName": "En progreso",
+    "previousBalance": 10,
+    "newBalance": 0
+  }
+}
+```
+
+**Handlers:**
+
+| Consumer Group | Acción | Prioridad |
+|----------------|--------|-----------|
+| notifier | Enviar mensaje "Tarjeta reiniciada, ¡sigue acumulando!" | Media |
 | webhooks | Publicar a endpoints suscritos | Media |
 
 ---
@@ -340,8 +420,11 @@
     "transactionId": "txn_123",
     "userId": "usr_456",
     "storeId": "sto_789",
+    "storeType": "tiendita",
     "items": [
       {
+        "productId": "prd_001",
+        "sku": "FANTA-600ML",
         "brandId": "brd_001",
         "quantity": 2,
         "amount": 150.00
@@ -356,7 +439,7 @@
 
 | Consumer Group | Acción | Prioridad |
 |----------------|--------|-----------|
-| accumulator | Evaluar campañas y calcular acumulaciones | **Crítica** |
+| accumulator | Evaluar campañas, policies y calcular acumulaciones | **Crítica** |
 | webhooks | Publicar a endpoints suscritos | Media |
 | analytics | Registrar métricas de venta | Baja |
 
@@ -491,8 +574,8 @@ Tendero escanea QR usuario ─────────────────�
    ┌──────────────────────┐      ┌──────────────────────────────────────────────┐
    │ INSERT transactions  │──────│ INSERT outbox_events                         │
    │ INSERT trans_items   │      │   (transactions.transaction.created.v1)      │
-   └───────────┬──────────┘      └──────────────────────────────────────────────┘
-               │                                    │
+   │  (con product_id)    │      └──────────────────────────────────────────────┘
+   └───────────┬──────────┘                        │
                │                           Dispatcher publica
                │                                    │
                │                                    ▼
@@ -506,32 +589,37 @@ Tendero escanea QR usuario ─────────────────�
                │               │ accumulator │      │      │ webhooks │
                │               └──────┬──────┘      │      └──────────┘
                │                      │             │
-               │           Evalúa campañas          │
-               │           activas por items        │
+               │     1. Evalúa campañas por scope   │
+               │        (products, brands, stores)  │
+               │     2. Evalúa policies             │
+               │        (límites, montos mínimos)   │
+               │     3. Calcula acumulación         │
+               │     4. Evalúa tiers                │
                │                      │             │
                │                      ▼             │
                │         ┌────────────────────┐     │
                │         │ INSERT accumulations│    │
                │         │ UPDATE balances     │    │
+               │         │ UPDATE cards.tier   │    │
                │         │ INSERT outbox_events│    │
                │         │  - balance_updated  │    │
-               │         │  - threshold_reached│    │
+               │         │  - tier_reached     │    │
                │         │  - txn_processed    │    │
                │         └─────────┬──────────┘     │
                │                   │                │
                │                   ▼                ▼
                │            Más eventos publicados
                │                   │
-               │         ┌─────────┴─────────┐
-               │         ▼                   ▼
-               │   ┌──────────┐        ┌───────────┐
-               │   │ notifier │        │ notifier  │
-               │   │ (balance)│        │(threshold)│
-               │   └────┬─────┘        └────┬──────┘
-               │        │                   │
-               │        ▼                   ▼
-               │   "Acumulaste 3       "¡Tienes una
-               │    estampas"           recompensa!"
+               │         ┌─────────┼─────────┐
+               │         ▼         ▼         ▼
+               │   ┌──────────┐ ┌───────┐ ┌──────────┐
+               │   │ notifier │ │notif. │ │ notifier │
+               │   │ (balance)│ │(tier) │ │(resumen) │
+               │   └────┬─────┘ └───┬───┘ └────┬─────┘
+               │        │           │          │
+               │        ▼           ▼          ▼
+               │   "Acumulaste   "¡Subiste   "Resumen
+               │    3 puntos"    a Plata!"   de compra"
                │
                ▼
    Compra completada ───────────────────────────────────────────────────────────
@@ -599,7 +687,9 @@ Usuario solicita canje ───────────────────
 - `users.user.verified.v1` → Confirmación de verificación
 - `cards.card.created.v1` → Enviar tarjeta digital
 - `cards.card.balance_updated.v1` → Notificar acumulación
-- `campaigns.threshold.reached.v1` → "¡Tienes una recompensa!"
+- `campaigns.threshold.reached.v1` → "¡Tienes una recompensa!" (legacy)
+- `campaigns.tier.reached.v1` → "¡Subiste a nivel X!" + beneficios
+- `campaigns.tier.reset.v1` → "Tarjeta reiniciada, ¡sigue acumulando!"
 - `transactions.transaction.processed.v1` → Resumen de compra
 - `rewards.reward.redeemed.v1` → Código de canje
 
@@ -612,18 +702,29 @@ Usuario solicita canje ───────────────────
 
 ### accumulator
 
-**Propósito:** Evaluar campañas y calcular acumulaciones para transacciones
+**Propósito:** Evaluar campañas, policies y calcular acumulaciones para transacciones
 
 **Eventos que consume:**
 - `transactions.transaction.created.v1` → Procesar acumulación
 
 **Lógica:**
-1. Obtener items de la transacción
-2. Identificar campañas activas por scope
-3. Calcular puntos/estampas según reglas
-4. Insertar accumulations
-5. Actualizar balances
-6. Emitir eventos derivados
+1. Obtener items de la transacción (con product → brand → cpg)
+2. Identificar campañas activas por scope:
+   - Verificar CPG del producto
+   - Verificar scope de brands (campaign_brands)
+   - Verificar scope de products (campaign_products)
+   - Verificar scope de store types (campaign_store_types)
+3. Por cada campaña aplicable, evaluar policies:
+   - Verificar max_accumulations por período
+   - Verificar min_amount, min_quantity
+   - Verificar cooldowns
+   - Si viola alguna policy → SKIP campaña
+4. Calcular puntos/estampas según tipo de acumulación
+5. Insertar accumulations, actualizar balances
+6. Evaluar tiers:
+   - Calcular tier actual según balance y threshold_type
+   - Si subió de tier → emitir `campaigns.tier.reached.v1`
+7. Emitir eventos derivados (balance_updated, threshold_reached)
 
 **Configuración:**
 - Reintentos: 5 (crítico)
