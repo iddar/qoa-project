@@ -43,7 +43,7 @@ Basado en los ADRs y el modelo de negocio:
 | **Stores** | `/stores/*` | PDVs y su relación con CPGs |
 | **Brands** | `/brands/*` | Marcas/sub-marcas de CPGs |
 | **Products** | `/products/*` | Catálogo de productos (SKUs) |
-| **Campaigns** | `/campaigns/*` | Programas de lealtad |
+| **Campaigns** | `/campaigns/*` | Programas de lealtad, códigos y auditoría |
 | **Cards** | `/cards/*` | Tarjetas de consumidores |
 | **Transactions** | `/transactions/*` | Registro de compras |
 | **Rewards** | `/rewards/*` | Catálogo y canje de premios |
