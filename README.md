@@ -97,6 +97,31 @@ Actualiza esos valores antes de desplegar en otros entornos; no compartas secret
 
 Los servicios usan las credenciales definidas en `src/.env.local`. Ajusta puertos/volúmenes editando `docker-compose.yml`.
 
+### Solo dependencias en Docker (Bun corriendo en tu máquina)
+
+Cuando quieras aprovechar hot-reload de `bun run dev` pero mantener la misma base de datos/caché de Docker:
+
+1. Levanta únicamente las dependencias:
+
+   ```bash
+   docker compose up -d postgres redis
+   ```
+
+2. Usa las variables de `src/.env.development` (Bun ya carga `.env.development` cuando `bun run dev` establece `BUN_ENV=development`). Asegúrate de que `POSTGRES_HOST` y `REDIS_HOST` apunten a `127.0.0.1`, tal como viene en ese archivo.
+3. Ejecuta la app local:
+
+   ```bash
+   cd src
+   bun install
+   bun run dev
+   ```
+
+4. Cuando termines, detén los contenedores (los volúmenes persisten):
+
+   ```bash
+   docker compose stop postgres redis
+   ```
+
 ### Flujo de desarrollo local (sin contenedores)
 
 Desde `src/`:
