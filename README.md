@@ -159,3 +159,4 @@ Los comandos anteriores respetan el principio de “Bun-first” (sin npm, node,
    ```
 
 Todas las migraciones y snapshots (`src/drizzle/meta`) se deben versionar en Git para garantizar reproducibilidad.
+La aplicación usa el driver nativo de Bun (`drizzle-orm/bun-sql` + [`SQL` de Bun](https://bun.sh/docs/runtime/sql)), así que no requiere adaptadores como `postgres` o `pg`.
