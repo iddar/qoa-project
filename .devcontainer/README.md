@@ -117,11 +117,11 @@ You can verify services are running:
 # Check app health
 curl http://localhost:3000/health
 
-# Check PostgreSQL
-pg_isready -h postgres -U qoa -d qoa_local
+# Check PostgreSQL (from within the postgres container)
+docker exec qoa-project-postgres-1 pg_isready -h localhost -U qoa -d qoa_local
 
-# Check Redis
-redis-cli -h redis ping
+# Check Redis (from within the redis container)
+docker exec qoa-project-redis-1 redis-cli ping
 ```
 
 ## Troubleshooting

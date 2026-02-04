@@ -80,7 +80,7 @@ Este proyecto está configurado para GitHub Codespaces, lo que permite desarroll
 - ✅ Hot-reload para desarrollo rápido
 
 Para empezar:
-1. Haz clic en el botón "Open in GitHub Codespaces" arriba
+1. Haz clic en el badge de arriba (el botón aparecerá en inglés como "Open in GitHub Codespaces")
 2. Espera a que el entorno se configure (2-3 minutos)
 3. Ejecuta `bun run dev` en la terminal
 4. Accede a la aplicación en el puerto 3000 cuando VS Code te notifique
