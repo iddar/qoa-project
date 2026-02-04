@@ -20,4 +20,3 @@ describe("Health module", () => {
     expect(() => new Date(payload.timestamp)).not.toThrow();
   });
 });
-

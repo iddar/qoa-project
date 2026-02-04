@@ -42,6 +42,7 @@ Basado en los ADRs y el modelo de negocio:
 | **Users** | `/users/*` | Consumidores (identificados por teléfono) |
 | **Stores** | `/stores/*` | PDVs y su relación con CPGs |
 | **Brands** | `/brands/*` | Marcas/sub-marcas de CPGs |
+| **Products** | `/products/*` | Catálogo de productos (SKUs) |
 | **Campaigns** | `/campaigns/*` | Programas de lealtad |
 | **Cards** | `/cards/*` | Tarjetas de consumidores |
 | **Transactions** | `/transactions/*` | Registro de compras |
@@ -138,6 +139,8 @@ Ejemplos:
 | `transactions.transaction.created` | Compra registrada | Motor de reglas |
 | `transactions.transaction.processed` | Items evaluados | Balances, Notificaciones |
 | `campaigns.threshold.reached` | Usuario alcanza meta | Rewards, Notificaciones |
+| `campaigns.campaign.updated` | Cambios en configuración | Auditoría, QA |
+| `campaigns.code.captured` | Código capturado | Motor de reglas, antifraude |
 | `rewards.reward.redeemed` | Canje de recompensa | Balances, Analytics |
 | `cards.card.created` | Nueva tarjeta emitida | Notificaciones |
 

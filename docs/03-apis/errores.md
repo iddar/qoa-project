@@ -82,6 +82,8 @@ Todas las respuestas de error siguen este formato:
 | `CAMPAIGN_NOT_FOUND` | 404 | Campaña no encontrada | campaign_id inválido |
 | `CARD_NOT_FOUND` | 404 | Tarjeta no encontrada | card_id inválido |
 | `REWARD_NOT_FOUND` | 404 | Recompensa no encontrada | reward_id inválido |
+| `CODE_SET_NOT_FOUND` | 404 | Batch de códigos no encontrado | code_set_id inválido |
+| `CODE_NOT_FOUND` | 404 | Código no encontrado | code_value inválido |
 
 ### Conflictos (409)
 
@@ -92,6 +94,7 @@ Todas las respuestas de error siguen este formato:
 | `PHONE_ALREADY_REGISTERED` | 409 | Teléfono ya registrado | Usuario existente |
 | `CARD_ALREADY_EXISTS` | 409 | Ya tienes una tarjeta activa | Card duplicada para campaña |
 | `ALREADY_REDEEMED` | 409 | Recompensa ya canjeada | Intento de doble canje |
+| `CODE_ALREADY_USED` | 409 | Código ya utilizado | Reuso de código único |
 
 ### Reglas de negocio (422)
 
@@ -101,9 +104,14 @@ Todas las respuestas de error siguen este formato:
 | `INSUFFICIENT_BALANCE` | 422 | Saldo insuficiente | Puntos/estampas < threshold |
 | `CAMPAIGN_NOT_ACTIVE` | 422 | Campaña no activa | Campaña en draft/paused/ended |
 | `CAMPAIGN_EXPIRED` | 422 | Campaña expirada | Fuera de vigencia |
+| `CAMPAIGN_NOT_READY` | 422 | Campaña no lista para revisión | ready_for_review=false |
+| `CAMPAIGN_NOT_REVIEWED` | 422 | Campaña no revisada | reviewed=false |
+| `CAMPAIGN_NOT_CONFIRMED` | 422 | Campaña no confirmada | confirmed=false |
 | `STORE_NOT_PARTICIPATING` | 422 | Tienda no participa en campaña | PDV no asociado |
 | `REWARD_NOT_AVAILABLE` | 422 | Recompensa no disponible | Stock agotado o inactiva |
 | `DAILY_LIMIT_REACHED` | 422 | Límite diario alcanzado | Máximo de operaciones/día |
+| `CODE_EXPIRED` | 422 | Código expirado | Fuera de vigencia del código |
+| `CODE_INVALID` | 422 | Código inválido | No pertenece a la campaña |
 
 ### Rate Limiting (429)
 

@@ -43,12 +43,16 @@ channels:
     messages:
       campaignCreated:
         $ref: '#/components/messages/CampaignCreated'
+      campaignUpdated:
+        $ref: '#/components/messages/CampaignUpdated'
       campaignActivated:
         $ref: '#/components/messages/CampaignActivated'
       campaignPaused:
         $ref: '#/components/messages/CampaignPaused'
       campaignEnded:
         $ref: '#/components/messages/CampaignEnded'
+      campaignCodeCaptured:
+        $ref: '#/components/messages/CampaignCodeCaptured'
       thresholdReached:
         $ref: '#/components/messages/ThresholdReached'
 
@@ -102,6 +106,20 @@ operations:
       $ref: '#/channels/campaigns'
     messages:
       - $ref: '#/channels/campaigns/messages/thresholdReached'
+
+  onCampaignUpdated:
+    action: receive
+    channel:
+      $ref: '#/channels/campaigns'
+    messages:
+      - $ref: '#/channels/campaigns/messages/campaignUpdated'
+
+  onCampaignCodeCaptured:
+    action: receive
+    channel:
+      $ref: '#/channels/campaigns'
+    messages:
+      - $ref: '#/channels/campaigns/messages/campaignCodeCaptured'
 
   onRewardRedeemed:
     action: receive
@@ -163,6 +181,14 @@ components:
       payload:
         $ref: '#/components/schemas/CampaignCreatedPayload'
 
+    CampaignUpdated:
+      name: campaigns.campaign.updated.v1
+      title: Campaña actualizada
+      summary: Se emite cuando se actualiza una campaña (incluye diff)
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CampaignUpdatedPayload'
+
     CampaignActivated:
       name: campaigns.campaign.activated.v1
       title: Campaña activada
@@ -186,6 +212,14 @@ components:
       contentType: application/json
       payload:
         $ref: '#/components/schemas/CampaignStatusChangedPayload'
+
+    CampaignCodeCaptured:
+      name: campaigns.code.captured.v1
+      title: Código capturado
+      summary: Se emite cuando se captura un código único en una campaña
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/CampaignCodeCapturedPayload'
 
     ThresholdReached:
       name: campaigns.threshold.reached.v1
@@ -402,8 +436,49 @@ components:
             accumulationType:
               type: string
               enum: [stamps, points, amount]
+            captureMode:
+              type: string
+              enum: [transaction, code, hybrid]
+            status:
+              type: string
+              enum: [draft, active, paused, ended]
+            version:
+              type: integer
             threshold:
               type: integer
+
+    CampaignUpdatedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - campaignId
+            - version
+            - changes
+          properties:
+            campaignId:
+              type: string
+            version:
+              type: integer
+            changes:
+              type: array
+              items:
+                type: object
+                properties:
+                  fieldPath:
+                    type: string
+                  oldValue:
+                    type: object
+                    nullable: true
+                  newValue:
+                    type: object
+                    nullable: true
 
     CampaignStatusChangedPayload:
       type: object
@@ -431,6 +506,35 @@ components:
             reason:
               type: string
               description: Razón del cambio (si aplica)
+
+    CampaignCodeCapturedPayload:
+      type: object
+      required:
+        - metadata
+        - data
+      properties:
+        metadata:
+          $ref: '#/components/schemas/EventMetadata'
+        data:
+          type: object
+          required:
+            - campaignId
+            - cardId
+            - codeValue
+            - status
+          properties:
+            campaignId:
+              type: string
+            cardId:
+              type: string
+            codeValue:
+              type: string
+            status:
+              type: string
+              enum: [accepted, rejected]
+            reason:
+              type: string
+              nullable: true
 
     ThresholdReachedPayload:
       type: object
@@ -556,7 +660,7 @@ components:
               items:
                 type: object
                 properties:
-                  brandId:
+                  productId:
                     type: string
                   quantity:
                     type: integer
@@ -564,6 +668,10 @@ components:
                     type: number
             totalAmount:
               type: number
+            codes:
+              type: array
+              items:
+                type: string
 
     TransactionProcessedPayload:
       type: object
@@ -596,6 +704,12 @@ components:
                     type: integer
                   thresholdReached:
                     type: boolean
+                  sourceType:
+                    type: string
+                    enum: [transaction_item, code_capture]
+                  codeCaptureId:
+                    type: string
+                    nullable: true
 
     # ===== Rewards Payloads =====
     RewardRedeemedPayload:

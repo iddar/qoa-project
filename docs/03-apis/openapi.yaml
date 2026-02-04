@@ -32,6 +32,8 @@ tags:
     description: Puntos de venta (PDVs)
   - name: Brands
     description: Marcas de CPGs
+  - name: Products
+    description: Catálogo de productos (SKUs)
   - name: Campaigns
     description: Campañas de lealtad
   - name: Cards
@@ -40,6 +42,10 @@ tags:
     description: Registro de compras
   - name: Rewards
     description: Catálogo y canje de recompensas
+  - name: Reports
+    description: Reportes para PDV y CPG
+  - name: Webhooks
+    description: Configuración de webhooks
 
 paths:
   # ==================== AUTH ====================
@@ -135,6 +141,59 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /auth/password/reset-request:
+    post:
+      tags: [Auth]
+      summary: Solicitar reset de contraseña
+      description: Envía email con token de reseteo si la cuenta existe
+      operationId: requestPasswordReset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Solicitud recibida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      message:
+                        type: string
+
+  /auth/password/reset:
+    post:
+      tags: [Auth]
+      summary: Confirmar reset de contraseña
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                newPassword:
+                  type: string
+                  minLength: 8
+      responses:
+        '204':
+          description: Contraseña actualizada
 
   /auth/refresh:
     post:
@@ -352,6 +411,41 @@ paths:
               schema:
                 $ref: '#/components/schemas/BrandListResponse'
 
+  # ==================== PRODUCTS ====================
+  /products:
+    get:
+      tags: [Products]
+      summary: Listar productos
+      operationId: listProducts
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: cpgId
+          in: query
+          schema:
+            type: string
+          description: Filtrar por CPG
+        - name: brandId
+          in: query
+          schema:
+            type: string
+          description: Filtrar por brand
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+
   # ==================== CAMPAIGNS ====================
   /campaigns:
     get:
@@ -442,10 +536,205 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignResponse'
 
+  /campaigns/{campaignId}/ready-for-review:
+    post:
+      tags: [Campaigns]
+      summary: Enviar campaña a revisión
+      operationId: submitCampaignForReview
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Nota opcional del owner
+      responses:
+        '200':
+          description: Campaña marcada como lista para revisión
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+
+  /campaigns/{campaignId}/review:
+    post:
+      tags: [Campaigns]
+      summary: Revisar campaña
+      operationId: reviewCampaign
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approved:
+                  type: boolean
+                  default: true
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Estado de revisión actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+
+  /campaigns/{campaignId}/confirm:
+    post:
+      tags: [Campaigns]
+      summary: Confirmar campaña (QC)
+      operationId: confirmCampaign
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+      responses:
+        '200':
+          description: Campaña confirmada para activación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+
+  /campaigns/{campaignId}/audit-logs:
+    get:
+      tags: [Campaigns]
+      summary: Listar auditoría de campaña
+      operationId: listCampaignAuditLogs
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Historial de cambios de la campaña
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignAuditLogListResponse'
+
+  /campaigns/{campaignId}/code-sets:
+    get:
+      tags: [Campaigns]
+      summary: Listar batches de códigos
+      operationId: listCampaignCodeSets
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de batches de códigos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignCodeSetListResponse'
+
+    post:
+      tags: [Campaigns]
+      summary: Crear batch de códigos
+      operationId: createCampaignCodeSet
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCodeSetCreate'
+      responses:
+        '201':
+          description: Batch creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignCodeSetResponse'
+
+  /campaigns/{campaignId}/code-sets/{codeSetId}/codes/import:
+    post:
+      tags: [Campaigns]
+      summary: Importar códigos a un batch
+      operationId: importCampaignCodes
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - $ref: '#/components/parameters/codeSetIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCodeImport'
+      responses:
+        '202':
+          description: Importación aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignCodeImportResponse'
+
+  /campaigns/{campaignId}/codes/capture:
+    post:
+      tags: [Campaigns]
+      summary: Capturar códigos de campaña
+      operationId: captureCampaignCodes
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignCodeCaptureRequest'
+      responses:
+        '200':
+          description: Resultado de la captura
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignCodeCaptureResponse'
+
   /campaigns/{campaignId}/activate:
     post:
       tags: [Campaigns]
       summary: Activar campaña
+      description: Requiere ready_for_review, reviewed y confirmed en true
       operationId: activateCampaign
       security:
         - bearerAuth: []
@@ -687,6 +976,113 @@ paths:
         '422':
           $ref: '#/components/responses/BusinessRuleViolation'
 
+  # ==================== REPORTS ====================
+  /reports/stores/{storeId}/summary:
+    get:
+      tags: [Reports]
+      summary: Resumen de tienda
+      operationId: getStoreSummaryReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Reporte resumido de tienda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSummaryResponse'
+
+  /reports/cpgs/{cpgId}/summary:
+    get:
+      tags: [Reports]
+      summary: Resumen por CPG
+      operationId: getCpgSummaryReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/cpgIdParam'
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Reporte resumido por CPG
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportSummaryResponse'
+
+  # ==================== WEBHOOKS ====================
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: Listar webhooks
+      operationId: listWebhooks
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de webhooks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookListResponse'
+
+    post:
+      tags: [Webhooks]
+      summary: Crear webhook
+      operationId: createWebhook
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookCreate'
+      responses:
+        '201':
+          description: Webhook creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+
+  /webhooks/{webhookId}:
+    delete:
+      tags: [Webhooks]
+      summary: Eliminar webhook
+      operationId: deleteWebhook
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/webhookIdParam'
+      responses:
+        '204':
+          description: Webhook eliminado
+
 # ==================== COMPONENTS ====================
 components:
   securitySchemes:
@@ -720,8 +1116,20 @@ components:
       required: true
       schema:
         type: string
+    cpgIdParam:
+      name: cpgId
+      in: path
+      required: true
+      schema:
+        type: string
     campaignIdParam:
       name: campaignId
+      in: path
+      required: true
+      schema:
+        type: string
+    codeSetIdParam:
+      name: codeSetId
       in: path
       required: true
       schema:
@@ -740,6 +1148,12 @@ components:
         type: string
     rewardIdParam:
       name: rewardId
+      in: path
+      required: true
+      schema:
+        type: string
+    webhookIdParam:
+      name: webhookId
       in: path
       required: true
       schema:
@@ -896,6 +1310,10 @@ components:
           description: Código único para QR
         name:
           type: string
+        type:
+          type: string
+          nullable: true
+          description: Tipo de canal (tiendita, minisuper, cadena)
         address:
           type: string
           nullable: true
@@ -916,6 +1334,9 @@ components:
         name:
           type: string
           maxLength: 200
+        type:
+          type: string
+          nullable: true
         address:
           type: string
         phone:
@@ -967,7 +1388,88 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    # ===== Product =====
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        brandId:
+          type: string
+        sku:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+
+    ProductListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     # ===== Campaign =====
+    CampaignTier:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        thresholdValue:
+          type: integer
+        thresholdType:
+          type: string
+          enum: [cumulative, per_period, reset_on_redeem]
+        order:
+          type: integer
+        benefits:
+          type: array
+          items:
+            $ref: '#/components/schemas/TierBenefit'
+
+    TierBenefit:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [discount, reward, multiplier, free_product]
+        config:
+          type: object
+
+    CampaignPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+        policyType:
+          type: string
+          enum: [max_accumulations, min_amount, min_quantity, cooldown]
+        scopeType:
+          type: string
+          enum: [campaign, brand, product]
+        scopeId:
+          type: string
+          nullable: true
+        period:
+          type: string
+          enum: [transaction, day, week, month, lifetime]
+        value:
+          type: integer
+        config:
+          type: object
+          nullable: true
+        active:
+          type: boolean
+
     Campaign:
       type: object
       properties:
@@ -986,6 +1488,12 @@ components:
         accumulationScope:
           type: string
           enum: [store_brand, store_cpg, brand_only, cpg_only]
+          deprecated: true
+          description: Legacy. Usar brandIds/productIds/storeTypes.
+        captureMode:
+          type: string
+          enum: [transaction, code, hybrid]
+          default: transaction
         threshold:
           type: integer
           description: Cantidad para canjear
@@ -995,6 +1503,26 @@ components:
             type: string
           nullable: true
           description: null = todas las brands del CPG
+        productIds:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: null = todos los productos de las brands seleccionadas
+        storeTypes:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: null = cualquier tipo de store
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignTier'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignPolicy'
         status:
           type: string
           enum: [draft, active, paused, ended]
@@ -1008,13 +1536,26 @@ components:
           type: string
           format: date-time
           nullable: true
+        version:
+          type: integer
+          description: Versión incremental para auditoría
+        readyForReview:
+          type: boolean
+        reviewed:
+          type: boolean
+        confirmed:
+          type: boolean
         createdAt:
           type: string
           format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     CampaignCreate:
       type: object
-      required: [cpgId, name, accumulationType, accumulationScope, threshold, startsAt]
+      required: [cpgId, name, accumulationType, captureMode, startsAt]
       properties:
         cpgId:
           type: string
@@ -1029,6 +1570,12 @@ components:
         accumulationScope:
           type: string
           enum: [store_brand, store_cpg, brand_only, cpg_only]
+          deprecated: true
+          description: Legacy. Usar brandIds/productIds/storeTypes.
+        captureMode:
+          type: string
+          enum: [transaction, code, hybrid]
+          default: transaction
         threshold:
           type: integer
           minimum: 1
@@ -1036,6 +1583,22 @@ components:
           type: array
           items:
             type: string
+        productIds:
+          type: array
+          items:
+            type: string
+        storeTypes:
+          type: array
+          items:
+            type: string
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignTier'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignPolicy'
         validityType:
           type: string
           enum: [indefinite, date_range]
@@ -1046,6 +1609,9 @@ components:
         endsAt:
           type: string
           format: date-time
+        readyForReview:
+          type: boolean
+          default: false
 
     CampaignUpdate:
       type: object
@@ -1054,9 +1620,46 @@ components:
           type: string
         description:
           type: string
+        accumulationType:
+          type: string
+          enum: [stamps, points, amount]
+        captureMode:
+          type: string
+          enum: [transaction, code, hybrid]
+        threshold:
+          type: integer
+          minimum: 1
+        brandIds:
+          type: array
+          items:
+            type: string
+        productIds:
+          type: array
+          items:
+            type: string
+        storeTypes:
+          type: array
+          items:
+            type: string
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignTier'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignPolicy'
+        validityType:
+          type: string
+          enum: [indefinite, date_range]
+        startsAt:
+          type: string
+          format: date-time
         endsAt:
           type: string
           format: date-time
+        readyForReview:
+          type: boolean
 
     CampaignResponse:
       type: object
@@ -1073,6 +1676,245 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Campaign'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignCodeSet:
+      type: object
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        name:
+          type: string
+        source:
+          type: string
+          nullable: true
+        maxUsesPerCode:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    CampaignCode:
+      type: object
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        codeSetId:
+          type: string
+        codeValue:
+          type: string
+        status:
+          type: string
+          enum: [available, assigned, redeemed, void]
+        productId:
+          type: string
+          nullable: true
+        maxUses:
+          type: integer
+        usesCount:
+          type: integer
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CampaignCodeCapture:
+      type: object
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        cardId:
+          type: string
+        campaignCodeId:
+          type: string
+        transactionId:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, accepted, rejected]
+        rejectionReason:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CampaignAuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        version:
+          type: integer
+        fieldPath:
+          type: string
+        oldValue:
+          type: object
+          nullable: true
+        newValue:
+          type: object
+          nullable: true
+        actorId:
+          type: string
+          nullable: true
+        actorType:
+          type: string
+          enum: [user, api_key, system]
+        reason:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    CampaignCodeSetCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        source:
+          type: string
+        maxUsesPerCode:
+          type: integer
+          default: 1
+        metadata:
+          type: object
+          nullable: true
+
+    CampaignCodeSetResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignCodeSet'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignCodeSetListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignCodeSet'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignCodeImport:
+      type: object
+      required: [codes]
+      properties:
+        codes:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [codeValue]
+            properties:
+              codeValue:
+                type: string
+              productId:
+                type: string
+                nullable: true
+              maxUses:
+                type: integer
+                nullable: true
+
+    CampaignCodeImportResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            imported:
+              type: integer
+            rejected:
+              type: integer
+            errors:
+              type: array
+              items:
+                type: object
+                properties:
+                  codeValue:
+                    type: string
+                  reason:
+                    type: string
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignCodeCaptureRequest:
+      type: object
+      required: [cardId, codes]
+      properties:
+        cardId:
+          type: string
+        transactionId:
+          type: string
+          nullable: true
+        codes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        metadata:
+          type: object
+          nullable: true
+
+    CampaignCodeCaptureResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            results:
+              type: array
+              items:
+                type: object
+                properties:
+                  codeValue:
+                    type: string
+                  status:
+                    type: string
+                    enum: [accepted, rejected]
+                  reason:
+                    type: string
+                    nullable: true
+                  campaignCodeId:
+                    type: string
+                    nullable: true
+                  captureId:
+                    type: string
+                    nullable: true
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CampaignAuditLogListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignAuditLog'
         pagination:
           $ref: '#/components/schemas/Pagination'
         meta:
@@ -1095,6 +1937,9 @@ components:
         code:
           type: string
           description: Código único de la tarjeta
+        currentTierId:
+          type: string
+          nullable: true
         status:
           type: string
           enum: [active, inactive]
@@ -1164,7 +2009,7 @@ components:
     TransactionItem:
       type: object
       properties:
-        brandId:
+        productId:
           type: string
         quantity:
           type: integer
@@ -1212,6 +2057,15 @@ components:
                     type: integer
                   newBalance:
                     type: integer
+                  sourceType:
+                    type: string
+                    enum: [transaction_item, code_capture]
+                  codeCaptureId:
+                    type: string
+                    nullable: true
+                  codeValue:
+                    type: string
+                    nullable: true
 
     TransactionCreate:
       type: object
@@ -1226,9 +2080,9 @@ components:
           minItems: 1
           items:
             type: object
-            required: [brandId]
+            required: [productId]
             properties:
-              brandId:
+              productId:
                 type: string
               quantity:
                 type: integer
@@ -1239,6 +2093,11 @@ components:
                 format: decimal
               metadata:
                 type: object
+        codes:
+          type: array
+          description: Códigos únicos capturados en la misma transacción (modo híbrido)
+          items:
+            type: string
         metadata:
           type: object
           description: Datos adicionales de la transacción
@@ -1316,6 +2175,93 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Reward'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== Reports =====
+    ReportSummary:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+        metrics:
+          type: object
+          properties:
+            totalTransactions:
+              type: integer
+            totalAmount:
+              type: number
+              format: decimal
+            totalAccumulations:
+              type: integer
+
+    ReportSummaryResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/ReportSummary'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # ===== Webhooks =====
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+        url:
+          type: string
+        events:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookCreate:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        secret:
+          type: string
+          nullable: true
+
+    WebhookResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Webhook'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    WebhookListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Webhook'
         pagination:
           $ref: '#/components/schemas/Pagination'
         meta:

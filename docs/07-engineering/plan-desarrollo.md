@@ -16,6 +16,7 @@ Este plan divide la construcción del sistema en etapas consecutivas. Cada etapa
 - [ ] Crear template de módulo (controller, service, repo, schema).
 - [ ] Configurar lint (Biome/ESLint) + format en CI.
 - [ ] Inicializar `docs/03-apis/openapi.yaml` con info general y esquemas `Error`, `Pagination`.
+- [ ] Auditar `docs/03-apis/*` contra el modelo de datos antes de iniciar desarrollo.
 
 ---
 
@@ -49,12 +50,12 @@ Este plan divide la construcción del sistema en etapas consecutivas. Cada etapa
 
 - **Código:** módulo `campaigns` completo (tiers, policies, scopes, capture modes, auditoría).
 - **Tests:** unit tests del evaluador de policies y del motor de acumulaciones, pruebas de snapshot para auditoría (`campaign_audit_logs`).
-- **API docs:** endpoints `/campaigns` (CRUD), `/campaigns/{id}/publish`, y documentación del workflow de flags.
+- **API docs:** endpoints `/campaigns` (CRUD), `/campaigns/{id}/ready-for-review`, `/review`, `/confirm`, `/activate`, y documentación del workflow de flags.
 
 **TODOs**
 - [ ] Implementar `campaigns.version` y trigger para insertar en `campaign_audit_logs`.
 - [ ] Escribir tests de regresión para combinaciones policy scope/product/brand.
-- [ ] Añadir secciones de “Differences & Audit Trail” en `docs/03-apis/campaigns.md`.
+- [ ] Mantener OpenAPI/AsyncAPI alineados a cambios en campañas y auditoría.
 
 ---
 

@@ -5,14 +5,13 @@ export const openApiPlugin = openapi({
     info: {
       title: "QOA API",
       version: "1.0.0",
-      description: "Internal API surface for QOA services."
+      description: "Internal API surface for QOA services.",
     },
     tags: [
       {
         name: "Health",
-        description: "Service availability and readiness endpoints."
-      }
-    ]
-  }
+        description: "Service availability and readiness endpoints.",
+      },
+    ],
+  },
 });
-

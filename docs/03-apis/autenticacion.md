@@ -200,6 +200,8 @@ Las API Keys tienen scopes que limitan qué pueden hacer:
 | `transactions:write` | Crear transacciones |
 | `campaigns:read` | Leer campañas |
 | `campaigns:write` | Crear/modificar campañas |
+| `campaigns:codes:write` | Importar/capturar códigos |
+| `campaigns:audit:read` | Leer auditoría de campañas |
 | `reports:read` | Acceder a reportes |
 | `webhooks:manage` | Configurar webhooks |
 
