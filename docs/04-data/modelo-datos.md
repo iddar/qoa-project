@@ -29,24 +29,31 @@
 │ id          │  │ id          │
 │ cpg_id (FK) │  │ cpg_id (FK) │
 │ name        │  │ name        │
-└──────┬──────┘  │ threshold   │
-       │         │ status      │
-       │ 1:N     └──────┬──────┘
-       ▼                │
-┌─────────────┐         │ N:M (scope jerárquico)
-│  products   │         │
-│─────────────│         ├─────────────────────┐
-│ id          │         ▼                     ▼
-│ brand_id    │  ┌─────────────┐       ┌─────────────┐
-│ sku         │  │campaign_    │       │campaign_    │
-│ name        │  │  brands     │       │  products   │
-└──────┬──────┘  │─────────────│       │─────────────│
-       │         │ campaign_id │       │ campaign_id │
-       └────────▶│ brand_id    │       │ product_id  │◀──┘
-                 └─────────────┘       └─────────────┘
-                        │
-                 RELACIÓN OPERACIONAL
-                 (vía transactions y cards)
+└──────┬──────┘  │ status      │
+       │         └──────┬──────┘
+       │ 1:N            │
+       ▼                ├──────────────────────────────────────┐
+┌─────────────┐         │                                      │
+│  products   │         │ N:M (scope)    1:N (tiers)    1:N (policies)
+│─────────────│         │                                      │
+│ id          │         ▼                ▼                     ▼
+│ brand_id    │  ┌─────────────┐  ┌─────────────┐      ┌─────────────┐
+│ sku         │  │campaign_    │  │campaign_    │      │campaign_    │
+│ name        │  │  brands     │  │  tiers      │      │  policies   │
+└──────┬──────┘  └─────────────┘  │─────────────│      │─────────────│
+       │                │         │ name        │      │ policy_type │
+       │                ▼         │ threshold   │      │ scope_type  │
+       │         ┌─────────────┐  │ order       │      │ period      │
+       │         │campaign_    │  └──────┬──────┘      │ value       │
+       └────────▶│  products   │         │             └─────────────┘
+                 └─────────────┘         │ 1:N
+                        │                ▼
+                        │         ┌─────────────┐
+                        │         │tier_benefits│
+                 RELACIÓN         │─────────────│
+                 OPERACIONAL      │ benefit_type│
+                 (vía txn/cards)  │ config      │
+                                  └─────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                            USUARIOS Y TARJETAS                              │
@@ -183,6 +190,56 @@ SINO:
 campaigns.id ◀──── campaign_brands ────▶ brands.id
 campaigns.id ◀──── campaign_products ──▶ products.id
 campaigns.id ◀──── campaign_store_types (store_type)
+```
+
+### Campaign Tiers (Niveles de Progresión)
+
+Las campañas pueden tener múltiples niveles que los usuarios desbloquean según su progreso.
+
+**Tipos de mecánica:**
+
+| threshold_type | Comportamiento | Ejemplo |
+|----------------|----------------|---------|
+| `cumulative` | Subes de nivel y te quedas | Club Oro: 50 compras = nivel permanente |
+| `per_period` | Se evalúa por período | Top del mes: reset cada mes |
+| `reset_on_redeem` | Al canjear vuelve a 0 | Tarjeta de sellos: 10 sellos = café gratis, reset |
+
+**Ejemplo: Club de Compradores**
+```
+Tier 1: Normal     (0-9 puntos)   → Sin beneficio
+Tier 2: Bronce     (10-24 puntos) → 5% descuento
+Tier 3: Plata      (25-49 puntos) → 10% descuento + reward
+Tier 4: Oro        (50+ puntos)   → 15% descuento + 2x puntos
+```
+
+**Ejemplo: Tarjeta de Sellos**
+```
+Tier 1: En progreso (1-9 sellos)  → Sin beneficio
+Tier 2: Completa    (10 sellos)   → Café gratis (reset_on_redeem)
+```
+
+### Campaign Policies (Restricciones)
+
+Las políticas controlan cómo y cuándo se pueden acumular puntos/estampas.
+
+**Dimensiones de una política:**
+- `policy_type`: Tipo de restricción (max_accumulations, min_amount, etc.)
+- `scope_type`: A qué aplica (campaign, brand, product)
+- `period`: Ventana de tiempo (transaction, day, week, month, lifetime)
+
+**Casos de uso comunes:**
+```
+1. Solo 1 compra válida por día
+   → policy_type: max_accumulations, scope: campaign, period: day, value: 1
+
+2. Máximo 1 del producto X por día (anti-abuse)
+   → policy_type: max_accumulations, scope: product, period: day, value: 1
+
+3. Compra mínima de $50 para acumular
+   → policy_type: min_amount, scope: campaign, period: transaction, value: 50
+
+4. Máximo 100 puntos lifetime por producto (caps)
+   → policy_type: max_accumulations, scope: product, period: lifetime, value: 100
 ```
 
 ### User → Cards (1:N)
@@ -344,6 +401,72 @@ Tipos de store donde aplica la campaña. Si está vacío, aplica en cualquier st
 | store_type | varchar(50) | Tipo de store permitido |
 
 PK: (campaign_id, store_type)
+
+### campaign_tiers
+
+Niveles de progresión dentro de una campaña (ej: Normal, Bronce, Plata, Oro).
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid | PK |
+| campaign_id | uuid | FK → campaigns |
+| name | varchar(100) | Nombre del nivel |
+| threshold_value | integer | Valor para alcanzar este nivel |
+| threshold_type | enum | cumulative, per_period, reset_on_redeem |
+| order | integer | Orden del nivel (1, 2, 3...) |
+| created_at | timestamptz | |
+
+Unique: (campaign_id, order)
+
+**threshold_type:**
+- `cumulative`: Acumulas y te quedas en el nivel (tiers permanentes)
+- `per_period`: Se evalúa por período (ej: compras este mes)
+- `reset_on_redeem`: Al canjear vuelve a 0 (tarjeta de sellos clásica)
+
+### tier_benefits
+
+Beneficios asociados a cada nivel. Un tier puede tener múltiples beneficios.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid | PK |
+| tier_id | uuid | FK → campaign_tiers |
+| benefit_type | enum | discount, reward, multiplier, free_product |
+| config | jsonb | Configuración del beneficio |
+| created_at | timestamptz | |
+
+**Ejemplos de config por tipo:**
+- `discount`: `{"percent": 10}` o `{"fixed": 50}`
+- `reward`: `{"reward_id": "uuid"}`
+- `multiplier`: `{"factor": 2}` (2x puntos)
+- `free_product`: `{"product_id": "uuid", "quantity": 1}`
+
+### campaign_policies
+
+Restricciones y reglas de acumulación con scope granular.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid | PK |
+| campaign_id | uuid | FK → campaigns |
+| policy_type | enum | max_accumulations, min_amount, min_quantity, cooldown |
+| scope_type | enum | campaign, brand, product |
+| scope_id | uuid | FK a brand o product (nullable si scope=campaign) |
+| period | enum | transaction, day, week, month, lifetime |
+| value | integer | Valor de la restricción |
+| config | jsonb | Configuración adicional (nullable) |
+| active | boolean | Si la política está activa |
+| created_at | timestamptz | |
+
+**Ejemplos de políticas:**
+
+| policy_type | scope_type | scope_id | period | value | Descripción |
+|-------------|------------|----------|--------|-------|-------------|
+| max_accumulations | campaign | null | day | 1 | Máx 1 acumulación/día |
+| max_accumulations | product | prod_123 | day | 1 | Máx 1 del producto X/día |
+| max_accumulations | brand | brand_456 | transaction | 2 | Máx 2 de marca Y/txn |
+| min_amount | campaign | null | transaction | 50 | Compra mínima $50 |
+| cooldown | campaign | null | day | 24 | Esperar 24h entre acumulaciones |
 
 ### cards
 
