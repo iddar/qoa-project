@@ -5,7 +5,6 @@ import {
   timestamp,
   uniqueIndex
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 
 export const tenants = pgTable(
   "tenants",
@@ -19,7 +18,7 @@ export const tenants = pgTable(
       .defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
-      .default(sql`now()`)
+      .defaultNow()
   },
   (table) => [uniqueIndex("tenants_slug_idx").on(table.slug)]
 );

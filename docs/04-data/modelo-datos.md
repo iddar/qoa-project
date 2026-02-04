@@ -8,50 +8,47 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            JERARQUÍA DE NEGOCIO                             │
+│                          ENTIDADES PRINCIPALES                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-                              ┌─────────────┐
-                              │    cpgs     │
-                              │─────────────│
-                              │ id          │
-                              │ name        │
-                              │ status      │
-                              └──────┬──────┘
-                                     │
-                    ┌────────────────┼────────────────┐
-                    │ 1:N            │ N:M            │ 1:N
-                    ▼                ▼                ▼
-             ┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-             │   brands    │  │store_brands │  │  campaigns  │
-             │─────────────│  │─────────────│  │─────────────│
-             │ id          │  │ store_id    │  │ id          │
-             │ cpg_id (FK) │  │ cpg_id      │  │ cpg_id (FK) │
-             │ name        │  │ created_at  │  │ name        │
-             └─────────────┘  └──────┬──────┘  │ scope       │
-                    ▲                │         │ threshold   │
-                    │                │         │ status      │
-                    │                ▼         └──────┬──────┘
-                    │         ┌─────────────┐         │
-                    │         │   stores    │         │
-                    │         │─────────────│         │
-                    │         │ id          │         │
-                    │         │ code        │         │
-                    │         │ name        │         │
-                    │         │ status      │         │
-                    │         └──────┬──────┘         │
-                    │                │                │
-                    │                │                ▼
-                    │                │         ┌─────────────┐
-                    │                │         │campaign_    │
-                    │                │         │  brands     │
-                    │                │         │─────────────│
-                    │                │         │ campaign_id │
-                    │                │         │ brand_id    │
-                    │                │         └─────────────┘
-                    │                │                │
-                    │                │                │
-┌───────────────────┴────────────────┴────────────────┴───────────────────────┐
+       ┌─────────────┐                              ┌─────────────┐
+       │    cpgs     │                              │   stores    │
+       │─────────────│                              │─────────────│
+       │ id          │                              │ id          │
+       │ name        │                              │ code        │
+       │ status      │                              │ name        │
+       └──────┬──────┘                              │ type        │
+              │                                     │ status      │
+              │                                     └──────┬──────┘
+     ┌────────┴────────┐                                   │
+     │ 1:N             │ 1:N                               │
+     ▼                 ▼                                   │
+┌─────────────┐  ┌─────────────┐                           │
+│   brands    │  │  campaigns  │◀── campaign_store_types ──┘
+│─────────────│  │─────────────│
+│ id          │  │ id          │
+│ cpg_id (FK) │  │ cpg_id (FK) │
+│ name        │  │ name        │
+└──────┬──────┘  │ threshold   │
+       │         │ status      │
+       │ 1:N     └──────┬──────┘
+       ▼                │
+┌─────────────┐         │ N:M (scope jerárquico)
+│  products   │         │
+│─────────────│         ├─────────────────────┐
+│ id          │         ▼                     ▼
+│ brand_id    │  ┌─────────────┐       ┌─────────────┐
+│ sku         │  │campaign_    │       │campaign_    │
+│ name        │  │  brands     │       │  products   │
+└──────┬──────┘  │─────────────│       │─────────────│
+       │         │ campaign_id │       │ campaign_id │
+       └────────▶│ brand_id    │       │ product_id  │◀──┘
+                 └─────────────┘       └─────────────┘
+                        │
+                 RELACIÓN OPERACIONAL
+                 (vía transactions y cards)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
 │                            USUARIOS Y TARJETAS                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
@@ -113,7 +110,7 @@
              │─────────────│                   │ id          │
              │ id          │──────────────────▶│ txn_item_id │
              │ txn_id (FK) │                   │ card_id     │
-             │ brand_id    │                   │ campaign_id │
+             │ product_id  │                   │ campaign_id │
              │ quantity    │                   │ amount      │
              │ amount      │                   │ created_at  │
              └─────────────┘                   └─────────────┘
@@ -131,20 +128,61 @@ Un CPG tiene múltiples marcas (brands).
 cpgs.id ──────────▶ brands.cpg_id
 ```
 
-### CPG ↔ Stores (N:M)
+### Brand → Products (1:N)
 
-Un PDV puede vender productos de múltiples CPGs. Se resuelve con tabla intermedia.
-
-```
-cpgs.id ◀──────────▶ store_brands ◀──────────▶ stores.id
-```
-
-### Campaign → Brands (N:M)
-
-Una campaña puede aplicar a múltiples brands (o null = todas del CPG).
+Una marca tiene múltiples productos.
 
 ```
-campaigns.id ◀──────────▶ campaign_brands ◀──────────▶ brands.id
+brands.id ──────────▶ products.brand_id
+```
+
+### Stores (Independientes)
+
+Los stores son canales de distribución independientes. No tienen relación directa con CPGs.
+Tienen un campo `type` para clasificar el tipo de canal.
+
+La relación con CPGs se establece operacionalmente a través de:
+- `transactions.store_id` + `transaction_items.product_id` → `products.brand_id` → `brands.cpg_id`
+- `cards.store_id` (cuando el scope de campaña lo requiere)
+
+```
+stores ──── (sin FK a cpgs) ────
+           │
+           ├──▶ transactions.store_id
+           ├──▶ cards.store_id
+           └──▶ campaign_store_types.store_type (filtra por stores.type)
+```
+
+### Campaign Scope (Jerárquico)
+
+Las campañas tienen un scope flexible con dos dimensiones independientes:
+
+**Dimensión 1: Productos (jerárquico)**
+```
+SI campaign_brands está vacío:
+    → Aplica a TODAS las brands del CPG
+SINO:
+    → Aplica solo a las brands listadas
+
+SI campaign_products está vacío:
+    → Aplica a TODOS los productos de las brands seleccionadas
+SINO:
+    → Aplica solo a los productos listados
+```
+
+**Dimensión 2: Stores (independiente)**
+```
+SI campaign_store_types está vacío:
+    → Aplica en CUALQUIER store
+SINO:
+    → Aplica solo en stores con type en la lista
+```
+
+**Tablas de scope:**
+```
+campaigns.id ◀──── campaign_brands ────▶ brands.id
+campaigns.id ◀──── campaign_products ──▶ products.id
+campaigns.id ◀──── campaign_store_types (store_type)
 ```
 
 ### User → Cards (1:N)
@@ -165,10 +203,11 @@ cards.campaign_id ──────────▶ campaigns.id
 
 ### Transaction → Items (1:N)
 
-Una transacción tiene múltiples items (productos/brands comprados).
+Una transacción tiene múltiples items (productos comprados).
 
 ```
 transactions.id ──────────▶ transaction_items.transaction_id
+transaction_items.product_id ──────────▶ products.id
 ```
 
 ### Item → Accumulations (1:N)
@@ -208,32 +247,34 @@ Sub-marcas de un CPG.
 | status | enum | active, inactive |
 | created_at | timestamptz | |
 
+### products
+
+Productos de una marca.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid | PK |
+| brand_id | uuid | FK → brands |
+| sku | varchar(50) | Código único del producto |
+| name | varchar(200) | Nombre del producto |
+| status | enum | active, inactive |
+| created_at | timestamptz | |
+
 ### stores
 
-Puntos de venta (PDVs).
+Puntos de venta (PDVs). Entidades independientes de CPGs.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
 | id | uuid | PK |
 | code | varchar(10) | Código único para QR |
 | name | varchar(200) | Nombre de la tienda |
+| type | varchar(50) | Tipo de canal (nullable) |
 | address | text | Dirección (nullable) |
 | phone | varchar(20) | Teléfono (nullable) |
 | status | enum | active, inactive |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
-
-### store_brands
-
-Relación N:M entre stores y CPGs.
-
-| Columna | Tipo | Descripción |
-|---------|------|-------------|
-| store_id | uuid | FK → stores |
-| cpg_id | uuid | FK → cpgs |
-| created_at | timestamptz | |
-
-PK: (store_id, cpg_id)
 
 ### users
 
@@ -273,7 +314,7 @@ Campañas de lealtad.
 
 ### campaign_brands
 
-Brands específicas de una campaña (si brand_ids no es null).
+Brands específicas de una campaña. Si está vacío, aplica a todas las brands del CPG.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
@@ -281,6 +322,28 @@ Brands específicas de una campaña (si brand_ids no es null).
 | brand_id | uuid | FK → brands |
 
 PK: (campaign_id, brand_id)
+
+### campaign_products
+
+Productos específicos de una campaña. Si está vacío, aplica a todos los productos de las brands seleccionadas.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| campaign_id | uuid | FK → campaigns |
+| product_id | uuid | FK → products |
+
+PK: (campaign_id, product_id)
+
+### campaign_store_types
+
+Tipos de store donde aplica la campaña. Si está vacío, aplica en cualquier store.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| campaign_id | uuid | FK → campaigns |
+| store_type | varchar(50) | Tipo de store permitido |
+
+PK: (campaign_id, store_type)
 
 ### cards
 
@@ -360,7 +423,7 @@ Items de una transacción.
 |---------|------|-------------|
 | id | uuid | PK |
 | transaction_id | uuid | FK → transactions |
-| brand_id | uuid | FK → brands |
+| product_id | uuid | FK → products |
 | quantity | integer | Cantidad |
 | amount | decimal(12,2) | Monto (nullable) |
 | metadata | jsonb | Datos adicionales |
