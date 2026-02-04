@@ -133,3 +133,29 @@ bun test spec # ejecuta las pruebas existentes
 ```
 
 Los comandos anteriores respetan el principio de “Bun-first” (sin npm, node, ni ts-node).
+
+### Migraciones con Drizzle ORM
+
+1. Define/actualiza las tablas en `src/db/schema/*.ts` (p. ej. `tenants`).
+2. Genera el SQL versionado y los snapshots JSON:
+
+   ```bash
+   cd src
+   bun run db:generate
+   ```
+
+   Esto produce archivos en `src/drizzle/` (ej. `0000_red_shockwave.sql`) siguiendo la guía oficial de [Drizzle migrations](https://orm.drizzle.team/docs/migrations).
+3. Aplica las migraciones al Postgres que tengas configurado mediante `DATABASE_URL` (usa `.env.local` o `.env.development` según el flujo):
+
+   ```bash
+   cd src
+   bun run db:migrate
+   ```
+
+4. En entornos Docker, ejecuta las migraciones dentro del contenedor de la app antes de exponer tráfico:
+
+   ```bash
+   docker compose run --rm app bun run db:migrate
+   ```
+
+Todas las migraciones y snapshots (`src/drizzle/meta`) se deben versionar en Git para garantizar reproducibilidad.
