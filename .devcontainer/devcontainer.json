@@ -1,0 +1,71 @@
+{
+  "name": "Qoa Project",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/app",
+  
+  // Configure which docker-compose services to start
+  "runServices": ["app", "postgres", "redis"],
+  
+  // Override the app service to keep it running
+  "overrideCommand": true,
+  
+  // Features to install in the container
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  
+  // VS Code extensions to install
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "oven.bun-vscode",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-azuretools.vscode-docker",
+        "streetsidesoftware.code-spell-checker",
+        "eamodio.gitlens",
+        "github.copilot",
+        "yoavbls.pretty-ts-errors"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        }
+      }
+    }
+  },
+  
+  // Port forwarding configuration
+  "forwardPorts": [3000, 5432, 6379],
+  "portsAttributes": {
+    "3000": {
+      "label": "Application",
+      "onAutoForward": "notify"
+    },
+    "5432": {
+      "label": "PostgreSQL"
+    },
+    "6379": {
+      "label": "Redis"
+    }
+  },
+  
+  // Post create commands to run after the container is created
+  "postCreateCommand": "cd /app && bun install",
+  
+  // Lifecycle scripts
+  "postStartCommand": "bun --version && echo 'Codespace ready! Run: bun run dev'",
+  
+  // Environment variables
+  "remoteEnv": {
+    "NODE_ENV": "development"
+  },
+  
+  // Remote user
+  "remoteUser": "bun"
+}
