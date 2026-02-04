@@ -220,27 +220,45 @@ Tier 2: Completa    (10 sellos)   → Café gratis (reset_on_redeem)
 
 ### Campaign Policies (Restricciones)
 
-Las políticas controlan cómo y cuándo se pueden acumular puntos/estampas.
+Las políticas controlan cómo y cuándo se pueden acumular puntos/estampas. Son el mecanismo principal para prevenir abuso y modelar reglas de negocio.
+
+**Principio fundamental:** Todas las policies activas deben cumplirse (AND). Si cualquiera falla, la acumulación no procede.
 
 **Dimensiones de una política:**
-- `policy_type`: Tipo de restricción (max_accumulations, min_amount, etc.)
-- `scope_type`: A qué aplica (campaign, brand, product)
-- `period`: Ventana de tiempo (transaction, day, week, month, lifetime)
+
+| Dimensión | Opciones | Descripción |
+|-----------|----------|-------------|
+| `policy_type` | max_accumulations, min_amount, min_quantity, cooldown | Qué tipo de restricción |
+| `scope_type` | campaign, brand, product | A qué nivel aplica |
+| `period` | transaction, day, week, month, lifetime | Ventana de tiempo |
+
+**Cómo interactúan los scopes:**
+
+```
+┌────────────────────────────────────────────────────────────┐
+│  CAMPAIGN: max 3/día (cualquier producto)                  │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  BRAND: max 2/día de Coca-Cola                       │  │
+│  │  ┌────────────────────────────────────────────────┐  │  │
+│  │  │  PRODUCT: max 1/día de Coca-Cola 600ml         │  │  │
+│  │  └────────────────────────────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────┘
+
+Resultado: Las 3 policies aplican simultáneamente (AND)
+```
 
 **Casos de uso comunes:**
-```
-1. Solo 1 compra válida por día
-   → policy_type: max_accumulations, scope: campaign, period: day, value: 1
 
-2. Máximo 1 del producto X por día (anti-abuse)
-   → policy_type: max_accumulations, scope: product, period: day, value: 1
+| Caso | Configuración | Efecto |
+|------|---------------|--------|
+| Anti-abuso diario | max_accumulations, campaign, day, 3 | Máx 3 acumulaciones/día |
+| Límite por producto | max_accumulations, product, day, 1 | Máx 1 del mismo producto/día |
+| Compra mínima | min_amount, campaign, transaction, 50 | Compra ≥$50 para acumular |
+| Cooldown | cooldown, campaign, day, 24 | Esperar 24h entre compras |
+| Cap lifetime | max_accumulations, product, lifetime, 100 | Máx 100 acum. totales por producto |
 
-3. Compra mínima de $50 para acumular
-   → policy_type: min_amount, scope: campaign, period: transaction, value: 50
-
-4. Máximo 100 puntos lifetime por producto (caps)
-   → policy_type: max_accumulations, scope: product, period: lifetime, value: 100
-```
+> **Nota:** Para detalles sobre evaluación de múltiples policies, algoritmo y escenarios complejos, ver [ADR-0008: Modelo de Campañas](../adr/0008-modelo-campanias.md#sistema-de-policies-restricciones).
 
 ### User → Cards (1:N)
 

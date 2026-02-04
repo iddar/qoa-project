@@ -145,9 +145,16 @@ Campaign Tier {
 
 ## Sistema de Policies (Restricciones)
 
-Las policies controlan cómo y cuándo se pueden acumular puntos/estampas.
+Las policies controlan cómo y cuándo se pueden acumular puntos/estampas. Son el mecanismo principal para prevenir abuso y modelar reglas de negocio específicas.
 
-### Dimensiones de una política
+### Principios del Sistema
+
+1. **Composición AND**: Todas las policies activas deben cumplirse para que una acumulación sea válida
+2. **Especificidad**: Las policies más específicas (product) complementan a las generales (campaign)
+3. **Independencia**: Cada policy se evalúa independientemente contra el histórico del usuario
+4. **Por campaña**: Las policies pertenecen a una campaña, no son globales
+
+### Estructura de una Policy
 
 ```
 Campaign Policy {
@@ -156,46 +163,388 @@ Campaign Policy {
   scope_id     → UUID de brand/product (null si scope=campaign)
   period       → transaction, day, week, month, lifetime
   value        → Valor de la restricción
+  active       → boolean (permite desactivar sin borrar)
 }
 ```
 
-### Tipos de políticas
+### Tipos de Policies
 
-| policy_type | Descripción |
-|-------------|-------------|
-| `max_accumulations` | Límite de acumulaciones |
-| `min_amount` | Monto mínimo requerido |
-| `min_quantity` | Cantidad mínima de productos |
-| `cooldown` | Tiempo de espera entre acumulaciones |
+| policy_type | Descripción | Evaluación |
+|-------------|-------------|------------|
+| `max_accumulations` | Límite de acumulaciones | Cuenta acumulaciones en el período |
+| `min_amount` | Monto mínimo requerido | Verifica monto de la transacción/item |
+| `min_quantity` | Cantidad mínima de productos | Verifica cantidad en transacción |
+| `cooldown` | Tiempo de espera entre acumulaciones | Verifica tiempo desde última acumulación |
 
-### Ejemplos de restricciones
+### Scope de Policies
+
+El `scope_type` define a qué nivel aplica la restricción:
+
+| scope_type | scope_id | Aplica a |
+|------------|----------|----------|
+| `campaign` | null | Toda la campaña |
+| `brand` | brand_id | Solo productos de esa marca |
+| `product` | product_id | Solo ese producto específico |
+
+### Períodos de Evaluación
+
+| period | Ventana de tiempo | Uso típico |
+|--------|-------------------|------------|
+| `transaction` | La transacción actual | Límites por compra |
+| `day` | Últimas 24 horas | Anti-abuso diario |
+| `week` | Últimos 7 días | Control semanal |
+| `month` | Últimos 30 días | Límites mensuales |
+| `lifetime` | Todo el historial | Caps totales |
+
+---
+
+## Coexistencia de Múltiples Policies
+
+### Regla Fundamental: AND
+
+Cuando hay múltiples policies, **TODAS deben cumplirse**. No es OR.
 
 ```
-1. Solo 1 compra válida por día
-   → policy_type: max_accumulations
-   → scope_type: campaign
-   → period: day
-   → value: 1
+Resultado = Policy_1 AND Policy_2 AND Policy_3 AND ... Policy_N
 
-2. Máximo 1 del producto X por día (anti-abuse)
-   → policy_type: max_accumulations
-   → scope_type: product
-   → scope_id: product_123
-   → period: day
-   → value: 1
+Si cualquier policy falla → la acumulación NO procede
+```
 
-3. Compra mínima de $50 para acumular
-   → policy_type: min_amount
-   → scope_type: campaign
-   → period: transaction
-   → value: 50
+### Cómo Interactúan los Scopes
 
-4. Máximo 2 productos de marca Y por transacción
-   → policy_type: max_accumulations
-   → scope_type: brand
-   → scope_id: brand_456
-   → period: transaction
-   → value: 2
+Los scopes son **aditivos, no excluyentes**. Cada policy se evalúa contra su scope correspondiente:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           CAMPAIGN SCOPE                                    │
+│                                                                             │
+│    Policy: max 3 acumulaciones/día (cualquier producto)                     │
+│    ┌─────────────────────────────────────────────────────────────────────┐  │
+│    │                         BRAND SCOPE                                 │  │
+│    │                                                                     │  │
+│    │    Policy: max 2 de Coca-Cola/día                                   │  │
+│    │    ┌─────────────────────────────────────────────────────────────┐  │  │
+│    │    │                      PRODUCT SCOPE                          │  │  │
+│    │    │                                                             │  │  │
+│    │    │    Policy: max 1 de Coca-Cola 600ml/día                     │  │  │
+│    │    │                                                             │  │  │
+│    │    └─────────────────────────────────────────────────────────────┘  │  │
+│    └─────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Ejemplo de Coexistencia
+
+**Configuración:**
+```yaml
+Policies:
+  - name: "Límite diario general"
+    policy_type: max_accumulations
+    scope_type: campaign
+    period: day
+    value: 3
+
+  - name: "Límite por marca Coca-Cola"
+    policy_type: max_accumulations
+    scope_type: brand
+    scope_id: coca-cola
+    period: day
+    value: 2
+
+  - name: "Límite producto específico"
+    policy_type: max_accumulations
+    scope_type: product
+    scope_id: coca-600ml
+    period: day
+    value: 1
+```
+
+**Escenarios:**
+
+| Compra | Previo hoy | ¿Pasa campaign? | ¿Pasa brand? | ¿Pasa product? | Resultado |
+|--------|------------|-----------------|--------------|----------------|-----------|
+| 1 Coca 600ml | Nada | ✅ (1/3) | ✅ (1/2) | ✅ (1/1) | **ACUMULA** |
+| 1 Coca 600ml | 1 Coca 600ml | ✅ (2/3) | ✅ (2/2) | ❌ (2/1) | **RECHAZA** |
+| 1 Coca 2L | 1 Coca 600ml | ✅ (2/3) | ✅ (2/2) | N/A | **ACUMULA** |
+| 1 Fanta | 2 Coca (600ml + 2L) | ✅ (3/3) | N/A | N/A | **ACUMULA** |
+| 1 Sprite | 3 productos previos | ❌ (4/3) | N/A | N/A | **RECHAZA** |
+
+---
+
+## Algoritmo de Evaluación
+
+### Pseudocódigo
+
+```
+función evaluarPolicies(campaña, usuario, transacción, item):
+
+    policies = obtenerPoliciesActivas(campaña)
+
+    para cada policy en policies:
+
+        # Determinar si esta policy aplica al item
+        si policy.scope_type == "campaign":
+            aplica = true
+        si policy.scope_type == "brand":
+            aplica = (item.product.brand_id == policy.scope_id)
+        si policy.scope_type == "product":
+            aplica = (item.product_id == policy.scope_id)
+
+        si NO aplica:
+            continuar  # Esta policy no afecta este item
+
+        # Evaluar según tipo de policy
+        pasa = evaluarPolicy(policy, usuario, transacción, item)
+
+        si NO pasa:
+            retornar {
+                valido: false,
+                razon: "Viola policy: " + policy.nombre,
+                policy: policy
+            }
+
+    retornar { valido: true }
+
+
+función evaluarPolicy(policy, usuario, transacción, item):
+
+    según policy.policy_type:
+
+        caso "max_accumulations":
+            conteo = contarAcumulaciones(
+                usuario,
+                policy.scope_type,
+                policy.scope_id,
+                policy.period
+            )
+            retornar conteo < policy.value
+
+        caso "min_amount":
+            si policy.scope_type == "campaign":
+                monto = transacción.total_amount
+            sino:
+                monto = item.amount
+            retornar monto >= policy.value
+
+        caso "min_quantity":
+            si policy.scope_type == "campaign":
+                cantidad = transacción.items.length
+            sino:
+                cantidad = item.quantity
+            retornar cantidad >= policy.value
+
+        caso "cooldown":
+            ultimaAcum = obtenerUltimaAcumulacion(
+                usuario,
+                policy.scope_type,
+                policy.scope_id
+            )
+            si ultimaAcum == null:
+                retornar true
+            horasTranscurridas = (ahora - ultimaAcum.created_at).horas
+            retornar horasTranscurridas >= policy.value
+
+
+función contarAcumulaciones(usuario, scopeType, scopeId, periodo):
+
+    fechaInicio = calcularInicioPeríodo(periodo)
+
+    query = """
+        SELECT COUNT(*) FROM accumulations a
+        JOIN transaction_items ti ON ti.id = a.transaction_item_id
+        JOIN products p ON p.id = ti.product_id
+        WHERE a.user_id = :usuario
+        AND a.created_at >= :fechaInicio
+    """
+
+    si scopeType == "brand":
+        query += " AND p.brand_id = :scopeId"
+    si scopeType == "product":
+        query += " AND ti.product_id = :scopeId"
+
+    retornar ejecutar(query)
+```
+
+### Orden de Evaluación
+
+El orden de evaluación de policies NO afecta el resultado (es AND), pero por eficiencia:
+
+```
+1. Evaluar policies de scope "campaign" primero
+   → Son las más generales, si fallan evitamos consultas
+
+2. Evaluar policies de scope "brand"
+   → Filtro intermedio
+
+3. Evaluar policies de scope "product"
+   → Más específicas, solo si las anteriores pasan
+```
+
+---
+
+## Escenarios Complejos
+
+### Escenario 1: Anti-Abuso Multi-Nivel
+
+**Objetivo:** Prevenir que un usuario abuse comprando el mismo producto múltiples veces.
+
+```yaml
+Policies:
+  # Nivel 1: Límite general de campaña
+  - policy_type: max_accumulations
+    scope_type: campaign
+    period: day
+    value: 5
+
+  # Nivel 2: Límite por marca (previene concentrar en una marca)
+  - policy_type: max_accumulations
+    scope_type: brand
+    scope_id: [cada-brand]  # Se crea una policy por brand
+    period: day
+    value: 2
+
+  # Nivel 3: Límite por producto (1 acumulación por SKU por día)
+  - policy_type: max_accumulations
+    scope_type: product
+    scope_id: [cada-product]  # Se crea una policy por producto
+    period: day
+    value: 1
+```
+
+**Resultado:** Usuario puede acumular máximo 5 veces/día, máximo 2 de cada marca, máximo 1 de cada producto.
+
+### Escenario 2: Compra Mínima con Variación por Producto
+
+**Objetivo:** Compra mínima general, pero ciertos productos premium tienen mínimo mayor.
+
+```yaml
+Policies:
+  # Mínimo general de $30
+  - policy_type: min_amount
+    scope_type: campaign
+    period: transaction
+    value: 30
+
+  # Productos premium requieren $50 de ese producto
+  - policy_type: min_amount
+    scope_type: product
+    scope_id: producto-premium-x
+    period: transaction
+    value: 50
+```
+
+**Resultado:** Transacción debe ser ≥$30, y si incluye producto premium, el monto de ese item debe ser ≥$50.
+
+### Escenario 3: Cooldown con Excepciones
+
+**Objetivo:** 24h entre compras, pero ciertos productos no tienen cooldown.
+
+```yaml
+Policies:
+  # Cooldown general de 24h
+  - policy_type: cooldown
+    scope_type: campaign
+    period: day  # No aplica para cooldown pero requerido
+    value: 24  # horas
+
+  # Producto promocional sin cooldown (policy inactiva)
+  - policy_type: cooldown
+    scope_type: product
+    scope_id: producto-promo
+    value: 0
+    active: false  # Al estar inactiva, no hay restricción adicional
+```
+
+**Nota:** Para "exceptuar" un producto del cooldown general, la lógica debe verificar el scope. Alternativa: usar `min_quantity: 0` con `active: false` para el producto específico.
+
+### Escenario 4: Límites por Período Diferenciado
+
+**Objetivo:** Límites diferentes para día, semana y mes.
+
+```yaml
+Policies:
+  # Máximo 2 por día
+  - policy_type: max_accumulations
+    scope_type: campaign
+    period: day
+    value: 2
+
+  # Máximo 10 por semana
+  - policy_type: max_accumulations
+    scope_type: campaign
+    period: week
+    value: 10
+
+  # Máximo 30 por mes
+  - policy_type: max_accumulations
+    scope_type: campaign
+    period: month
+    value: 30
+```
+
+**Resultado:** Todas las restricciones aplican. Usuario puede acumular 2/día, pero si llega a 10 en una semana, no puede más esa semana aunque no haya llegado a 2 ese día.
+
+---
+
+## Queries SQL de Soporte
+
+### Obtener Policies Activas de una Campaña
+
+```sql
+SELECT * FROM campaign_policies
+WHERE campaign_id = $1
+AND active = true
+ORDER BY
+  CASE scope_type
+    WHEN 'campaign' THEN 1
+    WHEN 'brand' THEN 2
+    WHEN 'product' THEN 3
+  END;
+```
+
+### Contar Acumulaciones por Scope y Período
+
+```sql
+-- Acumulaciones de campaña en período
+SELECT COUNT(*)
+FROM accumulations a
+JOIN cards c ON c.id = a.card_id
+WHERE c.user_id = $1
+AND a.campaign_id = $2
+AND a.created_at >= $3;  -- fecha inicio período
+
+-- Acumulaciones de brand en período
+SELECT COUNT(*)
+FROM accumulations a
+JOIN cards c ON c.id = a.card_id
+JOIN transaction_items ti ON ti.id = a.transaction_item_id
+JOIN products p ON p.id = ti.product_id
+WHERE c.user_id = $1
+AND a.campaign_id = $2
+AND p.brand_id = $3  -- brand de la policy
+AND a.created_at >= $4;
+
+-- Acumulaciones de producto en período
+SELECT COUNT(*)
+FROM accumulations a
+JOIN cards c ON c.id = a.card_id
+JOIN transaction_items ti ON ti.id = a.transaction_item_id
+WHERE c.user_id = $1
+AND a.campaign_id = $2
+AND ti.product_id = $3  -- product de la policy
+AND a.created_at >= $4;
+```
+
+### Verificar Cooldown
+
+```sql
+SELECT created_at
+FROM accumulations a
+JOIN cards c ON c.id = a.card_id
+WHERE c.user_id = $1
+AND a.campaign_id = $2
+ORDER BY created_at DESC
+LIMIT 1;
 ```
 
 ---
