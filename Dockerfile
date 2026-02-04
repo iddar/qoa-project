@@ -1,17 +1,21 @@
 # syntax=docker/dockerfile:1.5
 
-FROM oven/bun:1 AS base
+FROM oven/bun:1-alpine AS deps
 WORKDIR /app
 
-# Install dependencies first to leverage Docker layer caching
+# Install production dependencies first to leverage Docker layer caching
 COPY src/package.json src/bun.lock ./
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+	bun install --frozen-lockfile --production
 
-# Copy source code
-COPY src/. .
+FROM oven/bun:1-alpine AS runner
+WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=3000
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY src/. .
 
 EXPOSE 3000
 
