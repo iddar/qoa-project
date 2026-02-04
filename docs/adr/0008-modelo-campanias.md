@@ -198,6 +198,89 @@ El `scope_type` define a qué nivel aplica la restricción:
 
 ---
 
+## Campañas basadas en códigos únicos
+
+Algunas campañas no acumulan por SKU escaneado sino por **códigos únicos** impresos en empaques o distribuidos digitalmente. Para cubrir este caso agregamos una variante del modelo que sigue usando tiers y policies, pero cambia la fuente de datos de las acumulaciones.
+
+### Extensiones al modelo
+
+- **`campaigns.capture_mode`** define cómo se captura la evidencia: `transaction` (SKU/receipt), `code` (solo códigos) o `hybrid` (ambos). Esto permite que una campaña determine si espera items tradicionales, códigos únicos o los dos a la vez.
+- **Catálogo de códigos:**
+  - `campaign_code_sets` agrupa archivos/batches importados con metadatos (nombre, formato, origen, max_uses).
+  - `campaign_codes` almacena cada código (`code_value`), su estado (`available`, `assigned`, `redeemed`, `void`), opcionalmente el `product_id` asociado y métricas como `uses_count`/`max_uses`. Cada registro pertenece a un `campaign_code_set` y a una campaña.
+- **Capturas de código:** `campaign_code_captures` vincula `card_id`, `campaign_id`, `campaign_code_id` y la transacción (si existe). Registra `status` (`accepted`, `rejected`, `pending`) y la razón de rechazo cuando aplica.
+- **Acumulaciones multi-fuente:** `accumulations` incorpora `source_type` (`transaction_item` | `code_capture`) y la FK opcional `code_capture_id`. Así, una acumulación puede provenir de un item tradicional o de un código capturado.
+
+### Flujo de registro
+
+1. **Ingesta del catálogo:** el CPG carga un batch (`campaign_code_sets`) y el sistema crea los `campaign_codes` correspondientes.
+2. **Registro en app:** el usuario elige la campaña y captura uno o varios códigos. Si la campaña es `hybrid`, también puede subir tickets/SKUs en la misma transacción.
+3. **Validación del código:**
+   - Se busca el `campaign_codes.code_value` activo para la campaña.
+   - Se marca el código como `assigned` y se crea un registro en `campaign_code_captures` con el `card_id` (o se rechaza con motivo si ya fue usado, está fuera de vigencia o no pertenece a la campaña).
+4. **Acumulación:** se genera una entrada en `accumulations` con `source_type = 'code_capture'` que referencia la captura aceptada. Los tiers y balances se actualizan igual que con un SKU.
+
+### Evaluación y policies
+
+- **Scope jerárquico:** si el código tiene `product_id`, se usa para mapear brand/cpg y evaluar policies específicas. Si no tiene SKU asociado, la acumulación solo queda sujeta a policies de scope `campaign`.
+- **Límites de uso:** los campos `max_uses` y `uses_count` permiten campañas de múltiples usos por código (ej. un código válido 5 veces) sin duplicar registros.
+- **Auditabilidad:** `campaign_code_captures` conserva `transaction_id` (opcional) y `metadata` (ej. canal de captura, fotos) para auditorías o antifraude.
+
+### Ejemplo
+
+```yaml
+Campaign:
+  name: "Colecciona Códigos"
+  capture_mode: code
+  accumulation_type: stamps
+  tiers:
+    - name: "Completa"
+      threshold_value: 10
+      threshold_type: reset_on_redeem
+
+Code Catalog:
+  campaign_code_sets:
+    - name: "Batch Enero"
+      max_uses_per_code: 1
+
+  campaign_codes:
+    - code_value: "FANTA-XYZ-001"
+      product_id: fanta-600ml
+      status: available
+
+Policies:
+  - policy_type: max_accumulations
+    scope_type: campaign
+    period: day
+    value: 5
+```
+
+En este esquema el usuario ingresa diez códigos válidos para completar la tarjeta, sin subir tickets ni registrar SKUs. El catálogo adicional es responsabilidad de la campaña y queda enlazado explícitamente a ella.
+
+---
+
+## Workflow de validación de campañas
+
+Para garantizar que ninguna campaña se active sin revisión formal, toda campaña tiene tres flags binarios directamente en la entidad `campaigns`:
+
+| Flag | Responsable | Descripción |
+|------|-------------|-------------|
+| `ready_for_review` | Owner de la campaña (CPG/Brand) | Se marca cuando la configuración está completa y lista para evaluación. |
+| `reviewed` | Equipo Qoa (Producto/Tecnología) | Confirma que scope, tiers, policies y assets cumplen lineamientos. |
+| `confirmed` | Operaciones/QC | Autorización final para habilitar la campaña al público. |
+
+### Reglas de negocio
+
+1. No se puede marcar `reviewed = true` si `ready_for_review` es `false`.
+2. `reviewed` vuelve a `false` automáticamente cuando se modifican campos sensibles (scope, tiers, policies, capture_mode) mientras la campaña esté en `draft` o `paused`.
+3. `confirmed` requiere que los otros dos flags estén en `true`. Si cambia algo validado, el flag vuelve a `false`.
+4. `status = 'active'` solo es posible cuando los tres flags están en `true`. Transicionar a `paused` o `ended` no altera los flags, pero volver a `active` obliga a revalidarlos si alguno fue reiniciado.
+5. Una campaña en `draft` o `paused` puede ser editada libremente, pero cualquier cambio crítico reinicia el proceso de revisión. Si la campana está `active`, solo cambios menores son permitidos (ej. descripción).
+
+Este workflow deja un rastro auditable de la revisión (sin nuevas tablas) y evita que campañas incompletas lleguen a producción.
+
+---
+
 ## Coexistencia de Múltiples Policies
 
 ### Regla Fundamental: AND

@@ -123,6 +123,19 @@
              └─────────────┘                   └─────────────┘
 ```
 
+Extensión para campañas que usan códigos únicos:
+
+```
+campaigns
+   │
+   ├── campaign_code_sets ──┐
+   │                        │
+   └── campaign_codes ◀─────┘
+           │
+           ▼
+   campaign_code_captures ───▶ accumulations (source_type = code_capture)
+```
+
 ---
 
 ## Relaciones clave
@@ -379,6 +392,10 @@ Campañas de lealtad.
 | description | text | Descripción (nullable) |
 | accumulation_type | enum | stamps, points, amount |
 | accumulation_scope | enum | store_brand, store_cpg, brand_only, cpg_only |
+| capture_mode | enum | transaction, code, hybrid |
+| ready_for_review | boolean | Flag operativo para solicitar revisión (default false) |
+| reviewed | boolean | Flag de QA interna (default false) |
+| confirmed | boolean | Flag de confirmación final para poder activar |
 | threshold | integer | Cantidad para canjear |
 | validity_type | enum | indefinite, date_range |
 | starts_at | timestamptz | Fecha de inicio |
@@ -419,6 +436,56 @@ Tipos de store donde aplica la campaña. Si está vacío, aplica en cualquier st
 | store_type | varchar(50) | Tipo de store permitido |
 
 PK: (campaign_id, store_type)
+
+### campaign_code_sets
+
+Agrupa los lotes/catálogos de códigos cargados para una campaña.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid | PK |
+| campaign_id | uuid | FK → campaigns |
+| name | varchar(100) | Nombre del batch (ej: \"Enero 2026\") |
+| source | varchar(50) | Origen (csv_upload, api, partner, etc.) |
+| max_uses_per_code | integer | Límites heredados (default 1) |
+| metadata | jsonb | Información del archivo/import |
+| created_at | timestamptz | |
+
+### campaign_codes
+
+Catálogo de códigos únicos asociados a la campaña.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid | PK |
+| campaign_id | uuid | FK → campaigns |
+| code_set_id | uuid | FK → campaign_code_sets |
+| code_value | varchar(120) | Código (único por campaña) |
+| status | enum | available, assigned, redeemed, void |
+| product_id | uuid | FK → products (nullable) |
+| max_uses | integer | Veces permitidas (default = max_uses_per_code) |
+| uses_count | integer | Veces utilizadas |
+| expires_at | timestamptz | Expiración específica (nullable) |
+| metadata | jsonb | Datos adicionales |
+| created_at | timestamptz | |
+
+Unique: (campaign_id, code_value)
+
+### campaign_code_captures
+
+Registro operacional de los códigos capturados por los usuarios.
+
+| Columna | Tipo | Descripción |
+|---------|------|-------------|
+| id | uuid | PK |
+| campaign_id | uuid | FK → campaigns |
+| card_id | uuid | FK → cards |
+| campaign_code_id | uuid | FK → campaign_codes |
+| transaction_id | uuid | FK → transactions (nullable, para modo híbrido) |
+| status | enum | pending, accepted, rejected |
+| rejection_reason | text | Motivo de rechazo (nullable) |
+| metadata | jsonb | Evidencia (foto, canal, device) |
+| created_at | timestamptz | |
 
 ### campaign_tiers
 
@@ -571,15 +638,17 @@ Items de una transacción.
 
 ### accumulations
 
-Acumulaciones generadas por items.
+Acumulaciones generadas por items tradicionales o capturas de código.
 
 | Columna | Tipo | Descripción |
 |---------|------|-------------|
 | id | uuid | PK |
-| transaction_item_id | uuid | FK → transaction_items |
+| transaction_item_id | uuid | FK → transaction_items (nullable si proviene de código) |
 | card_id | uuid | FK → cards |
 | campaign_id | uuid | FK → campaigns |
 | amount | integer | Cantidad acumulada |
+| source_type | enum | transaction_item, code_capture |
+| code_capture_id | uuid | FK → campaign_code_captures (nullable) |
 | created_at | timestamptz | |
 
 ---

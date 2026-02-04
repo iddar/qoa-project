@@ -28,6 +28,9 @@ CREATE TYPE campaign_status AS ENUM ('draft', 'active', 'paused', 'ended');
 -- Tipo de acumulación
 CREATE TYPE accumulation_type AS ENUM ('stamps', 'points', 'amount');
 
+-- Modo de captura de evidencia en campañas
+CREATE TYPE capture_mode AS ENUM ('transaction', 'code', 'hybrid');
+
 -- Scope de acumulación (legacy, mantener para compatibilidad)
 CREATE TYPE accumulation_scope AS ENUM (
   'store_brand',   -- Por PDV + brands específicas
@@ -77,6 +80,15 @@ CREATE TYPE policy_period AS ENUM (
   'month',        -- Por mes
   'lifetime'      -- Lifetime del usuario en la campaña
 );
+
+-- Estado del código único
+CREATE TYPE campaign_code_status AS ENUM ('available', 'assigned', 'redeemed', 'void');
+
+-- Estado del intento de captura de código
+CREATE TYPE code_capture_status AS ENUM ('pending', 'accepted', 'rejected');
+
+-- Fuente de datos de una acumulación
+CREATE TYPE accumulation_source_type AS ENUM ('transaction_item', 'code_capture');
 
 -- Estado de canje
 CREATE TYPE redemption_status AS ENUM ('pending', 'completed', 'cancelled');
@@ -218,6 +230,11 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 | name | varchar(200) | NO | - | - |
 | description | text | YES | - | - |
 | accumulation_type | accumulation_type | NO | - | - |
+| accumulation_scope | accumulation_scope | YES | NULL | Legacy, se mantiene para compatibilidad |
+| capture_mode | capture_mode | NO | 'transaction' | Define la fuente (tickets/códigos) |
+| ready_for_review | boolean | NO | false | Señal de que el owner pide revisión |
+| reviewed | boolean | NO | false | Revisión aprobada por Qoa |
+| confirmed | boolean | NO | false | Confirmación operativa para ir a producción |
 | validity_type | validity_type | NO | 'indefinite' | - |
 | starts_at | timestamptz | NO | - | - |
 | ends_at | timestamptz | YES | - | - |
@@ -236,6 +253,8 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 **Validaciones:**
 - Si `validity_type = 'date_range'` entonces `ends_at` NO puede ser NULL
 - `ends_at > starts_at` cuando ambos están presentes
+- `status = 'active'` requiere `ready_for_review = reviewed = confirmed = true`
+- Cambios en `scope`, `tiers`, `policies`, `capture_mode` o `accumulation_type` reinician `reviewed` y `confirmed` a `false`
 
 **Nota:** El scope de productos y stores se define en tablas relacionadas.
 
@@ -300,6 +319,93 @@ Tabla para definir en qué tipos de stores aplica una campaña.
 
 **Regla de negocio:**
 - Si `campaign_store_types` está vacío, aplica en CUALQUIER tipo de store
+
+---
+
+### campaign_code_sets
+
+Lotes importados de códigos únicos vinculados a una campaña.
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | uuid_generate_v7() | PK |
+| campaign_id | uuid | NO | - | FK → campaigns(id) |
+| name | varchar(100) | NO | - | - |
+| source | varchar(50) | YES | - | - |
+| max_uses_per_code | integer | NO | 1 | CHECK (max_uses_per_code > 0) |
+| metadata | jsonb | YES | '{}' | - |
+| created_at | timestamptz | NO | now() | - |
+
+**Índices:**
+- `campaign_code_sets_pkey` PRIMARY KEY (id)
+- `campaign_code_sets_campaign_id_idx` INDEX (campaign_id)
+
+**Foreign Keys:**
+- `campaign_code_sets_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+
+---
+
+### campaign_codes
+
+Catálogo de códigos disponibles para captura.
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | uuid_generate_v7() | PK |
+| campaign_id | uuid | NO | - | FK → campaigns(id) |
+| code_set_id | uuid | NO | - | FK → campaign_code_sets(id) |
+| code_value | varchar(120) | NO | - | UNIQUE por campaña |
+| status | campaign_code_status | NO | 'available' | - |
+| product_id | uuid | YES | - | FK → products(id) |
+| max_uses | integer | NO | 1 | CHECK (max_uses > 0) |
+| uses_count | integer | NO | 0 | CHECK (uses_count >= 0) |
+| expires_at | timestamptz | YES | - | - |
+| metadata | jsonb | YES | '{}' | - |
+| created_at | timestamptz | NO | now() | - |
+| updated_at | timestamptz | YES | - | - |
+
+**Índices:**
+- `campaign_codes_pkey` PRIMARY KEY (id)
+- `campaign_codes_code_value_idx` UNIQUE (campaign_id, code_value)
+- `campaign_codes_status_idx` INDEX (campaign_id, status, uses_count) WHERE status IN ('available','assigned')
+
+**Foreign Keys:**
+- `campaign_codes_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+- `campaign_codes_code_set_id_fkey` REFERENCES campaign_code_sets(id) ON DELETE CASCADE
+- `campaign_codes_product_id_fkey` REFERENCES products(id) ON DELETE SET NULL
+
+**Reglas:**
+- `uses_count <= max_uses`
+- Al cambiar `status` a `redeemed` forzar `uses_count = max_uses`
+
+---
+
+### campaign_code_captures
+
+Intentos de registro enviados por los usuarios (una fila por código capturado).
+
+| Columna | Tipo | Nullable | Default | Constraints |
+|---------|------|----------|---------|-------------|
+| id | uuid | NO | uuid_generate_v7() | PK |
+| campaign_id | uuid | NO | - | FK → campaigns(id) |
+| card_id | uuid | NO | - | FK → cards(id) |
+| campaign_code_id | uuid | NO | - | FK → campaign_codes(id) |
+| transaction_id | uuid | YES | - | FK → transactions(id) |
+| status | code_capture_status | NO | 'pending' | - |
+| rejection_reason | text | YES | - | - |
+| metadata | jsonb | YES | '{}' | - |
+| created_at | timestamptz | NO | now() | - |
+
+**Índices:**
+- `campaign_code_captures_pkey` PRIMARY KEY (id)
+- `campaign_code_captures_campaign_code_id_idx` INDEX (campaign_code_id)
+- `campaign_code_captures_card_id_idx` INDEX (card_id)
+
+**Foreign Keys:**
+- `campaign_code_captures_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+- `campaign_code_captures_card_id_fkey` REFERENCES cards(id) ON DELETE CASCADE
+- `campaign_code_captures_campaign_code_id_fkey` REFERENCES campaign_codes(id) ON DELETE CASCADE
+- `campaign_code_captures_transaction_id_fkey` REFERENCES transactions(id) ON DELETE SET NULL
 
 ---
 
@@ -550,10 +656,12 @@ Tarjetas de lealtad de usuarios.
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
 | id | uuid | NO | uuid_generate_v7() | PK |
-| transaction_item_id | uuid | NO | - | FK → transaction_items(id) |
+| transaction_item_id | uuid | YES | - | FK → transaction_items(id) |
 | card_id | uuid | NO | - | FK → cards(id) |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | amount | integer | NO | - | CHECK (amount > 0) |
+| source_type | accumulation_source_type | NO | - | - |
+| code_capture_id | uuid | YES | - | FK → campaign_code_captures(id) |
 | created_at | timestamptz | NO | now() | - |
 
 **Índices:**
@@ -565,6 +673,11 @@ Tarjetas de lealtad de usuarios.
 - `accumulations_transaction_item_id_fkey` REFERENCES transaction_items(id) ON DELETE CASCADE
 - `accumulations_card_id_fkey` REFERENCES cards(id) ON DELETE CASCADE
 - `accumulations_campaign_id_fkey` REFERENCES campaigns(id) ON DELETE CASCADE
+- `accumulations_code_capture_id_fkey` REFERENCES campaign_code_captures(id) ON DELETE SET NULL
+
+**Reglas:**
+- `transaction_item_id` es obligatorio cuando `source_type = 'transaction_item'`
+- `code_capture_id` es obligatorio cuando `source_type = 'code_capture'`
 
 ---
 

@@ -282,6 +282,58 @@ ON accumulations (card_id, campaign_id);
 
 ---
 
+### Códigos de Campaña
+
+**Validar un código por su valor**
+```sql
+SELECT * FROM campaign_codes
+WHERE campaign_id = $1
+AND code_value = $2;
+```
+```sql
+CREATE UNIQUE INDEX campaign_codes_code_value_idx
+ON campaign_codes (campaign_id, code_value);
+```
+
+**Obtener códigos disponibles/activos**
+```sql
+SELECT id FROM campaign_codes
+WHERE campaign_id = $1
+AND status IN ('available','assigned')
+AND uses_count < max_uses
+LIMIT 100;
+```
+```sql
+CREATE INDEX campaign_codes_status_idx
+ON campaign_codes (campaign_id, status, uses_count)
+WHERE status IN ('available','assigned');
+```
+
+**Historial por código**
+```sql
+SELECT * FROM campaign_code_captures
+WHERE campaign_code_id = $1
+ORDER BY created_at DESC;
+```
+```sql
+CREATE INDEX campaign_code_captures_code_idx
+ON campaign_code_captures (campaign_code_id, created_at DESC);
+```
+
+**Capturas por tarjeta en ventana de tiempo**
+```sql
+SELECT COUNT(*) FROM campaign_code_captures
+WHERE card_id = $1
+AND campaign_id = $2
+AND created_at >= $3;
+```
+```sql
+CREATE INDEX campaign_code_captures_card_idx
+ON campaign_code_captures (card_id, campaign_id, created_at DESC);
+```
+
+---
+
 ### Acumulaciones
 
 **Balance de una tarjeta**
