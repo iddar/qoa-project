@@ -1,7 +1,4 @@
 .playwright-mcp
-.claude
-.agents
-.codex
-.github
+
 
 node_modules
