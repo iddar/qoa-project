@@ -67,3 +67,44 @@ La documentación vive en /docs. Los READMEs de cada carpeta explican qué llena
 - [docs/06-ops/README.md](docs/06-ops/README.md)
 - [docs/07-engineering/README.md](docs/07-engineering/README.md)
 - [docs/adr/README.md](docs/adr/README.md)
+
+## Entorno de ejecución con Bun + Docker
+
+### Variables de entorno
+
+El runtime carga las variables definidas en `src/.env.local` automáticamente (Bun soporta `.env*` sin dependencias adicionales). El archivo incluido en el repo trae valores de ejemplo para:
+
+- `PORT`, `NODE_ENV` para la app HTTP.
+- `POSTGRES_*` y `DATABASE_URL` para la base de datos interna.
+- `REDIS_*` y `REDIS_URL` para la caché/eventos.
+
+Actualiza esos valores antes de desplegar en otros entornos; no compartas secretos reales en control de versiones.
+
+### Dockerfile + docker-compose
+
+1. Construye e inicia toda la pila (API Bun + Postgres + Redis):
+
+   ```bash
+   docker compose up --build
+   ```
+
+2. La app expone `http://localhost:3000/health` y la UI de OpenAPI en `/openapi`.
+3. Para apagar los servicios y conservar los datos de Postgres/Redis en volúmenes locales:
+
+   ```bash
+   docker compose down
+   ```
+
+Los servicios usan las credenciales definidas en `src/.env.local`. Ajusta puertos/volúmenes editando `docker-compose.yml`.
+
+### Flujo de desarrollo local (sin contenedores)
+
+Desde `src/`:
+
+```bash
+bun install
+bun run dev   # recarga en caliente para desarrollo
+bun test spec # ejecuta las pruebas existentes
+```
+
+Los comandos anteriores respetan el principio de “Bun-first” (sin npm, node, ni ts-node).

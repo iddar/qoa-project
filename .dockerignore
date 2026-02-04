@@ -1,0 +1,28 @@
+# Version control
+.git
+.gitignore
+.DS_Store
+
+# Dependencies
+node_modules
+src/node_modules
+
+# Bun caches & test outputs
+src/.bun
+coverage
+*.lcov
+
+# Runtime artifacts
+logs
+*.log
+
+# Local environment definitions
+.env
+.env.*
+src/.env*
+
+# Agent/editor metadata
+.agents
+.claude
+
+docs
