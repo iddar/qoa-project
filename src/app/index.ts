@@ -7,7 +7,7 @@ import { usersModule } from '../modules/users';
 import { openApiPlugin } from './plugins/openapi';
 
 export const createApp = () =>
-  new Elysia({ name: 'qoa-app' })
+  new Elysia({ name: 'qoa-app', prefix: '/v1' })
     .use(cors())
     .use(openApiPlugin)
     .use(healthModule)
