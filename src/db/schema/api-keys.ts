@@ -6,7 +6,7 @@ export const tenantType = pgEnum('tenant_type', ['cpg', 'store']);
 export const apiKeys = pgTable(
   'api_keys',
   {
-    id: uuid('id').primaryKey().default(sql`uuid_generate_v7()`),
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
     name: varchar('name', { length: 100 }).notNull(),
     keyHash: varchar('key_hash', { length: 255 }).notNull(),
     keyPrefix: varchar('key_prefix', { length: 20 }).notNull(),

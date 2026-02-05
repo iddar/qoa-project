@@ -8,7 +8,7 @@ export const userStatus = pgEnum('user_status', ['active', 'suspended']);
 export const users = pgTable(
   'users',
   {
-    id: uuid('id').primaryKey().default(sql`uuid_generate_v7()`),
+    id: uuid('id').primaryKey().default(sql`uuidv7()`),
     phone: varchar('phone', { length: 20 }).notNull(),
     email: varchar('email', { length: 255 }),
     name: varchar('name', { length: 100 }),

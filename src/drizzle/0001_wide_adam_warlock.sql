@@ -2,7 +2,7 @@ CREATE TYPE "public"."user_role" AS ENUM('consumer', 'store_staff', 'store_admin
 CREATE TYPE "public"."user_status" AS ENUM('active', 'suspended');--> statement-breakpoint
 CREATE TYPE "public"."tenant_type" AS ENUM('cpg', 'store');--> statement-breakpoint
 CREATE TABLE "users" (
-	"id" uuid PRIMARY KEY DEFAULT uuid_generate_v7() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"phone" varchar(20) NOT NULL,
 	"email" varchar(255),
 	"name" varchar(100),
@@ -14,7 +14,7 @@ CREATE TABLE "users" (
 );
 --> statement-breakpoint
 CREATE TABLE "api_keys" (
-	"id" uuid PRIMARY KEY DEFAULT uuid_generate_v7() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"name" varchar(100) NOT NULL,
 	"key_hash" varchar(255) NOT NULL,
 	"key_prefix" varchar(20) NOT NULL,
@@ -29,7 +29,7 @@ CREATE TABLE "api_keys" (
 );
 --> statement-breakpoint
 CREATE TABLE "refresh_tokens" (
-	"id" uuid PRIMARY KEY DEFAULT uuid_generate_v7() NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
 	"user_id" uuid NOT NULL,
 	"token_hash" varchar(255) NOT NULL,
 	"expires_at" timestamp with time zone NOT NULL,

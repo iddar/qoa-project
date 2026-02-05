@@ -80,7 +80,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "uuid_generate_v7()"
+          "default": "uuidv7()"
         },
         "phone": {
           "name": "phone",
@@ -185,7 +185,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "uuid_generate_v7()"
+          "default": "uuidv7()"
         },
         "name": {
           "name": "name",
@@ -312,7 +312,7 @@
           "type": "uuid",
           "primaryKey": true,
           "notNull": true,
-          "default": "uuid_generate_v7()"
+          "default": "uuidv7()"
         },
         "user_id": {
           "name": "user_id",
