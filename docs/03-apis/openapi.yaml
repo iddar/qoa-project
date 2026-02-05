@@ -512,23 +512,17 @@ paths:
   /stores/{storeId}/qr:
     get:
       tags: [Stores]
-      summary: Obtener QR de registro
-      description: Retorna el código QR para que consumidores se registren en esta tienda
+      summary: Obtener payload de registro
+      description: Retorna el payload que debe ser codificado en QR para registrar consumidores en esta tienda
       operationId: getStoreQr
       security:
         - bearerAuth: []
         - apiKey: []
       parameters:
         - $ref: '#/components/parameters/storeIdParam'
-        - name: format
-          in: query
-          schema:
-            type: string
-            enum: [svg, png, base64]
-            default: svg
       responses:
         '200':
-          description: QR de registro
+          description: Payload para QR de registro
           content:
             application/json:
               schema:
@@ -935,7 +929,7 @@ paths:
         - $ref: '#/components/parameters/cardIdParam'
       responses:
         '200':
-          description: Detalle de tarjeta con balance
+          description: Detalle de tarjeta
           content:
             application/json:
               schema:
@@ -944,22 +938,16 @@ paths:
   /cards/{cardId}/qr:
     get:
       tags: [Cards]
-      summary: Obtener QR de tarjeta
-      description: Retorna el código QR firmado para esta tarjeta
+      summary: Obtener payload de tarjeta
+      description: Retorna el payload que debe ser codificado en QR para esta tarjeta
       operationId: getCardQr
       security:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/cardIdParam'
-        - name: format
-          in: query
-          schema:
-            type: string
-            enum: [svg, png, base64]
-            default: svg
       responses:
         '200':
-          description: QR de tarjeta
+          description: Payload para QR de tarjeta
           content:
             application/json:
               schema:
@@ -2233,7 +2221,7 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/CardWithBalance'
+          $ref: '#/components/schemas/Card'
         meta:
           $ref: '#/components/schemas/Meta'
 
@@ -2243,7 +2231,7 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/CardWithBalance'
+            $ref: '#/components/schemas/Card'
         pagination:
           $ref: '#/components/schemas/Pagination'
         meta:
@@ -2530,21 +2518,29 @@ components:
           $ref: '#/components/schemas/Meta'
 
     # ===== QR =====
+    QrPayload:
+      type: object
+      properties:
+        entityType:
+          type: string
+          enum: [store, card]
+        entityId:
+          type: string
+        code:
+          type: string
+          description: Código único que representa a la entidad
+
     QrResponse:
       type: object
       properties:
         data:
           type: object
           properties:
-            url:
-              type: string
-              description: URL codificada en el QR
             code:
               type: string
               description: Código manual alternativo
-            qr:
-              type: string
-              description: QR en el formato solicitado (SVG, PNG base64, etc.)
+            payload:
+              $ref: '#/components/schemas/QrPayload'
             expiresAt:
               type: string
               format: date-time

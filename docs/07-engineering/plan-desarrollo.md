@@ -27,22 +27,23 @@ Este plan divide la construcción del sistema en etapas consecutivas. Cada etapa
 - **API docs:** describir endpoints `/auth/login`, `/auth/refresh`, `/users/me`, flujos de tokens y errores (sin OTP real).
 
 **TODOs**
-- [ ] Implementar middleware de auth (JWT + API key) con roles/scopes.
-- [ ] Definir “modo dev” para inyectar identidad en tests locales.
-- [ ] Documentar secuencia de login sin OTP real en `docs/03-apis/autenticacion.md`.
+- [x] Implementar middleware de auth (JWT + API key) con roles/scopes.
+- [x] Definir “modo dev” para inyectar identidad en tests locales.
+- [x] Documentar secuencia de login sin OTP real en `docs/03-apis/autenticacion.md`.
 
 ---
 
 ## Etapa 2 · Stores y Cards (Semana 2-4)
 
 - **Código:** CRUD de stores, emisión de cards, generación/rotación de QR codes.
+- **Nota:** en esta etapa solo se genera el payload/código del QR, no la imagen.
 - **Tests:** pruebas unitarias de generador de QR + integración para `/stores` y `/cards`.
 - **API docs:** endpoints `/stores`, `/cards`, guidelines de idempotencia para emisión.
 
 **TODOs**
 - [ ] Implementar `stores.service` con validaciones (geografía, tipo).
 - [ ] Crear job de rotación de QR y cubrirlo con tests de reloj simulado.
-- [ ] Actualizar OpenAPI con esquemas `Store`, `Card`, `QrPayload`.
+- [x] Actualizar OpenAPI con esquemas `Store`, `Card`, `QrPayload`.
 
 ---
 

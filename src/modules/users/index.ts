@@ -1,8 +1,9 @@
 import { Elysia } from 'elysia';
-import { and, eq, ne, or } from 'drizzle-orm';
+import { and, desc, eq, lt, ne, or } from 'drizzle-orm';
 import { authPlugin } from '../../app/plugins/auth';
 import { db } from '../../db/client';
-import { users } from '../../db/schema';
+import { cards, users } from '../../db/schema';
+import { cardListQuery, cardListResponse } from '../cards/model';
 import {
   adminCreateUserRequest,
   adminCreateUserResponse,
@@ -16,6 +17,38 @@ const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg
 const backofficeAdminRoles = ['qoa_admin'] as const;
 const backofficeRoles = ['qoa_support', 'qoa_admin'] as const;
 const temporaryPasswordLength = 14;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
+const parseLimit = (limit?: string) => {
+  const parsed = Number(limit ?? DEFAULT_LIMIT);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_LIMIT;
+  }
+  return Math.min(Math.max(parsed, 1), MAX_LIMIT);
+};
+
+const parseCursor = (cursor?: string) => {
+  if (!cursor) {
+    return null;
+  }
+  const parsed = new Date(cursor);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+};
+
+const serializeCard = (card: typeof cards.$inferSelect) => ({
+  id: card.id,
+  userId: card.userId,
+  campaignId: card.campaignId,
+  storeId: card.storeId ?? undefined,
+  code: card.code,
+  currentTierId: card.currentTierId ?? undefined,
+  status: card.status,
+  createdAt: card.createdAt.toISOString(),
+});
 
 const generateTemporaryPassword = () => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
@@ -267,6 +300,60 @@ export const usersModule = new Elysia({
       },
       detail: {
         summary: 'Desbloquear usuario',
+      },
+    },
+  )
+  .get(
+    '/me/cards',
+    async ({ auth, query, status }) => {
+      if (!auth || auth.type === 'api_key' || auth.type === 'dev_api_key') {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Token de usuario requerido',
+          },
+        });
+      }
+
+      const cursorDate = parseCursor(query.cursor);
+      if (query.cursor && !cursorDate) {
+        return status(400, {
+          error: {
+            code: 'INVALID_CURSOR',
+            message: 'Cursor inválido',
+          },
+        });
+      }
+
+      const limit = parseLimit(query.limit);
+      let queryBuilder = db.select().from(cards).where(eq(cards.userId, auth.userId));
+      if (cursorDate) {
+        queryBuilder = queryBuilder.where(and(eq(cards.userId, auth.userId), lt(cards.createdAt, cursorDate)));
+      }
+
+      const results = await queryBuilder.orderBy(desc(cards.createdAt), desc(cards.id)).limit(limit + 1);
+      const hasMore = results.length > limit;
+      const items = hasMore ? results.slice(0, limit) : results;
+      const nextCursor = hasMore ? items[items.length - 1]?.createdAt.toISOString() : null;
+
+      return {
+        data: items.map(serializeCard),
+        pagination: {
+          hasMore,
+          nextCursor: nextCursor ?? undefined,
+        },
+      };
+    },
+    {
+      auth: {
+        roles: [...allowedRoles],
+      },
+      query: cardListQuery,
+      response: {
+        200: cardListResponse,
+      },
+      detail: {
+        summary: 'Listar mis tarjetas',
       },
     },
   )
