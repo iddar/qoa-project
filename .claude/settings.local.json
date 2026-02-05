@@ -9,7 +9,11 @@
       "Bash(ls:*)",
       "Bash(git -C /Users/iddar/Developer/projects/qoa log --oneline)",
       "Bash(tree:*)",
-      "Bash(bun run:*)"
+      "Bash(bun run:*)",
+      "WebFetch(domain:elysiajs.com)",
+      "Bash(bun install:*)",
+      "Bash(bun test:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

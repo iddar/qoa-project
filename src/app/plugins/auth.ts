@@ -58,7 +58,7 @@ export const authPlugin = new Elysia({ name: 'auth' })
   })
   .macro(({ onBeforeHandle }) => ({
     auth: (requirement?: AuthRequirement) => {
-      onBeforeHandle(async (context) => {
+      onBeforeHandle(async (context: any) => {
         const requirementConfig = requirement ?? {};
         const authContext = await resolveAuth(context, requirementConfig);
 
@@ -171,7 +171,7 @@ const resolveAuth = async (context: any, requirement: AuthRequirement) => {
       return null;
     }
 
-    const scopes = Array.isArray(payload.scopes) ? payload.scopes.filter((scope) => typeof scope === 'string') : [];
+    const scopes = Array.isArray(payload.scopes) ? payload.scopes.filter((scope: unknown) => typeof scope === 'string') : [];
     const role = typeof payload.role === 'string' ? payload.role : 'consumer';
     const tenantId = typeof payload.tenantId === 'string' ? payload.tenantId : null;
     const tenantType = payload.tenantType === 'cpg' || payload.tenantType === 'store' ? payload.tenantType : null;
