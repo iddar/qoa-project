@@ -13,6 +13,7 @@ CREATE TYPE entity_status AS ENUM ('active', 'inactive');
 -- Roles de usuario
 CREATE TYPE user_role AS ENUM (
   'consumer',
+  'customer',
   'store_staff',
   'store_admin',
   'cpg_admin',
@@ -207,6 +208,9 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 | password_hash | varchar(255) | YES | - | - |
 | role | user_role | NO | 'consumer' | - |
 | status | user_status | NO | 'active' | - |
+| blocked_at | timestamptz | YES | - | - |
+| blocked_until | timestamptz | YES | - | - |
+| blocked_reason | text | YES | - | - |
 | created_at | timestamptz | NO | now() | - |
 | updated_at | timestamptz | YES | - | - |
 

@@ -9,6 +9,7 @@
 | Actor | Método | Endpoints | Token |
 |-------|--------|-----------|-------|
 | **Consumidor** | OTP vía WhatsApp | `/auth/otp/*` | JWT |
+| **Consumidor/Customer** | Signup con password | `/auth/signup` | JWT |
 | **Tendero (PDV)** | OTP o Password | `/auth/otp/*`, `/auth/login` | JWT |
 | **CPG Admin** | Password | `/auth/login` | JWT |
 | **B2B/Integración** | API Key | - | API Key |
@@ -100,6 +101,44 @@ El usuario fue creado automáticamente. El cliente debe:
 ---
 
 ## 2. Autenticación por Password (Tenderos y CPG)
+
+### Signup (Consumidor/Customer)
+
+```http
+POST /v1/auth/signup
+Content-Type: application/json
+
+{
+  "phone": "+521234567890",
+  "email": "cliente@ejemplo.com",
+  "name": "Cliente Demo",
+  "password": "Password123!",
+  "role": "consumer"
+}
+```
+
+**Respuesta exitosa (200):**
+
+```json
+{
+  "data": {
+    "accessToken": "eyJhbGciOiJSUzI1NiIs...",
+    "refreshToken": "ref_xyz789...",
+    "expiresIn": 900,
+    "user": {
+      "id": "usr_123",
+      "email": "cliente@ejemplo.com",
+      "phone": "+521234567890",
+      "role": "consumer"
+    }
+  }
+}
+```
+
+**Notas:**
+
+- Roles permitidos: `consumer`, `customer`.
+- Si el teléfono o email ya existen → `409 USER_EXISTS`.
 
 ### Login
 
@@ -406,7 +445,7 @@ Headers soportados:
 | Protección | Descripción |
 |------------|-------------|
 | Rate limiting | Límite de intentos por IP/usuario |
-| Bloqueo temporal | 5 intentos fallidos = bloqueo 15 min |
+| Bloqueo temporal | Admin puede bloquear con `blocked_until` |
 | HTTPS obligatorio | Tokens solo en conexiones seguras |
 | Token rotation | Refresh tokens rotan en cada uso |
 
@@ -417,6 +456,12 @@ Headers soportados:
 3. **Rotar API Keys** - Periódicamente y ante cualquier exposición
 4. **Manejar 401** - Implementar lógica de re-autenticación
 5. **Logout en dispositivos** - Permitir cerrar sesiones remotas
+
+### Bloqueo de cuentas
+
+- **Temporal:** `blocked_until` en el futuro.
+- **Permanente:** `status = suspended`.
+- Respuesta estándar: `403 ACCOUNT_BLOCKED`.
 
 ---
 

@@ -5,6 +5,14 @@ export const loginRequest = t.Object({
   password: t.String({ minLength: 8 }),
 });
 
+export const signupRequest = t.Object({
+  phone: t.String({ minLength: 7 }),
+  email: t.Optional(t.String({ format: 'email' })),
+  name: t.Optional(t.String()),
+  password: t.String({ minLength: 8 }),
+  role: t.Optional(t.Union([t.Literal('consumer'), t.Literal('customer')])),
+});
+
 export const refreshRequest = t.Object({
   refreshToken: t.String(),
 });

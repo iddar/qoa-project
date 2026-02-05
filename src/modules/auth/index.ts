@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { db } from '../../db/client';
 import { refreshTokens, users } from '../../db/schema';
 import {
@@ -9,7 +9,7 @@ import {
   persistRefreshToken,
   rotateRefreshToken,
 } from '../../app/plugins/auth';
-import { authResponse, loginRequest, refreshRequest } from './model';
+import { authResponse, loginRequest, refreshRequest, signupRequest } from './model';
 
 const invalidCredentialsError = {
   error: {
@@ -26,6 +26,98 @@ export const authModule = new Elysia({
 })
   .use(authPlugin)
   .post(
+    '/signup',
+    async ({ body, jwt, authHelpers, error }) => {
+      const email = body.email ? body.email.toLowerCase() : null;
+      const role = body.role ?? 'consumer';
+
+      if (role !== 'consumer' && role !== 'customer') {
+        return error(400, {
+          error: {
+            code: 'INVALID_ROLE',
+            message: 'Rol inválido para signup',
+          },
+        });
+      }
+
+      const conditions = [eq(users.phone, body.phone)];
+      if (email) {
+        conditions.push(eq(users.email, email));
+      }
+
+      const whereClause = conditions.length === 1 ? conditions[0] : or(...conditions);
+      const [existing] = await db.select().from(users).where(whereClause);
+      if (existing) {
+        return error(409, {
+          error: {
+            code: 'USER_EXISTS',
+            message: 'El usuario ya existe',
+          },
+        });
+      }
+
+      const passwordHash = await Bun.password.hash(body.password);
+      const [created] = await db
+        .insert(users)
+        .values({
+          phone: body.phone,
+          email,
+          name: body.name ?? null,
+          passwordHash,
+          role,
+        })
+        .returning({
+          id: users.id,
+          email: users.email,
+          phone: users.phone,
+          role: users.role,
+        });
+
+      if (!created) {
+        return error(500, {
+          error: {
+            code: 'SIGNUP_FAILED',
+            message: 'No se pudo crear el usuario',
+          },
+        });
+      }
+
+      const access = await issueAccessToken(
+        { jwt },
+        {
+          sub: created.id,
+          role: created.role,
+        },
+      );
+
+      const refreshToken = authHelpers.generateRefreshToken();
+      await persistRefreshToken(created.id, refreshToken);
+
+      return {
+        data: {
+          accessToken: access.token,
+          refreshToken,
+          expiresIn: access.expiresIn,
+          user: {
+            id: created.id,
+            email: created.email ?? undefined,
+            phone: created.phone ?? undefined,
+            role: created.role,
+          },
+        },
+      };
+    },
+    {
+      body: signupRequest,
+      response: {
+        200: authResponse,
+      },
+      detail: {
+        summary: 'Signup de consumidor/customer',
+      },
+    },
+  )
+  .post(
     '/login',
     async ({ body, jwt, authHelpers, error }) => {
       const email = body.email.toLowerCase();
@@ -35,11 +127,11 @@ export const authModule = new Elysia({
         return error(401, invalidCredentialsError);
       }
 
-      if (user.status === 'suspended') {
+      if (user.status === 'suspended' || (user.blockedUntil && user.blockedUntil.getTime() > Date.now())) {
         return error(403, {
           error: {
-            code: 'ACCOUNT_SUSPENDED',
-            message: 'La cuenta está suspendida',
+            code: 'ACCOUNT_BLOCKED',
+            message: 'La cuenta está bloqueada',
           },
         });
       }
@@ -107,6 +199,15 @@ export const authModule = new Elysia({
         });
       }
 
+      if (user.status === 'suspended' || (user.blockedUntil && user.blockedUntil.getTime() > Date.now())) {
+        return error(403, {
+          error: {
+            code: 'ACCOUNT_BLOCKED',
+            message: 'La cuenta está bloqueada',
+          },
+        });
+      }
+
       const access = await issueAccessToken(
         { jwt },
         {
@@ -147,7 +248,7 @@ export const authModule = new Elysia({
     {
       body: refreshRequest,
       auth: {
-        roles: ['consumer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_admin'],
+        roles: ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_admin'],
       },
       detail: {
         summary: 'Revocar refresh token',

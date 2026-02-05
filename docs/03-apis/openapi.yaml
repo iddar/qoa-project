@@ -113,6 +113,43 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
 
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Signup de consumidor/customer
+      operationId: signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, password]
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+[1-9]\d{1,14}$'
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+                role:
+                  type: string
+                  enum: [consumer, customer]
+      responses:
+        '200':
+          description: Signup exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
   /auth/login:
     post:
       tags: [Auth]
@@ -254,7 +291,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserResponse'
-
     patch:
       tags: [Users]
       summary: Actualizar perfil
@@ -280,6 +316,90 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserResponse'
+
+  /users:
+    post:
+      tags: [Users]
+      summary: Crear usuario desde backoffice
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, role]
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+[1-9]\d{1,14}$'
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum: [consumer, customer, store_staff, store_admin, cpg_admin, qoa_admin]
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '200':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreateResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /users/{userId}/block:
+    post:
+      tags: [Users]
+      summary: Bloquear usuario (temporal o permanente)
+      operationId: blockUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/userIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                until:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Usuario bloqueado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBlockResponse'
+
+  /users/{userId}/unblock:
+    post:
+      tags: [Users]
+      summary: Desbloquear usuario
+      operationId: unblockUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/userIdParam'
+      responses:
+        '200':
+          description: Usuario desbloqueado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBlockResponse'
 
   /users/me/cards:
     get:
@@ -1122,6 +1242,12 @@ components:
       required: true
       schema:
         type: string
+    userIdParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
     campaignIdParam:
       name: campaignId
       in: path
@@ -1284,7 +1410,14 @@ components:
           nullable: true
         role:
           type: string
-          enum: [consumer, store_staff, store_admin, cpg_admin, qoa_admin]
+          enum: [consumer, customer, store_staff, store_admin, cpg_admin, qoa_admin]
+        status:
+          type: string
+          enum: [active, suspended]
+        blockedUntil:
+          type: string
+          format: date-time
+          nullable: true
         isNew:
           type: boolean
         createdAt:
@@ -1298,6 +1431,51 @@ components:
           $ref: '#/components/schemas/User'
         meta:
           $ref: '#/components/schemas/Meta'
+
+    UserCreateResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            phone:
+              type: string
+            email:
+              type: string
+              nullable: true
+            name:
+              type: string
+              nullable: true
+            role:
+              type: string
+              enum: [consumer, customer, store_staff, store_admin, cpg_admin, qoa_admin]
+            status:
+              type: string
+              enum: [active, suspended]
+            temporaryPassword:
+              type: string
+              nullable: true
+
+    UserBlockResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+              enum: [active, suspended]
+            blockedUntil:
+              type: string
+              format: date-time
+              nullable: true
+            blockedReason:
+              type: string
+              nullable: true
 
     # ===== Store =====
     Store:

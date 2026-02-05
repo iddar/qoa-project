@@ -59,7 +59,7 @@ Todas las respuestas de error siguen este formato:
 | `FORBIDDEN` | 403 | No tienes permiso para esta acción | Sin permisos suficientes |
 | `INSUFFICIENT_SCOPE` | 403 | Scope insuficiente | API key sin scope requerido |
 | `RESOURCE_ACCESS_DENIED` | 403 | Acceso denegado al recurso | Recurso de otro tenant |
-| `ACCOUNT_SUSPENDED` | 403 | Cuenta suspendida | Usuario/tienda deshabilitado |
+| `ACCOUNT_BLOCKED` | 403 | Cuenta bloqueada | Usuario bloqueado (temporal o permanente) |
 
 ### Validación (400)
 
@@ -91,6 +91,7 @@ Todas las respuestas de error siguen este formato:
 |--------|------|---------|---------------|
 | `CONFLICT` | 409 | Conflicto con estado actual | Operación no permitida |
 | `ALREADY_EXISTS` | 409 | El recurso ya existe | Duplicado (teléfono, email) |
+| `USER_EXISTS` | 409 | El usuario ya existe | Duplicado de email o teléfono |
 | `PHONE_ALREADY_REGISTERED` | 409 | Teléfono ya registrado | Usuario existente |
 | `CARD_ALREADY_EXISTS` | 409 | Ya tienes una tarjeta activa | Card duplicada para campaña |
 | `ALREADY_REDEEMED` | 409 | Recompensa ya canjeada | Intento de doble canje |

@@ -15,6 +15,13 @@
       "when": 1770254945027,
       "tag": "0001_wide_adam_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770309146549,
+      "tag": "0002_fancy_lilith",
+      "breakpoints": true
     }
   ]
 }
