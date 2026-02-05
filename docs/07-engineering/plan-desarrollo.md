@@ -20,16 +20,16 @@ Este plan divide la construcción del sistema en etapas consecutivas. Cada etapa
 
 ---
 
-## Etapa 1 · Autenticación y Usuarios (Semana 1-2)
+## Etapa 1 · Auth base (sin OTP) y Usuarios (Semana 1-2)
 
-- **Código:** módulos `auth` y `users` (registro WhatsApp, login magic link, dashboard admins).
-- **Tests:** unit tests para servicios de OTP/magic link, contract tests para `/auth/*` endpoints.
-- **API docs:** describir endpoints `/auth/login`, `/users/me`, flujos de tokens y errores.
+- **Código:** middleware de auth, roles/scopes, API keys, módulo `users` y modo dev/stub para bypass controlado.
+- **Tests:** contract tests para `/auth/*` que no dependen de proveedor externo; tests de middleware/roles.
+- **API docs:** describir endpoints `/auth/login`, `/auth/refresh`, `/users/me`, flujos de tokens y errores (sin OTP real).
 
 **TODOs**
-- [ ] Implementar servicio OTP (`sendLoginCode`, `verifyLoginCode`) con expiración configurable.
-- [ ] Agregar unit tests cubriendo casos de OTP inválido/expirado.
-- [ ] Documentar secuencia de login en `docs/03-apis/autenticacion.md` con diagramas.
+- [ ] Implementar middleware de auth (JWT + API key) con roles/scopes.
+- [ ] Definir “modo dev” para inyectar identidad en tests locales.
+- [ ] Documentar secuencia de login sin OTP real en `docs/03-apis/autenticacion.md`.
 
 ---
 
@@ -59,7 +59,7 @@ Este plan divide la construcción del sistema en etapas consecutivas. Cada etapa
 
 ---
 
-## Etapa 4 · Transacciones y Integraciones (Semana 5-7)
+## Etapa 4 · Transacciones e Integraciones (Semana 5-7)
 
 - **Código:** módulo `transactions` (registro manual + ingestión T-Conecta), `accumulations`, jobs antifraude.
 - **Tests:** contract tests con fixtures JSON de transacciones, pruebas de integraciones simuladas (webhooks).
@@ -98,13 +98,14 @@ Este plan divide la construcción del sistema en etapas consecutivas. Cada etapa
 
 ---
 
-## Etapa 7 · Endgame y Hardening (Semana 9-10)
+## Etapa 7 · OTP/Proveedor externo + Hardening (Semana 9-10)
 
-- **Código:** refactor final, limpieza de feature toggles, scripts de migración finales.
-- **Tests:** cobertura >85%, pruebas de resiliencia (chaos) y seguridad básica (fuzz auth).
-- **API docs:** freeze de OpenAPI/AsyncAPI, changelog, ejemplos finales.
+- **Código:** integrar OTP con proveedor externo (Twilio u otro), refactor final, limpieza de feature toggles.
+- **Tests:** pruebas de integración con proveedor (mock), cobertura >85%, resiliencia (chaos) y seguridad básica (fuzz auth).
+- **API docs:** actualizar `autenticacion.md` con OTP real, freeze de OpenAPI/AsyncAPI, changelog.
 
 **TODOs**
+- [ ] Integrar proveedor OTP y activar endpoints `/auth/otp/*`.
 - [ ] Ejecutar pentest checklist de `docs/05-security`.
 - [ ] Generar reportes de cobertura y adjuntarlos en CI.
 - [ ] Publicar release notes y snapshot final de documentación (PDF/HTML).
