@@ -51,12 +51,12 @@
 ## Fase 5: Implementación Backend
 
 ### Sprint 1
-- [ ] Setup proyecto (tsconfig, eslint, prettier)
-- [ ] Configuración base de datos y migraciones
-- [ ] Middleware logging con trace_id
+- [x] Setup proyecto (tsconfig, eslint, prettier)
+- [x] Configuración base de datos y migraciones
+- [x] Middleware logging con trace_id
 - [ ] Middleware manejo de errores
-- [ ] Health check endpoint
-- [ ] Docker Compose para desarrollo
+- [x] Health check endpoint
+- [x] Docker Compose para desarrollo
 
 ### Sprint 2
 - [ ] Módulo Users
