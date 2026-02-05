@@ -68,6 +68,25 @@ La documentación vive en /docs. Los READMEs de cada carpeta explican qué llena
 - [docs/07-engineering/README.md](docs/07-engineering/README.md)
 - [docs/adr/README.md](docs/adr/README.md)
 
+## Desarrollo con GitHub Codespaces
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/iddar/qoa-project)
+
+Este proyecto está configurado para GitHub Codespaces, lo que permite desarrollar en un entorno completamente configurado en la nube. El Codespace incluye:
+
+- ✅ Bun runtime pre-instalado
+- ✅ PostgreSQL 16 y Redis 7 configurados automáticamente
+- ✅ Extensiones de VS Code recomendadas
+- ✅ Hot-reload para desarrollo rápido
+
+Para empezar:
+1. Haz clic en el badge de arriba (el botón aparecerá en inglés como "Open in GitHub Codespaces")
+2. Espera a que el entorno se configure (2-3 minutos)
+3. Ejecuta `bun run dev` en la terminal
+4. Accede a la aplicación en el puerto 3000 cuando VS Code te notifique
+
+Ver [.devcontainer/README.md](.devcontainer/README.md) para más detalles sobre el entorno de Codespaces.
+
 ## Entorno de ejecución con Bun + Docker
 
 ### Variables de entorno
