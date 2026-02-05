@@ -63,17 +63,17 @@ export const authPlugin = new Elysia({ name: 'auth' })
         const authContext = await resolveAuth(context, requirementConfig);
 
         if (!authContext) {
-          return context.error(401, buildError('UNAUTHORIZED', 'Autenticación requerida'));
+          return context.status(401, buildError('UNAUTHORIZED', 'Autenticación requerida'));
         }
 
         if (authContext.type === 'jwt') {
           const [user] = await db.select().from(users).where(eq(users.id, authContext.userId));
           if (!user) {
-            return context.error(401, buildError('INVALID_TOKEN', 'Usuario inválido'));
+            return context.status(401, buildError('INVALID_TOKEN', 'Usuario inválido'));
           }
 
           if (isUserBlocked(user)) {
-            return context.error(403, buildError('ACCOUNT_BLOCKED', 'Usuario bloqueado'));
+            return context.status(403, buildError('ACCOUNT_BLOCKED', 'Usuario bloqueado'));
           }
 
           // Enriquecer contexto con tenant del usuario
@@ -84,12 +84,12 @@ export const authPlugin = new Elysia({ name: 'auth' })
         if (requirementConfig.roles?.length) {
           const isApiKey = authContext.type === 'api_key' || authContext.type === 'dev_api_key';
           if (isApiKey) {
-            return context.error(403, buildError('FORBIDDEN', 'Rol requerido'));
+            return context.status(403, buildError('FORBIDDEN', 'Rol requerido'));
           }
 
           const userRole = (authContext as Extract<AuthContext, { type: 'jwt' | 'dev' }>).role;
           if (!requirementConfig.roles.includes(userRole)) {
-            return context.error(403, buildError('FORBIDDEN', 'Rol requerido'));
+            return context.status(403, buildError('FORBIDDEN', 'Rol requerido'));
           }
         }
 
@@ -98,7 +98,7 @@ export const authPlugin = new Elysia({ name: 'auth' })
           const hasScopes = requirementConfig.scopes.every((scope) => scopes.includes(scope));
 
           if (!hasScopes) {
-            return context.error(403, buildError('INSUFFICIENT_SCOPE', 'Scope insuficiente'));
+            return context.status(403, buildError('INSUFFICIENT_SCOPE', 'Scope insuficiente'));
           }
         }
 

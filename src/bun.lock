@@ -12,6 +12,7 @@
         "elysia": "^1.4.22",
       },
       "devDependencies": {
+        "@elysiajs/eden": "^1.4.2",
         "@types/bun": "latest",
         "@typescript/native-preview": "^7.0.0-dev.20260205.1",
         "drizzle-kit": "^0.31.8",
@@ -30,6 +31,8 @@
     "@drizzle-team/brocli": ["@drizzle-team/brocli@0.10.2", "", {}, "sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w=="],
 
     "@elysiajs/cors": ["@elysiajs/cors@1.4.1", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-lQfad+F3r4mNwsxRKbXyJB8Jg43oAOXjRwn7sKUL6bcOW3KjUqUimTS+woNpO97efpzjtDE0tEjGk9DTw8lqTQ=="],
+
+    "@elysiajs/eden": ["@elysiajs/eden@1.4.6", "", { "peerDependencies": { "elysia": ">=1.4.19" } }, "sha512-Tsa4NwXEWg/u73vWiYZQ3L5/ecgZSxqiEjYwpS+4qBKXeTZqZKl2hcgHJSVBL+InEDMi35Xugct7qyAXE5oM4Q=="],
 
     "@elysiajs/jwt": ["@elysiajs/jwt@1.4.0", "", { "dependencies": { "jose": "^6.0.11" }, "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-Z0PvZhQxdDeKZ8HslXzDoXXD83NKExNPmoiAPki3nI2Xvh5wtUrBH+zWOD17yP14IbRo8fxGj3L25MRCAPsgPA=="],
 

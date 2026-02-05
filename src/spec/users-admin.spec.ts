@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test';
+import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
-import { createApp } from '../app';
+import { createApp, type App } from '../app';
 import { db } from '../db/client';
 import { users } from '../db/schema';
 
 const app = createApp();
+const api = treaty<App>(app);
 
 const adminHeaders = {
   'content-type': 'application/json',
@@ -26,23 +28,29 @@ describe('Backoffice user management', () => {
     const email = `staff_${crypto.randomUUID()}@qoa.test`;
     const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
 
-    const response = await app.handle(
-      new Request('http://localhost/v1/users', {
-        method: 'POST',
-        headers: adminHeaders,
-        body: JSON.stringify({
-          email,
-          phone,
-          role: 'store_staff',
-          name: 'Staff Test',
-        }),
-      }),
+    const { data, error, status } = await api.v1.users.post(
+      {
+        email,
+        phone,
+        role: 'store_staff',
+        name: 'Staff Test',
+        tenantId: crypto.randomUUID(),
+        tenantType: 'store',
+      },
+      { headers: adminHeaders },
     );
 
-    expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload.data.temporaryPassword).toBeTruthy();
-    expect(payload.data.role).toBe('store_staff');
+    if (error) {
+      throw error.value;
+    }
+
+    if (!data) {
+      throw new Error('Admin create user response missing');
+    }
+
+    expect(status).toBe(200);
+    expect(data.data.temporaryPassword).toBeTruthy();
+    expect(data.data.role).toBe('store_staff');
 
     await cleanupUser(email, phone);
   });
@@ -67,31 +75,41 @@ describe('Backoffice user management', () => {
       throw new Error('No user created for block test');
     }
 
-    const blockResponse = await app.handle(
-      new Request(`http://localhost/v1/users/${created.id}/block`, {
-        method: 'POST',
-        headers: adminHeaders,
-        body: JSON.stringify({
-          until: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-          reason: 'Fraude sospechado',
-        }),
-      }),
+    const { data: blockData, error: blockError, status: blockStatus } = await api.v1.users(
+      { id: created.id },
+    ).block.post(
+      {
+        until: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        reason: 'Fraude sospechado',
+      },
+      { headers: adminHeaders },
     );
 
-    expect(blockResponse.status).toBe(200);
-    const blockPayload = await blockResponse.json();
-    expect(blockPayload.data.blockedUntil).toBeTruthy();
+    if (blockError) {
+      throw blockError.value;
+    }
 
-    const unblockResponse = await app.handle(
-      new Request(`http://localhost/v1/users/${created.id}/unblock`, {
-        method: 'POST',
-        headers: adminHeaders,
-      }),
-    );
+    if (!blockData) {
+      throw new Error('Block user response missing');
+    }
 
-    expect(unblockResponse.status).toBe(200);
-    const unblockPayload = await unblockResponse.json();
-    expect(unblockPayload.data.status).toBe('active');
+    expect(blockStatus).toBe(200);
+    expect(blockData.data.blockedUntil).toBeTruthy();
+
+    const { data: unblockData, error: unblockError, status: unblockStatus } = await api.v1.users(
+      { id: created.id },
+    ).unblock.post(undefined, { headers: adminHeaders });
+
+    if (unblockError) {
+      throw unblockError.value;
+    }
+
+    if (!unblockData) {
+      throw new Error('Unblock user response missing');
+    }
+
+    expect(unblockStatus).toBe(200);
+    expect(unblockData.data.status).toBe('active');
 
     await cleanupUser(email, phone);
   });

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'bun:test';
+import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
-import { createApp } from '../app';
+import { createApp, type App } from '../app';
 import { db } from '../db/client';
 import { users } from '../db/schema';
 
 const app = createApp();
+const api = treaty<App>(app);
 
 const cleanupUser = async (email: string | null, phone: string) => {
   if (email) {
@@ -18,24 +20,25 @@ describe('Auth signup/login', () => {
     const email = `consumer_${crypto.randomUUID()}@qoa.test`;
     const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
 
-    const response = await app.handle(
-      new Request('http://localhost/v1/auth/signup', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          phone,
-          password: 'Password123!',
-          role: 'consumer',
-        }),
-      }),
-    );
+    const { data, error, status } = await api.v1.auth.signup.post({
+      email,
+      phone,
+      password: 'Password123!',
+      role: 'consumer',
+    });
 
-    expect(response.status).toBe(200);
-    const payload = await response.json();
-    expect(payload.data.accessToken).toBeTruthy();
-    expect(payload.data.refreshToken).toBeTruthy();
-    expect(payload.data.user.email).toBe(email);
+    if (error) {
+      throw error.value;
+    }
+
+    if (!data) {
+      throw new Error('Signup response data missing');
+    }
+
+    expect(status).toBe(200);
+    expect(data.data.accessToken).toBeTruthy();
+    expect(data.data.refreshToken).toBeTruthy();
+    expect(data.data.user.email).toBe(email);
 
     await cleanupUser(email, phone);
   });
@@ -51,22 +54,19 @@ describe('Auth signup/login', () => {
       role: 'consumer',
     });
 
-    const response = await app.handle(
-      new Request('http://localhost/v1/auth/signup', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          phone: `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`,
-          password: 'Password123!',
-          role: 'consumer',
-        }),
-      }),
-    );
+    const { error, status } = await api.v1.auth.signup.post({
+      email,
+      phone: `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`,
+      password: 'Password123!',
+      role: 'consumer',
+    });
 
-    expect(response.status).toBe(409);
-    const payload = await response.json();
-    expect(payload.error.code).toBe('USER_EXISTS');
+    if (!error) {
+      throw new Error('Expected signup to fail with duplicate email');
+    }
+
+    expect(status).toBe(409);
+    expect(error.value.error.code).toBe('USER_EXISTS');
 
     await cleanupUser(email, phone);
   });
@@ -84,20 +84,17 @@ describe('Auth signup/login', () => {
       blockedUntil: new Date(Date.now() + 60 * 60 * 1000),
     });
 
-    const response = await app.handle(
-      new Request('http://localhost/v1/auth/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
-      }),
-    );
+    const { error, status } = await api.v1.auth.login.post({
+      email,
+      password,
+    });
 
-    expect(response.status).toBe(403);
-    const payload = await response.json();
-    expect(payload.error.code).toBe('ACCOUNT_BLOCKED');
+    if (!error) {
+      throw new Error('Expected blocked user login to fail');
+    }
+
+    expect(status).toBe(403);
+    expect(error.value.error.code).toBe('ACCOUNT_BLOCKED');
 
     await cleanupUser(email, phone);
   });

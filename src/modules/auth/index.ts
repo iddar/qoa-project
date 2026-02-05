@@ -27,12 +27,12 @@ export const authModule = new Elysia({
   .use(authPlugin)
   .post(
     '/signup',
-    async ({ body, jwt, authHelpers, error }) => {
+    async ({ body, jwt, authHelpers, status }) => {
       const email = body.email ? body.email.toLowerCase() : null;
       const role = body.role ?? 'consumer';
 
       if (role !== 'consumer' && role !== 'customer') {
-        return error(400, {
+        return status(400, {
           error: {
             code: 'INVALID_ROLE',
             message: 'Rol inválido para signup',
@@ -48,7 +48,7 @@ export const authModule = new Elysia({
       const whereClause = conditions.length === 1 ? conditions[0] : or(...conditions);
       const [existing] = await db.select().from(users).where(whereClause);
       if (existing) {
-        return error(409, {
+        return status(409, {
           error: {
             code: 'USER_EXISTS',
             message: 'El usuario ya existe',
@@ -74,7 +74,7 @@ export const authModule = new Elysia({
         });
 
       if (!created) {
-        return error(500, {
+        return status(500, {
           error: {
             code: 'SIGNUP_FAILED',
             message: 'No se pudo crear el usuario',
@@ -119,16 +119,16 @@ export const authModule = new Elysia({
   )
   .post(
     '/login',
-    async ({ body, jwt, authHelpers, error }) => {
+    async ({ body, jwt, authHelpers, status }) => {
       const email = body.email.toLowerCase();
       const user = await findUserByEmail(email);
 
       if (!user || !user.passwordHash) {
-        return error(401, invalidCredentialsError);
+        return status(401, invalidCredentialsError);
       }
 
       if (user.status === 'suspended' || (user.blockedUntil && user.blockedUntil.getTime() > Date.now())) {
-        return error(403, {
+        return status(403, {
           error: {
             code: 'ACCOUNT_BLOCKED',
             message: 'La cuenta está bloqueada',
@@ -138,7 +138,7 @@ export const authModule = new Elysia({
 
       const passwordMatches = await Bun.password.verify(body.password, user.passwordHash);
       if (!passwordMatches) {
-        return error(401, invalidCredentialsError);
+        return status(401, invalidCredentialsError);
       }
 
       const access = await issueAccessToken(
@@ -182,10 +182,10 @@ export const authModule = new Elysia({
   )
   .post(
     '/refresh',
-    async ({ body, jwt, error }) => {
+    async ({ body, jwt, status }) => {
       const rotated = await rotateRefreshToken(body.refreshToken);
       if (!rotated) {
-        return error(401, {
+        return status(401, {
           error: {
             code: 'SESSION_EXPIRED',
             message: 'Refresh token inválido o expirado',
@@ -195,7 +195,7 @@ export const authModule = new Elysia({
 
       const [user] = await db.select().from(users).where(eq(users.id, rotated.userId));
       if (!user) {
-        return error(404, {
+        return status(404, {
           error: {
             code: 'USER_NOT_FOUND',
             message: 'Usuario no encontrado',
@@ -204,7 +204,7 @@ export const authModule = new Elysia({
       }
 
       if (user.status === 'suspended' || (user.blockedUntil && user.blockedUntil.getTime() > Date.now())) {
-        return error(403, {
+        return status(403, {
           error: {
             code: 'ACCOUNT_BLOCKED',
             message: 'La cuenta está bloqueada',

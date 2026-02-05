@@ -1,22 +1,25 @@
 import { describe, expect, it } from 'bun:test';
-import { createApp } from '../app';
+import { treaty } from '@elysiajs/eden';
+import { createApp, type App } from '../app';
 
 describe('Health module', () => {
   const app = createApp();
+  const api = treaty<App>(app);
 
   it('returns ok status and uptime metadata', async () => {
-    const response = await app.handle(new Request('http://localhost/health'));
+    const { data, error, status } = await api.v1.health.get();
 
-    expect(response.status).toBe(200);
+    if (error) {
+      throw error.value;
+    }
 
-    const payload = (await response.json()) as {
-      status: string;
-      uptime: number;
-      timestamp: string;
-    };
+    if (!data) {
+      throw new Error('Health response data missing');
+    }
 
-    expect(payload.status).toBe('ok');
-    expect(typeof payload.uptime).toBe('number');
-    expect(() => new Date(payload.timestamp)).not.toThrow();
+    expect(status).toBe(200);
+    expect(data.status).toBe('ok');
+    expect(typeof data.uptime).toBe('number');
+    expect(() => new Date(data.timestamp)).not.toThrow();
   });
 });

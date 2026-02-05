@@ -34,7 +34,7 @@ export const usersModule = new Elysia({
   .use(authPlugin)
   .post(
     '/',
-    async ({ body, error }) => {
+    async ({ body, status }) => {
       const email = body.email ? body.email.toLowerCase() : null;
       const conditions = [eq(users.phone, body.phone)];
       if (email) {
@@ -44,7 +44,7 @@ export const usersModule = new Elysia({
       const whereClause = conditions.length === 1 ? conditions[0] : or(...conditions);
       const [existing] = await db.select().from(users).where(whereClause);
       if (existing) {
-        return error(409, {
+        return status(409, {
           error: {
             code: 'USER_EXISTS',
             message: 'El usuario ya existe',
@@ -55,7 +55,7 @@ export const usersModule = new Elysia({
       // Validar coherencia rol/tenant
       const requiresTenant = ['store_staff', 'store_admin', 'cpg_admin'].includes(body.role);
       if (requiresTenant && (!body.tenantId || !body.tenantType)) {
-        return error(400, {
+        return status(400, {
           error: {
             code: 'TENANT_REQUIRED',
             message: 'Este rol requiere tenantId y tenantType',
@@ -64,7 +64,7 @@ export const usersModule = new Elysia({
       }
 
       if (!requiresTenant && (body.tenantId || body.tenantType)) {
-        return error(400, {
+        return status(400, {
           error: {
             code: 'TENANT_NOT_ALLOWED',
             message: 'Este rol no puede tener tenant',
@@ -73,7 +73,7 @@ export const usersModule = new Elysia({
       }
 
       if (body.role === 'cpg_admin' && body.tenantType !== 'cpg') {
-        return error(400, {
+        return status(400, {
           error: {
             code: 'INVALID_TENANT_TYPE',
             message: 'cpg_admin requiere tenantType = cpg',
@@ -82,7 +82,7 @@ export const usersModule = new Elysia({
       }
 
       if (['store_staff', 'store_admin'].includes(body.role) && body.tenantType !== 'store') {
-        return error(400, {
+        return status(400, {
           error: {
             code: 'INVALID_TENANT_TYPE',
             message: 'store_staff/store_admin requiere tenantType = store',
@@ -116,7 +116,7 @@ export const usersModule = new Elysia({
         });
 
       if (!created) {
-        return error(500, {
+        return status(500, {
           error: {
             code: 'USER_CREATE_FAILED',
             message: 'No se pudo crear el usuario',
@@ -153,10 +153,10 @@ export const usersModule = new Elysia({
   )
   .post(
     '/:id/block',
-    async ({ params, body, error }) => {
+    async ({ params, body, status }) => {
       const untilDate = body.until ? new Date(body.until) : null;
       if (body.until && Number.isNaN(untilDate?.getTime())) {
-        return error(400, {
+        return status(400, {
           error: {
             code: 'INVALID_ARGUMENT',
             message: 'Fecha de bloqueo inválida',
@@ -165,7 +165,7 @@ export const usersModule = new Elysia({
       }
 
       if (untilDate && untilDate.getTime() <= Date.now()) {
-        return error(400, {
+        return status(400, {
           error: {
             code: 'INVALID_ARGUMENT',
             message: 'La fecha de bloqueo debe ser futura',
@@ -190,7 +190,7 @@ export const usersModule = new Elysia({
         });
 
       if (!updated) {
-        return error(404, {
+        return status(404, {
           error: {
             code: 'USER_NOT_FOUND',
             message: 'Usuario no encontrado',
@@ -222,7 +222,7 @@ export const usersModule = new Elysia({
   )
   .post(
     '/:id/unblock',
-    async ({ params, error }) => {
+    async ({ params, status }) => {
       const [updated] = await db
         .update(users)
         .set({
@@ -240,7 +240,7 @@ export const usersModule = new Elysia({
         });
 
       if (!updated) {
-        return error(404, {
+        return status(404, {
           error: {
             code: 'USER_NOT_FOUND',
             message: 'Usuario no encontrado',
@@ -271,9 +271,9 @@ export const usersModule = new Elysia({
   )
   .get(
     '/me',
-    async ({ auth, error }) => {
+    async ({ auth, status }) => {
       if (!auth || auth.type === 'api_key' || auth.type === 'dev_api_key') {
-        return error(403, {
+        return status(403, {
           error: {
             code: 'FORBIDDEN',
             message: 'Token de usuario requerido',
@@ -283,7 +283,7 @@ export const usersModule = new Elysia({
 
       const [user] = await db.select().from(users).where(eq(users.id, auth.userId));
       if (!user) {
-        return error(404, {
+        return status(404, {
           error: {
             code: 'USER_NOT_FOUND',
             message: 'Usuario no encontrado',
