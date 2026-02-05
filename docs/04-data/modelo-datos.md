@@ -375,8 +375,11 @@ Usuarios del sistema (consumidores, tenderos, admins).
 | email | varchar(255) | Email (nullable, único) |
 | name | varchar(100) | Nombre (nullable) |
 | password_hash | varchar(255) | Hash bcrypt (nullable) |
-| role | enum | consumer, store_staff, store_admin, cpg_admin, qoa_admin |
+| role | enum | consumer, customer, store_staff, store_admin, cpg_admin, qoa_admin |
 | status | enum | active, suspended |
+| blocked_at | timestamptz | Inicio del bloqueo (nullable) |
+| blocked_until | timestamptz | Fin del bloqueo temporal (nullable) |
+| blocked_reason | text | Motivo del bloqueo (nullable) |
 | created_at | timestamptz | |
 | updated_at | timestamptz | |
 

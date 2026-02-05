@@ -26,6 +26,8 @@ servers:
 tags:
   - name: Auth
     description: Autenticación y tokens
+  - name: Health
+    description: Health check del servicio
   - name: Users
     description: Gestión de usuarios/consumidores
   - name: Stores
@@ -48,6 +50,20 @@ tags:
     description: Configuración de webhooks
 
 paths:
+  # ==================== HEALTH ====================
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: health
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
   # ==================== AUTH ====================
   /auth/otp/request:
     post:
@@ -112,6 +128,43 @@ paths:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Signup de consumidor/customer
+      operationId: signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, password]
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+[1-9]\d{1,14}$'
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                password:
+                  type: string
+                  minLength: 8
+                role:
+                  type: string
+                  enum: [consumer, customer]
+      responses:
+        '200':
+          description: Signup exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /auth/login:
     post:
@@ -216,7 +269,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                $ref: '#/components/schemas/RefreshResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -254,7 +307,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserResponse'
-
     patch:
       tags: [Users]
       summary: Actualizar perfil
@@ -262,6 +314,7 @@ paths:
       security:
         - bearerAuth: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -269,7 +322,6 @@ paths:
               properties:
                 name:
                   type: string
-                  maxLength: 100
                 email:
                   type: string
                   format: email
@@ -280,6 +332,102 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /users:
+    post:
+      tags: [Users]
+      summary: Crear usuario desde backoffice
+      operationId: createUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, role]
+              properties:
+                phone:
+                  type: string
+                  pattern: '^\+[1-9]\d{1,14}$'
+                email:
+                  type: string
+                  format: email
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum: [consumer, customer, store_staff, store_admin, cpg_admin, qoa_support, qoa_admin]
+                password:
+                  type: string
+                  minLength: 8
+                tenantId:
+                  type: string
+                  format: uuid
+                  description: Requerido para roles store_staff, store_admin y cpg_admin
+                tenantType:
+                  type: string
+                  enum: [store, cpg]
+                  description: Requerido para roles store_staff, store_admin y cpg_admin
+      responses:
+        '200':
+          description: Usuario creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserCreateResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /users/{id}/block:
+    post:
+      tags: [Users]
+      summary: Bloquear usuario (temporal o permanente)
+      operationId: blockUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                until:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Usuario bloqueado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBlockResponse'
+
+  /users/{id}/unblock:
+    post:
+      tags: [Users]
+      summary: Desbloquear usuario
+      operationId: unblockUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Usuario desbloqueado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBlockResponse'
 
   /users/me/cards:
     get:
@@ -1122,6 +1270,18 @@ components:
       required: true
       schema:
         type: string
+    userIdParam:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+    idParam:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
     campaignIdParam:
       name: campaignId
       in: path
@@ -1201,6 +1361,18 @@ components:
 
   schemas:
     # ===== Common =====
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok]
+        uptime:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+
     Error:
       type: object
       properties:
@@ -1268,6 +1440,19 @@ components:
             user:
               $ref: '#/components/schemas/User'
 
+    RefreshResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+            refreshToken:
+              type: string
+            expiresIn:
+              type: integer
+
     # ===== User =====
     User:
       type: object
@@ -1284,20 +1469,79 @@ components:
           nullable: true
         role:
           type: string
-          enum: [consumer, store_staff, store_admin, cpg_admin, qoa_admin]
-        isNew:
-          type: boolean
-        createdAt:
+          enum: [consumer, customer, store_staff, store_admin, cpg_admin, qoa_support, qoa_admin]
+        status:
+          type: string
+          enum: [active, suspended]
+        tenantId:
+          type: string
+          nullable: true
+        tenantType:
+          type: string
+          enum: [store, cpg]
+          nullable: true
+        blockedUntil:
           type: string
           format: date-time
+          nullable: true
 
     UserResponse:
       type: object
       properties:
         data:
           $ref: '#/components/schemas/User'
-        meta:
-          $ref: '#/components/schemas/Meta'
+
+    UserCreateResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            phone:
+              type: string
+            email:
+              type: string
+              nullable: true
+            name:
+              type: string
+              nullable: true
+            role:
+              type: string
+              enum: [consumer, customer, store_staff, store_admin, cpg_admin, qoa_support, qoa_admin]
+            status:
+              type: string
+              enum: [active, suspended]
+            tenantId:
+              type: string
+              nullable: true
+            tenantType:
+              type: string
+              enum: [store, cpg]
+              nullable: true
+            temporaryPassword:
+              type: string
+              nullable: true
+
+    UserBlockResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+            status:
+              type: string
+              enum: [active, suspended]
+            blockedUntil:
+              type: string
+              format: date-time
+              nullable: true
+            blockedReason:
+              type: string
+              nullable: true
 
     # ===== Store =====
     Store:

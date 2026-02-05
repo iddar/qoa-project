@@ -13,6 +13,7 @@ CREATE TYPE entity_status AS ENUM ('active', 'inactive');
 -- Roles de usuario
 CREATE TYPE user_role AS ENUM (
   'consumer',
+  'customer',
   'store_staff',
   'store_admin',
   'cpg_admin',
@@ -114,7 +115,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | name | varchar(200) | NO | - | - |
 | status | entity_status | NO | 'active' | - |
 | created_at | timestamptz | NO | now() | - |
@@ -129,7 +130,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | cpg_id | uuid | NO | - | FK → cpgs(id) |
 | name | varchar(200) | NO | - | - |
 | logo_url | text | YES | - | - |
@@ -149,7 +150,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | brand_id | uuid | NO | - | FK → brands(id) |
 | sku | varchar(50) | NO | - | - |
 | name | varchar(200) | NO | - | - |
@@ -173,7 +174,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | code | varchar(10) | NO | - | UNIQUE |
 | name | varchar(200) | NO | - | - |
 | type | varchar(50) | YES | - | - |
@@ -200,13 +201,16 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | phone | varchar(20) | NO | - | UNIQUE |
 | email | varchar(255) | YES | - | UNIQUE |
 | name | varchar(100) | YES | - | - |
 | password_hash | varchar(255) | YES | - | - |
 | role | user_role | NO | 'consumer' | - |
 | status | user_status | NO | 'active' | - |
+| blocked_at | timestamptz | YES | - | - |
+| blocked_until | timestamptz | YES | - | - |
+| blocked_reason | text | YES | - | - |
 | created_at | timestamptz | NO | now() | - |
 | updated_at | timestamptz | YES | - | - |
 
@@ -225,7 +229,7 @@ CREATE TYPE tenant_type AS ENUM ('cpg', 'store');
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | cpg_id | uuid | NO | - | FK → cpgs(id) |
 | name | varchar(200) | NO | - | - |
 | description | text | YES | - | - |
@@ -330,7 +334,7 @@ Lotes importados de códigos únicos vinculados a una campaña.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | name | varchar(100) | NO | - | - |
 | source | varchar(50) | YES | - | - |
@@ -353,7 +357,7 @@ Catálogo de códigos disponibles para captura.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | code_set_id | uuid | NO | - | FK → campaign_code_sets(id) |
 | code_value | varchar(120) | NO | - | UNIQUE por campaña |
@@ -388,7 +392,7 @@ Intentos de registro enviados por los usuarios (una fila por código capturado).
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | card_id | uuid | NO | - | FK → cards(id) |
 | campaign_code_id | uuid | NO | - | FK → campaign_codes(id) |
@@ -417,7 +421,7 @@ Logs append-only que documentan cada cambio en campañas.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | version | integer | NO | - | Debe ser ≥ 1 |
 | field_path | text | NO | - | Ruta del campo (`tiers[1].threshold_value`) |
@@ -449,7 +453,7 @@ Niveles de progresión dentro de una campaña (ej: Normal, Bronce, Plata, Oro).
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | name | varchar(100) | NO | - | - |
 | threshold_value | integer | NO | - | CHECK (threshold_value >= 0) |
@@ -478,7 +482,7 @@ Beneficios asociados a cada nivel. Un tier puede tener múltiples beneficios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | tier_id | uuid | NO | - | FK → campaign_tiers(id) |
 | benefit_type | benefit_type | NO | - | - |
 | config | jsonb | NO | '{}' | - |
@@ -505,7 +509,7 @@ Restricciones y reglas de acumulación con scope granular.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | policy_type | policy_type | NO | - | - |
 | scope_type | policy_scope_type | NO | 'campaign' | - |
@@ -547,7 +551,7 @@ Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | user_id | uuid | NO | - | FK → users(id) |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | store_id | uuid | YES | - | FK → stores(id) |
@@ -575,7 +579,7 @@ Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | card_id | uuid | NO | - | FK → cards(id), UNIQUE |
 | current | integer | NO | 0 | CHECK (current >= 0) |
 | lifetime | integer | NO | 0 | CHECK (lifetime >= 0) |
@@ -594,7 +598,7 @@ Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
 | name | varchar(200) | NO | - | - |
 | description | text | YES | - | - |
@@ -620,7 +624,7 @@ Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | card_id | uuid | NO | - | FK → cards(id) |
 | reward_id | uuid | NO | - | FK → rewards(id) |
 | cost | integer | NO | - | CHECK (cost > 0) |
@@ -642,7 +646,7 @@ Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | user_id | uuid | NO | - | FK → users(id) |
 | store_id | uuid | NO | - | FK → stores(id) |
 | total_amount | decimal(12,2) | YES | - | CHECK (total_amount >= 0) |
@@ -665,7 +669,7 @@ Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | transaction_id | uuid | NO | - | FK → transactions(id) |
 | product_id | uuid | NO | - | FK → products(id) |
 | quantity | integer | NO | 1 | CHECK (quantity > 0) |
@@ -689,7 +693,7 @@ Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | transaction_item_id | uuid | YES | - | FK → transaction_items(id) |
 | card_id | uuid | NO | - | FK → cards(id) |
 | campaign_id | uuid | NO | - | FK → campaigns(id) |
@@ -721,7 +725,7 @@ Tarjetas de lealtad de usuarios.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | name | varchar(100) | NO | - | - |
 | key_hash | varchar(255) | NO | - | - |
 | key_prefix | varchar(20) | NO | - | - |
@@ -747,7 +751,7 @@ Ver [ADR-0009](../adr/0009-stack-implementacion.md) para detalles del patrón.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| event_id | uuid | NO | uuid_generate_v7() | PK |
+| event_id | uuid | NO | uuidv7() | PK |
 | event_type | varchar(100) | NO | - | - |
 | event_version | varchar(10) | NO | 'v1' | - |
 | payload | jsonb | NO | - | - |
@@ -782,7 +786,7 @@ Ver [ADR-0009](../adr/0009-stack-implementacion.md) para detalles del patrón.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| job_id | uuid | NO | uuid_generate_v7() | PK |
+| job_id | uuid | NO | uuidv7() | PK |
 | job_type | varchar(100) | NO | - | - |
 | payload | jsonb | NO | - | - |
 | status | job_status | NO | 'pending' | - |
@@ -805,7 +809,7 @@ Ver [ADR-0009](../adr/0009-stack-implementacion.md) para detalles del patrón.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | job_id | uuid | NO | - | FK → jobs(job_id) |
 | attempt | integer | NO | - | - |
 | worker_id | varchar(100) | NO | - | - |
@@ -828,7 +832,7 @@ Ver [ADR-0009](../adr/0009-stack-implementacion.md) para detalles del patrón.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | tenant_id | uuid | NO | - | - |
 | tenant_type | tenant_type | NO | - | - |
 | url | text | NO | - | - |
@@ -847,7 +851,7 @@ Ver [ADR-0009](../adr/0009-stack-implementacion.md) para detalles del patrón.
 
 | Columna | Tipo | Nullable | Default | Constraints |
 |---------|------|----------|---------|-------------|
-| id | uuid | NO | uuid_generate_v7() | PK |
+| id | uuid | NO | uuidv7() | PK |
 | endpoint_id | uuid | NO | - | FK → webhook_endpoints(id) |
 | event_id | uuid | NO | - | - |
 | event_type | varchar(100) | NO | - | - |

@@ -153,6 +153,13 @@ bun test spec # ejecuta las pruebas existentes
 
 Los comandos anteriores respetan el principio de “Bun-first” (sin npm, node, ni ts-node).
 
+### Contrato de API y tests
+
+Siempre que se cree o modifique un endpoint:
+
+- Actualiza/crea sus tests en `src/spec/`.
+- Sincroniza la definición en `/Users/iddar/Developer/projects/qoa/docs/03-apis/openapi.yaml`.
+
 ### Migraciones con Drizzle ORM
 
 1. Define/actualiza las tablas en `src/db/schema/*.ts` (p. ej. `tenants`).

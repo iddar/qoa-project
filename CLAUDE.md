@@ -23,6 +23,8 @@ Default to using Bun instead of Node.js.
 
 Use `bun test` to run tests.
 
+API contract rule: whenever you create or modify an endpoint, update or add tests and keep `/Users/iddar/Developer/projects/qoa/docs/03-apis/openapi.yaml` in sync.
+
 ```ts#index.test.ts
 import { test, expect } from "bun:test";
 

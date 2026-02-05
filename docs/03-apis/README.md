@@ -58,7 +58,8 @@ Definido en [ADR-0003](../adr/0003-autenticacion.md) y [ADR-0009](../adr/0009-st
 
 | Actor | Método | Header |
 |-------|--------|--------|
-| **Consumidor** | OTP + JWT | `Authorization: Bearer <token>` |
+| **Consumidor** | OTP + JWT / Signup | `Authorization: Bearer <token>` |
+| **Customer** | Signup + JWT | `Authorization: Bearer <token>` |
 | **Tendero (PDV)** | OTP/Password + JWT | `Authorization: Bearer <token>` |
 | **CPG Admin** | Password + JWT | `Authorization: Bearer <token>` |
 | **B2B/Integración** | API Key | `X-API-Key: <key>` |

@@ -12,6 +12,14 @@ export const openApiPlugin = openapi({
         name: 'Health',
         description: 'Service availability and readiness endpoints.',
       },
+      {
+        name: 'Auth',
+        description: 'Authentication and token issuance endpoints.',
+      },
+      {
+        name: 'Users',
+        description: 'User profile and account endpoints.',
+      },
     ],
   },
 });
