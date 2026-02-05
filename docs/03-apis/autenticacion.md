@@ -130,6 +130,15 @@ Content-Type: application/json
 }
 ```
 
+### Secuencia de login sin OTP (Etapa 1)
+
+En la etapa inicial no se usa OTP real. El flujo esperado es:
+
+1. Cliente envía `POST /v1/auth/login` con email/password.
+2. API retorna `accessToken` + `refreshToken`.
+3. Cliente consulta perfil con `GET /v1/users/me`.
+4. Cuando expire el access token → `POST /v1/auth/refresh` para rotar.
+
 ### Recuperar contraseña
 
 **Paso 1: Solicitar reset**
@@ -327,6 +336,23 @@ Authorization: Bearer eyJhbGciOiJSUzI1NiIs...
 GET /v1/campaigns
 X-API-Key: qoa_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
+
+### Modo desarrollo / tests locales
+
+Para pruebas locales se puede activar un bypass controlado con:
+
+```
+AUTH_DEV_MODE=true
+NODE_ENV=development
+```
+
+Headers soportados:
+
+- `x-dev-user-id`: ID del usuario simulado (obligatorio).
+- `x-dev-user-role`: rol simulado (`consumer`, `store_admin`, etc.).
+- `x-dev-user-scopes`: scopes separados por coma.
+- `x-dev-auth-type: api_key`: habilita modo API key.
+- `x-dev-api-key-id`, `x-dev-tenant-id`, `x-dev-tenant-type`, `x-dev-api-key-scopes`: datos para simular API key.
 
 ---
 

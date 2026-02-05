@@ -1,0 +1,261 @@
+import { jwt } from '@elysiajs/jwt';
+import { Elysia } from 'elysia';
+import { and, eq, gt, isNull, or } from 'drizzle-orm';
+import { createHash, randomBytes } from 'node:crypto';
+import { db } from '../../db/client';
+import { apiKeys, refreshTokens, users } from '../../db/schema';
+
+const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.AUTH_ACCESS_TTL_SECONDS ?? 900);
+const REFRESH_TOKEN_TTL_DAYS = Number(process.env.AUTH_REFRESH_TTL_DAYS ?? 30);
+
+export type AuthContext =
+  | {
+      type: 'jwt' | 'dev';
+      userId: string;
+      role: string;
+      scopes: string[];
+    }
+  | {
+      type: 'api_key' | 'dev_api_key';
+      apiKeyId: string;
+      scopes: string[];
+      tenantId: string;
+      tenantType: string;
+    };
+
+export type AuthRequirement = {
+  roles?: string[];
+  scopes?: string[];
+  allowApiKey?: boolean;
+};
+
+const toHash = (value: string) => createHash('sha256').update(value).digest('hex');
+
+const buildError = (code: string, message: string) => ({
+  error: {
+    code,
+    message,
+  },
+});
+
+export const authPlugin = new Elysia({ name: 'auth' })
+  .use(
+    jwt({
+      name: 'jwt',
+      secret: process.env.JWT_SECRET ?? 'dev-secret',
+    }),
+  )
+  .derive(() => ({
+    auth: null as AuthContext | null,
+  }))
+  .decorate('authHelpers', {
+    toHash,
+    accessTokenTtlSeconds: ACCESS_TOKEN_TTL_SECONDS,
+    refreshTokenTtlDays: REFRESH_TOKEN_TTL_DAYS,
+    generateRefreshToken: () => randomBytes(48).toString('base64url'),
+  })
+  .macro(({ onBeforeHandle }) => ({
+    auth: (requirement?: AuthRequirement) => {
+      onBeforeHandle(async (context) => {
+        const requirementConfig = requirement ?? {};
+        const authContext = await resolveAuth(context, requirementConfig);
+
+        if (!authContext) {
+          return context.error(401, buildError('UNAUTHORIZED', 'Autenticación requerida'));
+        }
+
+        if (requirementConfig.roles?.length) {
+          if (authContext.type === 'api_key' || authContext.type === 'dev_api_key') {
+            return context.error(403, buildError('FORBIDDEN', 'Rol requerido'));
+          }
+
+          if (!requirementConfig.roles.includes(authContext.role)) {
+            return context.error(403, buildError('FORBIDDEN', 'Rol requerido'));
+          }
+        }
+
+        if (requirementConfig.scopes?.length) {
+          const scopes = authContext.scopes;
+          const hasScopes = requirementConfig.scopes.every((scope) => scopes.includes(scope));
+
+          if (!hasScopes) {
+            return context.error(403, buildError('INSUFFICIENT_SCOPE', 'Scope insuficiente'));
+          }
+        }
+
+        context.auth = authContext;
+      });
+    },
+  }));
+
+const resolveAuth = async (context: any, requirement: AuthRequirement) => {
+  const devMode = process.env.AUTH_DEV_MODE === 'true' && process.env.NODE_ENV !== 'production';
+  if (devMode) {
+    const devAuth = resolveDevAuth(context);
+    if (devAuth) {
+      return devAuth;
+    }
+  }
+
+  const authorization = context.request.headers.get('authorization');
+  const apiKeyHeader = context.request.headers.get('x-api-key');
+
+  const bearer = authorization?.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : null;
+  const apiKeyCandidate = apiKeyHeader ?? (bearer?.startsWith('qoa_') ? bearer : null);
+
+  if (apiKeyCandidate && (requirement.allowApiKey || !bearer)) {
+    const apiKeyHash = toHash(apiKeyCandidate);
+    const [apiKey] = await db
+      .select()
+      .from(apiKeys)
+      .where(
+        and(
+          eq(apiKeys.keyHash, apiKeyHash),
+          isNull(apiKeys.revokedAt),
+          or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, new Date())),
+        ),
+      );
+
+    if (!apiKey) {
+      return null;
+    }
+
+    await db
+      .update(apiKeys)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(apiKeys.id, apiKey.id));
+
+    return {
+      type: 'api_key',
+      apiKeyId: apiKey.id,
+      scopes: apiKey.scopes ?? [],
+      tenantId: apiKey.tenantId,
+      tenantType: apiKey.tenantType,
+    } satisfies AuthContext;
+  }
+
+  if (!bearer) {
+    return null;
+  }
+
+  try {
+    const payload = await context.jwt.verify(bearer);
+    if (!payload || typeof payload.sub !== 'string') {
+      return null;
+    }
+
+    const scopes = Array.isArray(payload.scopes) ? payload.scopes.filter((scope) => typeof scope === 'string') : [];
+    const role = typeof payload.role === 'string' ? payload.role : 'consumer';
+
+    return {
+      type: 'jwt',
+      userId: payload.sub,
+      role,
+      scopes,
+    } satisfies AuthContext;
+  } catch {
+    return null;
+  }
+};
+
+const resolveDevAuth = (context: any): AuthContext | null => {
+  const typeHeader = context.request.headers.get('x-dev-auth-type');
+  if (typeHeader === 'api_key') {
+    const apiKeyId = context.request.headers.get('x-dev-api-key-id');
+    const tenantId = context.request.headers.get('x-dev-tenant-id');
+    const tenantType = context.request.headers.get('x-dev-tenant-type');
+    if (!apiKeyId || !tenantId || !tenantType) {
+      return null;
+    }
+
+    return {
+      type: 'dev_api_key',
+      apiKeyId,
+      scopes: parseScopes(context.request.headers.get('x-dev-api-key-scopes')),
+      tenantId,
+      tenantType,
+    } satisfies AuthContext;
+  }
+
+  const userId = context.request.headers.get('x-dev-user-id');
+  if (!userId) {
+    return null;
+  }
+
+  return {
+    type: 'dev',
+    userId,
+    role: context.request.headers.get('x-dev-user-role') ?? 'consumer',
+    scopes: parseScopes(context.request.headers.get('x-dev-user-scopes')),
+  } satisfies AuthContext;
+};
+
+const parseScopes = (value: string | null) =>
+  value
+    ? value
+        .split(',')
+        .map((scope) => scope.trim())
+        .filter(Boolean)
+    : [];
+
+export const issueAccessToken = async (context: { jwt: { sign: (payload: Record<string, unknown>, options?: { exp?: number }) => Promise<string> } }, payload: {
+  sub: string;
+  role: string;
+  scopes?: string[];
+}) => {
+  const token = await context.jwt.sign(
+    {
+      ...payload,
+      iss: 'qoa',
+      aud: 'qoa-api',
+    },
+    {
+      exp: ACCESS_TOKEN_TTL_SECONDS,
+    },
+  );
+
+  return {
+    token,
+    expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+  };
+};
+
+export const persistRefreshToken = async (userId: string, refreshToken: string) => {
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
+  const tokenHash = toHash(refreshToken);
+
+  await db.insert(refreshTokens).values({
+    userId,
+    tokenHash,
+    expiresAt,
+  });
+
+  return { tokenHash, expiresAt };
+};
+
+export const rotateRefreshToken = async (refreshToken: string) => {
+  const tokenHash = toHash(refreshToken);
+  const [session] = await db
+    .select()
+    .from(refreshTokens)
+    .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt), gt(refreshTokens.expiresAt, new Date())));
+
+  if (!session) {
+    return null;
+  }
+
+  await db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.id, session.id));
+
+  const newToken = randomBytes(48).toString('base64url');
+  await persistRefreshToken(session.userId, newToken);
+
+  return {
+    userId: session.userId,
+    refreshToken: newToken,
+  };
+};
+
+export const findUserByEmail = async (email: string) => {
+  const [user] = await db.select().from(users).where(eq(users.email, email));
+  return user ?? null;
+};
