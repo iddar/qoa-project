@@ -16,6 +16,11 @@ export const userMeResponse = t.Object({
   }),
 });
 
+export const userMeUpdateRequest = t.Object({
+  name: t.Optional(t.String()),
+  email: t.Optional(t.String({ format: 'email' })),
+});
+
 export const adminCreateUserRequest = t.Object({
   phone: t.String({ minLength: 7 }),
   email: t.Optional(t.String({ format: 'email' })),

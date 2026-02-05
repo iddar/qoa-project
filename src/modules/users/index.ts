@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia';
-import { eq, or } from 'drizzle-orm';
+import { and, eq, ne, or } from 'drizzle-orm';
 import { authPlugin } from '../../app/plugins/auth';
 import { db } from '../../db/client';
 import { users } from '../../db/schema';
@@ -8,6 +8,7 @@ import {
   adminCreateUserResponse,
   blockUserRequest,
   blockUserResponse,
+  userMeUpdateRequest,
   userMeResponse,
 } from './model';
 
@@ -314,6 +315,110 @@ export const usersModule = new Elysia({
       },
       detail: {
         summary: 'Obtener perfil del usuario autenticado',
+      },
+    },
+  )
+  .patch(
+    '/me',
+    async ({ auth, body, status }) => {
+      if (!auth || auth.type === 'api_key' || auth.type === 'dev_api_key') {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Token de usuario requerido',
+          },
+        });
+      }
+
+      if (body.name === undefined && body.email === undefined) {
+        return status(400, {
+          error: {
+            code: 'INVALID_ARGUMENT',
+            message: 'Debes enviar al menos name o email',
+          },
+        });
+      }
+
+      const email = body.email?.toLowerCase();
+      if (email) {
+        const [existingEmail] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.email, email), ne(users.id, auth.userId)));
+
+        if (existingEmail) {
+          return status(409, {
+            error: {
+              code: 'USER_EXISTS',
+              message: 'El email ya está en uso',
+            },
+          });
+        }
+      }
+
+      const patch: {
+        name?: string | null;
+        email?: string | null;
+        updatedAt: Date;
+      } = {
+        updatedAt: new Date(),
+      };
+      if (body.name !== undefined) {
+        patch.name = body.name;
+      }
+      if (body.email !== undefined) {
+        patch.email = email ?? null;
+      }
+
+      const [updated] = await db
+        .update(users)
+        .set(patch)
+        .where(eq(users.id, auth.userId))
+        .returning({
+          id: users.id,
+          phone: users.phone,
+          email: users.email,
+          name: users.name,
+          role: users.role,
+          status: users.status,
+          tenantId: users.tenantId,
+          tenantType: users.tenantType,
+          blockedUntil: users.blockedUntil,
+        });
+
+      if (!updated) {
+        return status(404, {
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'Usuario no encontrado',
+          },
+        });
+      }
+
+      return {
+        data: {
+          id: updated.id,
+          phone: updated.phone,
+          email: updated.email ?? undefined,
+          name: updated.name ?? undefined,
+          role: updated.role,
+          status: updated.status,
+          tenantId: updated.tenantId ?? undefined,
+          tenantType: updated.tenantType ?? undefined,
+          blockedUntil: updated.blockedUntil ? updated.blockedUntil.toISOString() : undefined,
+        },
+      };
+    },
+    {
+      auth: {
+        roles: [...allowedRoles],
+      },
+      body: userMeUpdateRequest,
+      response: {
+        200: userMeResponse,
+      },
+      detail: {
+        summary: 'Actualizar perfil del usuario autenticado',
       },
     },
   );

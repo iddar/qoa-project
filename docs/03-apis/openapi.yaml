@@ -314,6 +314,7 @@ paths:
       security:
         - bearerAuth: []
       requestBody:
+        required: true
         content:
           application/json:
             schema:
@@ -321,7 +322,6 @@ paths:
               properties:
                 name:
                   type: string
-                  maxLength: 100
                 email:
                   type: string
                   format: email
@@ -332,6 +332,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
   /users:
     post:
@@ -1480,19 +1484,12 @@ components:
           type: string
           format: date-time
           nullable: true
-        isNew:
-          type: boolean
-        createdAt:
-          type: string
-          format: date-time
 
     UserResponse:
       type: object
       properties:
         data:
           $ref: '#/components/schemas/User'
-        meta:
-          $ref: '#/components/schemas/Meta'
 
     UserCreateResponse:
       type: object
