@@ -1,5 +1,7 @@
 import { t } from 'elysia';
 
+const tenantTypeSchema = t.Union([t.Literal('cpg'), t.Literal('store')]);
+
 export const userMeResponse = t.Object({
   data: t.Object({
     id: t.String(),
@@ -8,6 +10,8 @@ export const userMeResponse = t.Object({
     name: t.Optional(t.String()),
     role: t.String(),
     status: t.String(),
+    tenantId: t.Optional(t.String()),
+    tenantType: t.Optional(tenantTypeSchema),
     blockedUntil: t.Optional(t.String()),
   }),
 });
@@ -22,9 +26,12 @@ export const adminCreateUserRequest = t.Object({
     t.Literal('store_staff'),
     t.Literal('store_admin'),
     t.Literal('cpg_admin'),
+    t.Literal('qoa_support'),
     t.Literal('qoa_admin'),
   ]),
   password: t.Optional(t.String({ minLength: 8 })),
+  tenantId: t.Optional(t.String({ format: 'uuid' })),
+  tenantType: t.Optional(tenantTypeSchema),
 });
 
 export const adminCreateUserResponse = t.Object({
@@ -35,6 +42,8 @@ export const adminCreateUserResponse = t.Object({
     name: t.Optional(t.String()),
     role: t.String(),
     status: t.String(),
+    tenantId: t.Optional(t.String()),
+    tenantType: t.Optional(tenantTypeSchema),
     temporaryPassword: t.Optional(t.String()),
   }),
 });

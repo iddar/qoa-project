@@ -1,7 +1,8 @@
-import { pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { tenantType } from './api-keys';
 
-export const userRole = pgEnum('user_role', ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_admin']);
+export const userRole = pgEnum('user_role', ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin']);
 export const userStatus = pgEnum('user_status', ['active', 'suspended']);
 
 export const users = pgTable(
@@ -17,11 +18,14 @@ export const users = pgTable(
     blockedAt: timestamp('blocked_at', { withTimezone: true }),
     blockedUntil: timestamp('blocked_until', { withTimezone: true }),
     blockedReason: text('blocked_reason'),
+    tenantId: uuid('tenant_id'),
+    tenantType: tenantType('tenant_type'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('users_phone_key').on(table.phone),
     uniqueIndex('users_email_key').on(table.email).where(sql`${table.email} is not null`),
+    index('users_tenant_idx').on(table.tenantId, table.tenantType),
   ],
 );

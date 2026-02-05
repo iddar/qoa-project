@@ -14,13 +14,15 @@ export type AuthContext =
       userId: string;
       role: string;
       scopes: string[];
+      tenantId: string | null;
+      tenantType: 'cpg' | 'store' | null;
     }
   | {
       type: 'api_key' | 'dev_api_key';
       apiKeyId: string;
       scopes: string[];
       tenantId: string;
-      tenantType: string;
+      tenantType: 'cpg' | 'store';
     };
 
 export type AuthRequirement = {
@@ -73,14 +75,20 @@ export const authPlugin = new Elysia({ name: 'auth' })
           if (isUserBlocked(user)) {
             return context.error(403, buildError('ACCOUNT_BLOCKED', 'Usuario bloqueado'));
           }
+
+          // Enriquecer contexto con tenant del usuario
+          authContext.tenantId = user.tenantId;
+          authContext.tenantType = user.tenantType;
         }
 
         if (requirementConfig.roles?.length) {
-          if (authContext.type === 'api_key' || authContext.type === 'dev_api_key') {
+          const isApiKey = authContext.type === 'api_key' || authContext.type === 'dev_api_key';
+          if (isApiKey) {
             return context.error(403, buildError('FORBIDDEN', 'Rol requerido'));
           }
 
-          if (!requirementConfig.roles.includes(authContext.role)) {
+          const userRole = (authContext as Extract<AuthContext, { type: 'jwt' | 'dev' }>).role;
+          if (!requirementConfig.roles.includes(userRole)) {
             return context.error(403, buildError('FORBIDDEN', 'Rol requerido'));
           }
         }
@@ -165,12 +173,16 @@ const resolveAuth = async (context: any, requirement: AuthRequirement) => {
 
     const scopes = Array.isArray(payload.scopes) ? payload.scopes.filter((scope) => typeof scope === 'string') : [];
     const role = typeof payload.role === 'string' ? payload.role : 'consumer';
+    const tenantId = typeof payload.tenantId === 'string' ? payload.tenantId : null;
+    const tenantType = payload.tenantType === 'cpg' || payload.tenantType === 'store' ? payload.tenantType : null;
 
     return {
       type: 'jwt',
       userId: payload.sub,
       role,
       scopes,
+      tenantId,
+      tenantType,
     } satisfies AuthContext;
   } catch {
     return null;
@@ -201,11 +213,17 @@ const resolveDevAuth = (context: any): AuthContext | null => {
     return null;
   }
 
+  const tenantIdHeader = context.request.headers.get('x-dev-tenant-id');
+  const tenantTypeHeader = context.request.headers.get('x-dev-tenant-type');
+  const tenantType = tenantTypeHeader === 'cpg' || tenantTypeHeader === 'store' ? tenantTypeHeader : null;
+
   return {
     type: 'dev',
     userId,
     role: context.request.headers.get('x-dev-user-role') ?? 'consumer',
     scopes: parseScopes(context.request.headers.get('x-dev-user-scopes')),
+    tenantId: tenantIdHeader,
+    tenantType,
   } satisfies AuthContext;
 };
 
@@ -221,6 +239,8 @@ export const issueAccessToken = async (context: { jwt: { sign: (payload: Record<
   sub: string;
   role: string;
   scopes?: string[];
+  tenantId?: string | null;
+  tenantType?: 'cpg' | 'store' | null;
 }) => {
   const token = await context.jwt.sign(
     {

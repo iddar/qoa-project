@@ -22,6 +22,8 @@ export const authUser = t.Object({
   email: t.Optional(t.String()),
   phone: t.Optional(t.String()),
   role: t.Optional(t.String()),
+  tenantId: t.Optional(t.String()),
+  tenantType: t.Optional(t.Union([t.Literal('cpg'), t.Literal('store')])),
 });
 
 export const authResponse = t.Object({

@@ -146,6 +146,8 @@ export const authModule = new Elysia({
         {
           sub: user.id,
           role: user.role,
+          tenantId: user.tenantId,
+          tenantType: user.tenantType,
         },
       );
 
@@ -162,6 +164,8 @@ export const authModule = new Elysia({
             email: user.email ?? undefined,
             phone: user.phone ?? undefined,
             role: user.role,
+            tenantId: user.tenantId ?? undefined,
+            tenantType: user.tenantType ?? undefined,
           },
         },
       };
@@ -213,6 +217,8 @@ export const authModule = new Elysia({
         {
           sub: user.id,
           role: user.role,
+          tenantId: user.tenantId,
+          tenantType: user.tenantType,
         },
       );
 
@@ -248,7 +254,7 @@ export const authModule = new Elysia({
     {
       body: refreshRequest,
       auth: {
-        roles: ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_admin'],
+        roles: ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'],
       },
       detail: {
         summary: 'Revocar refresh token',

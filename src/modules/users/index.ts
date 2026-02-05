@@ -11,8 +11,9 @@ import {
   userMeResponse,
 } from './model';
 
-const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_admin'] as const;
-const backofficeRoles = ['qoa_admin'] as const;
+const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
+const backofficeAdminRoles = ['qoa_admin'] as const;
+const backofficeRoles = ['qoa_support', 'qoa_admin'] as const;
 const temporaryPasswordLength = 14;
 
 const generateTemporaryPassword = () => {
@@ -51,6 +52,44 @@ export const usersModule = new Elysia({
         });
       }
 
+      // Validar coherencia rol/tenant
+      const requiresTenant = ['store_staff', 'store_admin', 'cpg_admin'].includes(body.role);
+      if (requiresTenant && (!body.tenantId || !body.tenantType)) {
+        return error(400, {
+          error: {
+            code: 'TENANT_REQUIRED',
+            message: 'Este rol requiere tenantId y tenantType',
+          },
+        });
+      }
+
+      if (!requiresTenant && (body.tenantId || body.tenantType)) {
+        return error(400, {
+          error: {
+            code: 'TENANT_NOT_ALLOWED',
+            message: 'Este rol no puede tener tenant',
+          },
+        });
+      }
+
+      if (body.role === 'cpg_admin' && body.tenantType !== 'cpg') {
+        return error(400, {
+          error: {
+            code: 'INVALID_TENANT_TYPE',
+            message: 'cpg_admin requiere tenantType = cpg',
+          },
+        });
+      }
+
+      if (['store_staff', 'store_admin'].includes(body.role) && body.tenantType !== 'store') {
+        return error(400, {
+          error: {
+            code: 'INVALID_TENANT_TYPE',
+            message: 'store_staff/store_admin requiere tenantType = store',
+          },
+        });
+      }
+
       const temporaryPassword = body.password ?? generateTemporaryPassword();
       const passwordHash = await Bun.password.hash(temporaryPassword);
 
@@ -62,6 +101,8 @@ export const usersModule = new Elysia({
           name: body.name ?? null,
           passwordHash,
           role: body.role,
+          tenantId: body.tenantId ?? null,
+          tenantType: body.tenantType ?? null,
         })
         .returning({
           id: users.id,
@@ -70,6 +111,8 @@ export const usersModule = new Elysia({
           name: users.name,
           role: users.role,
           status: users.status,
+          tenantId: users.tenantId,
+          tenantType: users.tenantType,
         });
 
       if (!created) {
@@ -83,14 +126,21 @@ export const usersModule = new Elysia({
 
       return {
         data: {
-          ...created,
+          id: created.id,
+          phone: created.phone,
+          email: created.email ?? undefined,
+          name: created.name ?? undefined,
+          role: created.role,
+          status: created.status,
+          tenantId: created.tenantId ?? undefined,
+          tenantType: created.tenantType ?? undefined,
           temporaryPassword: body.password ? undefined : temporaryPassword,
         },
       };
     },
     {
       auth: {
-        roles: [...backofficeRoles],
+        roles: [...backofficeAdminRoles],
       },
       body: adminCreateUserRequest,
       response: {
@@ -249,6 +299,8 @@ export const usersModule = new Elysia({
           name: user.name ?? undefined,
           role: user.role,
           status: user.status,
+          tenantId: user.tenantId ?? undefined,
+          tenantType: user.tenantType ?? undefined,
           blockedUntil: user.blockedUntil ? user.blockedUntil.toISOString() : undefined,
         },
       };
