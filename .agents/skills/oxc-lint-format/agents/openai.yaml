@@ -1,0 +1,4 @@
+interface:
+  display_name: "OXC Lint/Format"
+  short_description: "Run Oxlint and Oxfmt with Bun scripts in this repo."
+  default_prompt: "Lint or format the codebase with Oxlint/Oxfmt using the existing Bun scripts."
