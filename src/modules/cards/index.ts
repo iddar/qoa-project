@@ -29,7 +29,41 @@ export const cardsModule = new Elysia({
   .use(authPlugin)
   .post(
     '/',
-    async ({ body, status }) => {
+    async ({ body, auth, status }) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      // Authorization checks
+      if (auth.type === 'jwt' || auth.type === 'dev') {
+        // User tokens can only create cards for themselves unless they're admins
+        const isAdmin = ['store_admin', 'cpg_admin', 'qoa_admin'].includes(auth.role);
+        if (!isAdmin && auth.userId !== body.userId) {
+          return status(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No puedes crear tarjetas para otros usuarios',
+            },
+          });
+        }
+      } else if (auth.type === 'api_key' || auth.type === 'dev_api_key') {
+        // API keys can only create cards for users in their tenant
+        const [user] = await db.select({ tenantId: users.tenantId }).from(users).where(eq(users.id, body.userId));
+        if (!user || user.tenantId !== auth.tenantId) {
+          return status(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No puedes crear tarjetas para usuarios fuera de tu tenant',
+            },
+          });
+        }
+      }
+
       const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, body.userId));
       if (!user) {
         return status(404, {
@@ -110,7 +144,16 @@ export const cardsModule = new Elysia({
   )
   .get(
     '/:cardId',
-    async ({ params, status }) => {
+    async ({ params, auth, status }) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const [card] = await db.select().from(cards).where(eq(cards.id, params.cardId));
       if (!card) {
         return status(404, {
@@ -119,6 +162,31 @@ export const cardsModule = new Elysia({
             message: 'Tarjeta no encontrada',
           },
         });
+      }
+
+      // Authorization: verify ownership or tenant access
+      if (auth.type === 'jwt' || auth.type === 'dev') {
+        // Users can only view their own cards unless they're admins
+        const isAdmin = ['store_admin', 'cpg_admin', 'qoa_admin'].includes(auth.role);
+        if (!isAdmin && auth.userId !== card.userId) {
+          return status(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No tienes permiso para ver esta tarjeta',
+            },
+          });
+        }
+      } else if (auth.type === 'api_key' || auth.type === 'dev_api_key') {
+        // API keys can only view cards for users in their tenant
+        const [user] = await db.select({ tenantId: users.tenantId }).from(users).where(eq(users.id, card.userId));
+        if (!user || user.tenantId !== auth.tenantId) {
+          return status(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No tienes permiso para ver esta tarjeta',
+            },
+          });
+        }
       }
 
       return {
@@ -139,13 +207,42 @@ export const cardsModule = new Elysia({
   )
   .get(
     '/:cardId/qr',
-    async ({ params, status }) => {
+    async ({ params, auth, status }) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const [card] = await db.select().from(cards).where(eq(cards.id, params.cardId));
       if (!card) {
         return status(404, {
           error: {
             code: 'CARD_NOT_FOUND',
             message: 'Tarjeta no encontrada',
+          },
+        });
+      }
+
+      // Authorization: verify ownership - only the card owner can access their QR
+      if (auth.type === 'jwt' || auth.type === 'dev') {
+        if (auth.userId !== card.userId) {
+          return status(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'No tienes permiso para acceder al QR de esta tarjeta',
+            },
+          });
+        }
+      } else {
+        // API keys are not allowed for QR access - this is a user-only operation
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'El acceso al QR requiere un token de usuario',
           },
         });
       }
