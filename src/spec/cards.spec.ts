@@ -123,7 +123,7 @@ describe('Cards module', () => {
     }
 
     expect(listStatus).toBe(200);
-    expect(listData.data.some((card) => card.id === cardId)).toBe(true);
+    expect(listData.data.some((card: any) => card.id === cardId)).toBe(true);
 
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));

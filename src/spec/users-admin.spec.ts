@@ -58,7 +58,7 @@ describe('Backoffice user management', () => {
       throw new Error('List users response missing');
     }
 
-    const found = data.data.find((user) => user.id === created.id);
+    const found = data.data.find((user: any) => user.id === created.id);
     expect(status).toBe(200);
     expect(found).toBeTruthy();
     expect(found?.role).toBe('consumer');
