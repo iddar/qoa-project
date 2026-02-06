@@ -1,15 +1,49 @@
 import { Elysia } from 'elysia';
 import { and, eq, isNull } from 'drizzle-orm';
-import { authPlugin } from '../../app/plugins/auth';
+import { authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { db } from '../../db/client';
 import { cards, stores, users } from '../../db/schema';
+import type { StatusHandler } from '../../types/handlers';
 import { cardCreateRequest, cardDetailResponse, cardResponse, qrResponse } from './model';
 
 const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
 
 const generateCardCode = () => `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 18)}`;
 
-export const serializeCard = (card: typeof cards.$inferSelect) => ({
+type CardRow = {
+  id: string;
+  userId: string;
+  campaignId: string;
+  storeId: string | null;
+  code: string;
+  currentTierId: string | null;
+  status: string;
+  createdAt: Date;
+};
+
+type CardCreateBody = {
+  userId: string;
+  campaignId: string;
+  storeId?: string;
+};
+
+type CardParams = {
+  cardId: string;
+};
+
+type CardCreateContext = {
+  body: CardCreateBody;
+  auth: AuthContext | null;
+  status: StatusHandler;
+};
+
+type CardParamsContext = {
+  params: CardParams;
+  auth: AuthContext | null;
+  status: StatusHandler;
+};
+
+export const serializeCard = (card: CardRow) => ({
   id: card.id,
   userId: card.userId,
   campaignId: card.campaignId,
@@ -29,7 +63,7 @@ export const cardsModule = new Elysia({
   .use(authPlugin)
   .post(
     '/',
-    async ({ body, auth, status }) => {
+    async ({ body, auth, status }: CardCreateContext) => {
       // Auth is guaranteed by the auth macro, but TypeScript doesn't know that
       if (!auth) {
         return status(401, {
@@ -54,7 +88,10 @@ export const cardsModule = new Elysia({
         }
       } else if (auth.type === 'api_key' || auth.type === 'dev_api_key') {
         // API keys can only create cards for users in their tenant
-        const [user] = await db.select({ tenantId: users.tenantId }).from(users).where(eq(users.id, body.userId));
+        const [user] = (await db
+          .select({ tenantId: users.tenantId })
+          .from(users)
+          .where(eq(users.id, body.userId))) as Array<{ tenantId: string | null }>;
         if (!user || user.tenantId !== auth.tenantId) {
           return status(403, {
             error: {
@@ -65,7 +102,7 @@ export const cardsModule = new Elysia({
         }
       }
 
-      const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, body.userId));
+      const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.id, body.userId))) as Array<{ id: string }>;
       if (!user) {
         return status(404, {
           error: {
@@ -76,7 +113,10 @@ export const cardsModule = new Elysia({
       }
 
       if (body.storeId) {
-        const [store] = await db.select({ id: stores.id }).from(stores).where(eq(stores.id, body.storeId));
+        const [store] = (await db
+          .select({ id: stores.id })
+          .from(stores)
+          .where(eq(stores.id, body.storeId))) as Array<{ id: string }>;
         if (!store) {
           return status(404, {
             error: {
@@ -92,10 +132,10 @@ export const cardsModule = new Elysia({
         eq(cards.campaignId, body.campaignId),
         body.storeId ? eq(cards.storeId, body.storeId) : isNull(cards.storeId),
       ];
-      const [existing] = await db
+      const [existing] = (await db
         .select({ id: cards.id })
         .from(cards)
-        .where(and(...conditions));
+        .where(and(...conditions))) as Array<{ id: string }>;
 
       if (existing) {
         return status(409, {
@@ -107,7 +147,7 @@ export const cardsModule = new Elysia({
       }
 
       const code = generateCardCode();
-      const [created] = await db
+      const [created] = (await db
         .insert(cards)
         .values({
           userId: body.userId,
@@ -115,7 +155,7 @@ export const cardsModule = new Elysia({
           storeId: body.storeId ?? null,
           code,
         })
-        .returning();
+        .returning()) as CardRow[];
 
       if (!created) {
         return status(500, {
@@ -145,7 +185,7 @@ export const cardsModule = new Elysia({
   )
   .get(
     '/:cardId',
-    async ({ params, auth, status }) => {
+    async ({ params, auth, status }: CardParamsContext) => {
       // Auth is guaranteed by the auth macro, but TypeScript doesn't know that
       if (!auth) {
         return status(401, {
@@ -156,7 +196,7 @@ export const cardsModule = new Elysia({
         });
       }
 
-      const [card] = await db.select().from(cards).where(eq(cards.id, params.cardId));
+      const [card] = (await db.select().from(cards).where(eq(cards.id, params.cardId))) as CardRow[];
       if (!card) {
         return status(404, {
           error: {
@@ -180,7 +220,10 @@ export const cardsModule = new Elysia({
         }
       } else if (auth.type === 'api_key' || auth.type === 'dev_api_key') {
         // API keys can only view cards for users in their tenant
-        const [user] = await db.select({ tenantId: users.tenantId }).from(users).where(eq(users.id, card.userId));
+        const [user] = (await db
+          .select({ tenantId: users.tenantId })
+          .from(users)
+          .where(eq(users.id, card.userId))) as Array<{ tenantId: string | null }>;
         if (!user || user.tenantId !== auth.tenantId) {
           return status(403, {
             error: {
@@ -209,7 +252,7 @@ export const cardsModule = new Elysia({
   )
   .get(
     '/:cardId/qr',
-    async ({ params, auth, status }) => {
+    async ({ params, auth, status }: CardParamsContext) => {
       // Auth is guaranteed by the auth macro, but TypeScript doesn't know that
       if (!auth) {
         return status(401, {
@@ -220,7 +263,7 @@ export const cardsModule = new Elysia({
         });
       }
 
-      const [card] = await db.select().from(cards).where(eq(cards.id, params.cardId));
+      const [card] = (await db.select().from(cards).where(eq(cards.id, params.cardId))) as CardRow[];
       if (!card) {
         return status(404, {
           error: {
