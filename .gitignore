@@ -1,6 +1,5 @@
 .playwright-mcp
 node_modules
 .env
-.env.local
 .obsidian
 .next
