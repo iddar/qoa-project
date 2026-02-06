@@ -29,6 +29,14 @@ export const openApiPlugin = openapi({
         name: 'Users',
         description: 'User profile and account endpoints.',
       },
+      {
+        name: 'Stores',
+        description: 'Store catalog and registration endpoints.',
+      },
+      {
+        name: 'Cards',
+        description: 'Consumer card issuance endpoints.',
+      },
     ],
   },
 });
