@@ -5,6 +5,13 @@ import { users } from './users';
 
 export const cardStatus = pgEnum('card_status', ['active', 'inactive']);
 
+type CardsTable = {
+  userId: unknown;
+  campaignId: unknown;
+  storeId: unknown;
+  code: unknown;
+};
+
 export const cards = pgTable(
   'cards',
   {
@@ -20,7 +27,7 @@ export const cards = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
-  (table) => [
+  (table: CardsTable) => [
     uniqueIndex('cards_code_key').on(table.code),
     uniqueIndex('cards_user_campaign_key').on(table.userId, table.campaignId, table.storeId),
     index('cards_user_idx').on(table.userId),

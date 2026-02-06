@@ -15,14 +15,14 @@ const createUser = async () => {
   const phone = `+52155${Math.floor(Math.random() * 10_000_000).toString().padStart(7, '0')}`;
   const email = `card_${crypto.randomUUID()}@qoa.test`;
 
-  const [created] = await db
+  const [created] = (await db
     .insert(users)
     .values({
       phone,
       email,
       role: 'consumer',
     })
-    .returning({ id: users.id });
+    .returning({ id: users.id })) as Array<{ id: string }>;
 
   if (!created) {
     throw new Error('Failed to create test user');
@@ -32,14 +32,14 @@ const createUser = async () => {
 };
 
 const createStore = async () => {
-  const [created] = await db
+  const [created] = (await db
     .insert(stores)
     .values({
       name: 'Tienda Norte',
       code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
       type: 'minisuper',
     })
-    .returning({ id: stores.id });
+    .returning({ id: stores.id })) as Array<{ id: string }>;
 
   if (!created) {
     throw new Error('Failed to create test store');
@@ -123,7 +123,7 @@ describe('Cards module', () => {
     }
 
     expect(listStatus).toBe(200);
-    expect(listData.data.some((card) => card.id === cardId)).toBe(true);
+    expect(listData.data.some((card: { id: string }) => card.id === cardId)).toBe(true);
 
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));

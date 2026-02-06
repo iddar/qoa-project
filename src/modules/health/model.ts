@@ -6,4 +6,8 @@ export const healthResponse = t.Object({
   timestamp: t.String({ format: 'date-time' }),
 });
 
-export type HealthResponse = typeof healthResponse.static;
+export type HealthResponse = {
+  status: 'ok';
+  uptime: number;
+  timestamp: string;
+};

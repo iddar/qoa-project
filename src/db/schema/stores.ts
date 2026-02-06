@@ -3,6 +3,10 @@ import { sql } from 'drizzle-orm';
 
 export const storeStatus = pgEnum('store_status', ['active', 'inactive']);
 
+type StoresTable = {
+  code: unknown;
+};
+
 export const stores = pgTable(
   'stores',
   {
@@ -16,5 +20,5 @@ export const stores = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
-  (table) => [uniqueIndex('stores_code_key').on(table.code)],
+  (table: StoresTable) => [uniqueIndex('stores_code_key').on(table.code)],
 );

@@ -28,7 +28,7 @@ describe('Backoffice user management', () => {
     const email = `list_${crypto.randomUUID()}@qoa.test`;
     const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
 
-    const [created] = await db
+    const [created] = (await db
       .insert(users)
       .values({
         email,
@@ -36,7 +36,7 @@ describe('Backoffice user management', () => {
         passwordHash: await Bun.password.hash('Password123!'),
         role: 'consumer',
       })
-      .returning({ id: users.id });
+      .returning({ id: users.id })) as Array<{ id: string }>;
 
     if (!created) {
       throw new Error('No user created for list test');
@@ -58,7 +58,7 @@ describe('Backoffice user management', () => {
       throw new Error('List users response missing');
     }
 
-    const found = data.data.find((user) => user.id === created.id);
+    const found = data.data.find((user: { id: string; role?: string }) => user.id === created.id);
     expect(status).toBe(200);
     expect(found).toBeTruthy();
     expect(found?.role).toBe('consumer');
@@ -105,7 +105,7 @@ describe('Backoffice user management', () => {
     const email = `block_${crypto.randomUUID()}@qoa.test`;
     const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
 
-    const [created] = await db
+    const [created] = (await db
       .insert(users)
       .values({
         email,
@@ -113,7 +113,7 @@ describe('Backoffice user management', () => {
         passwordHash: await Bun.password.hash('Password123!'),
         role: 'consumer',
       })
-      .returning({ id: users.id });
+      .returning({ id: users.id })) as Array<{ id: string }>;
 
     if (!created) {
       throw new Error('No user created for block test');

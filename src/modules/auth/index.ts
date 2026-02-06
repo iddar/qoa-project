@@ -10,6 +10,7 @@ import {
   persistRefreshToken,
   rotateRefreshToken,
 } from '../../app/plugins/auth';
+import type { AuthHelpers, JwtSigner, StatusHandler } from '../../types/handlers';
 import { authResponse, loginRequest, refreshRequest, signupRequest } from './model';
 
 const authHeader = t.Object({
@@ -27,6 +28,48 @@ const invalidCredentialsError = {
   },
 };
 
+type SignupBody = {
+  phone: string;
+  email?: string;
+  name?: string;
+  password: string;
+  role?: 'consumer' | 'customer' | 'store_staff' | 'store_admin' | 'cpg_admin' | 'qoa_support' | 'qoa_admin';
+};
+
+type LoginBody = {
+  email: string;
+  password: string;
+};
+
+type RefreshBody = {
+  refreshToken: string;
+};
+
+type SignupContext = {
+  body: SignupBody;
+  jwt: JwtSigner;
+  authHelpers: AuthHelpers;
+  status: StatusHandler;
+};
+
+type LoginContext = {
+  body: LoginBody;
+  jwt: JwtSigner;
+  authHelpers: AuthHelpers;
+  status: StatusHandler;
+};
+
+type RefreshContext = {
+  body: RefreshBody;
+  jwt: JwtSigner;
+  status: StatusHandler;
+};
+
+type LogoutContext = {
+  body: RefreshBody;
+  authHelpers: AuthHelpers;
+};
+
 export const authModule = new Elysia({
   prefix: '/auth',
   detail: {
@@ -36,7 +79,7 @@ export const authModule = new Elysia({
   .use(authPlugin)
   .post(
     '/signup',
-    async ({ body, jwt, authHelpers, status }) => {
+    async ({ body, jwt, authHelpers, status }: SignupContext) => {
       const email = body.email ? body.email.toLowerCase() : null;
       const role = body.role ?? 'consumer';
 
@@ -66,7 +109,7 @@ export const authModule = new Elysia({
       }
 
       const passwordHash = await Bun.password.hash(body.password);
-      const [created] = await db
+      const [created] = (await db
         .insert(users)
         .values({
           phone: body.phone,
@@ -80,7 +123,7 @@ export const authModule = new Elysia({
           email: users.email,
           phone: users.phone,
           role: users.role,
-        });
+        })) as Array<{ id: string; email: string | null; phone: string; role: string }>;
 
       if (!created) {
         return status(500, {
@@ -128,7 +171,7 @@ export const authModule = new Elysia({
   )
   .post(
     '/login',
-    async ({ body, jwt, authHelpers, status }) => {
+    async ({ body, jwt, authHelpers, status }: LoginContext) => {
       const email = body.email.toLowerCase();
       const user = await findUserByEmail(email);
 
@@ -191,7 +234,7 @@ export const authModule = new Elysia({
   )
   .post(
     '/refresh',
-    async ({ body, jwt, status }) => {
+    async ({ body, jwt, status }: RefreshContext) => {
       const rotated = await rotateRefreshToken(body.refreshToken);
       if (!rotated) {
         return status(401, {
@@ -202,7 +245,14 @@ export const authModule = new Elysia({
         });
       }
 
-      const [user] = await db.select().from(users).where(eq(users.id, rotated.userId));
+      const [user] = (await db.select().from(users).where(eq(users.id, rotated.userId))) as Array<{
+        id: string;
+        role: string;
+        status: string;
+        blockedUntil: Date | null;
+        tenantId: string | null;
+        tenantType: 'cpg' | 'store' | null;
+      }>;
       if (!user) {
         return status(404, {
           error: {
@@ -251,7 +301,7 @@ export const authModule = new Elysia({
   )
   .post(
     '/logout',
-    async ({ body, authHelpers }) => {
+    async ({ body, authHelpers }: LogoutContext) => {
       const tokenHash = authHelpers.toHash(body.refreshToken);
       await db
         .update(refreshTokens)

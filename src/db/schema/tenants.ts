@@ -1,5 +1,9 @@
 import { pgTable, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
+type TenantsTable = {
+  slug: unknown;
+};
+
 export const tenants = pgTable(
   'tenants',
   {
@@ -10,5 +14,5 @@ export const tenants = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex('tenants_slug_idx').on(table.slug)],
+  (table: TenantsTable) => [uniqueIndex('tenants_slug_idx').on(table.slug)],
 );

@@ -5,6 +5,13 @@ import { tenantType } from './api-keys';
 export const userRole = pgEnum('user_role', ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin']);
 export const userStatus = pgEnum('user_status', ['active', 'suspended']);
 
+type UsersTable = {
+  phone: unknown;
+  email: unknown;
+  tenantId: unknown;
+  tenantType: unknown;
+};
+
 export const users = pgTable(
   'users',
   {
@@ -23,7 +30,7 @@ export const users = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
-  (table) => [
+  (table: UsersTable) => [
     uniqueIndex('users_phone_key').on(table.phone),
     uniqueIndex('users_email_key').on(table.email).where(sql`${table.email} is not null`),
     index('users_tenant_idx').on(table.tenantId, table.tenantType),
