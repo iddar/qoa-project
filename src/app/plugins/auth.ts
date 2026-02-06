@@ -1,6 +1,6 @@
 import { jwt } from '@elysiajs/jwt';
-import { Elysia } from 'elysia';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
+import { Elysia } from 'elysia';
 import { createHash, randomBytes } from 'node:crypto';
 import { db } from '../../db/client';
 import { apiKeys, refreshTokens, users } from '../../db/schema';
@@ -59,50 +59,7 @@ export const authPlugin = new Elysia({ name: 'auth' })
   .macro(({ onBeforeHandle }) => ({
     auth: (requirement?: AuthRequirement) => {
       onBeforeHandle(async (context: any) => {
-        const requirementConfig = requirement ?? {};
-        const authContext = await resolveAuth(context, requirementConfig);
-
-        if (!authContext) {
-          return context.status(401, buildError('UNAUTHORIZED', 'Autenticación requerida'));
-        }
-
-        if (authContext.type === 'jwt') {
-          const [user] = await db.select().from(users).where(eq(users.id, authContext.userId));
-          if (!user) {
-            return context.status(401, buildError('INVALID_TOKEN', 'Usuario inválido'));
-          }
-
-          if (isUserBlocked(user)) {
-            return context.status(403, buildError('ACCOUNT_BLOCKED', 'Usuario bloqueado'));
-          }
-
-          // Enriquecer contexto con tenant del usuario
-          authContext.tenantId = user.tenantId;
-          authContext.tenantType = user.tenantType;
-        }
-
-        if (requirementConfig.roles?.length) {
-          const isApiKey = authContext.type === 'api_key' || authContext.type === 'dev_api_key';
-          if (isApiKey) {
-            return context.status(403, buildError('FORBIDDEN', 'Rol requerido'));
-          }
-
-          const userRole = (authContext as Extract<AuthContext, { type: 'jwt' | 'dev' }>).role;
-          if (!requirementConfig.roles.includes(userRole)) {
-            return context.status(403, buildError('FORBIDDEN', 'Rol requerido'));
-          }
-        }
-
-        if (requirementConfig.scopes?.length) {
-          const scopes = authContext.scopes;
-          const hasScopes = requirementConfig.scopes.every((scope) => scopes.includes(scope));
-
-          if (!hasScopes) {
-            return context.status(403, buildError('INSUFFICIENT_SCOPE', 'Scope insuficiente'));
-          }
-        }
-
-        context.auth = authContext;
+        return applyAuth(context, requirement);
       });
     },
   }));
@@ -114,7 +71,6 @@ const isUserBlocked = (user: { status: string; blockedUntil: Date | null }) => {
 
   return Boolean(user.blockedUntil && user.blockedUntil.getTime() > Date.now());
 };
-
 const resolveAuth = async (context: any, requirement: AuthRequirement) => {
   const devMode = process.env.AUTH_DEV_MODE === 'true' && process.env.NODE_ENV !== 'production';
   if (devMode) {
@@ -188,6 +144,55 @@ const resolveAuth = async (context: any, requirement: AuthRequirement) => {
     return null;
   }
 };
+
+const applyAuth = async (context: any, requirement?: AuthRequirement) => {
+  const requirementConfig = requirement ?? {};
+  const authContext = await resolveAuth(context, requirementConfig);
+
+  if (!authContext) {
+    return context.status(401, buildError('UNAUTHORIZED', 'Autenticación requerida'));
+  }
+
+  if (authContext.type === 'jwt') {
+    const [user] = await db.select().from(users).where(eq(users.id, authContext.userId));
+    if (!user) {
+      return context.status(401, buildError('INVALID_TOKEN', 'Usuario inválido'));
+    }
+
+    if (isUserBlocked(user)) {
+      return context.status(403, buildError('ACCOUNT_BLOCKED', 'Usuario bloqueado'));
+    }
+
+    // Enriquecer contexto con tenant del usuario
+    authContext.tenantId = user.tenantId;
+    authContext.tenantType = user.tenantType;
+  }
+
+  if (requirementConfig.roles?.length) {
+    const isApiKey = authContext.type === 'api_key' || authContext.type === 'dev_api_key';
+    if (isApiKey) {
+      return context.status(403, buildError('FORBIDDEN', 'Rol requerido'));
+    }
+
+    const userRole = (authContext as Extract<AuthContext, { type: 'jwt' | 'dev' }>).role;
+    if (!requirementConfig.roles.includes(userRole)) {
+      return context.status(403, buildError('FORBIDDEN', 'Rol requerido'));
+    }
+  }
+
+  if (requirementConfig.scopes?.length) {
+    const scopes = authContext.scopes;
+    const hasScopes = requirementConfig.scopes.every((scope) => scopes.includes(scope));
+
+    if (!hasScopes) {
+      return context.status(403, buildError('INSUFFICIENT_SCOPE', 'Scope insuficiente'));
+    }
+  }
+
+  context.auth = authContext;
+};
+
+export const authGuard = (requirement?: AuthRequirement) => async (context: any) => applyAuth(context, requirement);
 
 const resolveDevAuth = (context: any): AuthContext | null => {
   const typeHeader = context.request.headers.get('x-dev-auth-type');

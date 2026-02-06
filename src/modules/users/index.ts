@@ -1,24 +1,30 @@
-import { Elysia } from 'elysia';
-import { and, desc, eq, lt, ne, or } from 'drizzle-orm';
-import { authPlugin } from '../../app/plugins/auth';
-import { parseLimit, parseCursor } from '../../app/utils/pagination';
+import { and, desc, eq, ne, or, sql } from 'drizzle-orm';
+import { Elysia, t } from 'elysia';
+import { authGuard, authPlugin } from '../../app/plugins/auth';
 import { db } from '../../db/client';
-import { cards, users } from '../../db/schema';
-import { serializeCard } from '../cards';
-import { cardListQuery, cardListResponse } from '../cards/model';
+import { users } from '../../db/schema';
 import {
   adminCreateUserRequest,
   adminCreateUserResponse,
   blockUserRequest,
   blockUserResponse,
-  userMeUpdateRequest,
+  userListQuery,
+  userListResponse,
   userMeResponse,
+  userMeUpdateRequest,
 } from './model';
 
 const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
 const backofficeAdminRoles = ['qoa_admin'] as const;
 const backofficeRoles = ['qoa_support', 'qoa_admin'] as const;
 const temporaryPasswordLength = 14;
+const authHeader = t.Object({
+  authorization: t.Optional(
+    t.String({
+      description: 'Bearer <accessToken>',
+    }),
+  ),
+});
 
 const generateTemporaryPassword = () => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
@@ -36,6 +42,79 @@ export const usersModule = new Elysia({
   },
 })
   .use(authPlugin)
+  .get(
+    '/',
+    async ({ query, status }) => {
+      const limit = Math.min(Math.max(Number(query.limit ?? 25), 1), 100);
+      const offset = Math.max(Number(query.offset ?? 0), 0);
+
+      const whereClauses = [];
+      if (query.role) {
+        whereClauses.push(eq(users.role, query.role));
+      }
+      if (query.status) {
+        whereClauses.push(eq(users.status, query.status));
+      }
+
+      const whereClause = whereClauses.length ? and(...whereClauses) : undefined;
+
+      let listQuery = db
+        .select({
+          id: users.id,
+          phone: users.phone,
+          email: users.email,
+          name: users.name,
+          role: users.role,
+          status: users.status,
+          tenantId: users.tenantId,
+          tenantType: users.tenantType,
+          createdAt: users.createdAt,
+        })
+        .from(users);
+
+      if (whereClause) {
+        listQuery = listQuery.where(whereClause);
+      }
+
+      const rows = await listQuery.orderBy(desc(users.createdAt)).limit(limit).offset(offset);
+
+      let countQuery = db.select({ total: sql<number>`count(*)` }).from(users);
+      if (whereClause) {
+        countQuery = countQuery.where(whereClause);
+      }
+
+      const [{ total }] = await countQuery;
+
+      return {
+        data: rows.map((user) => ({
+          ...user,
+          phone: user.phone ?? undefined,
+          email: user.email ?? undefined,
+          name: user.name ?? undefined,
+          tenantId: user.tenantId ?? undefined,
+          tenantType: user.tenantType ?? undefined,
+          createdAt: user.createdAt.toISOString(),
+        })),
+        meta: {
+          total,
+          limit,
+          offset,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authHeader,
+      query: userListQuery,
+      response: {
+        200: userListResponse,
+      },
+      detail: {
+        summary: 'Listar usuarios para backoffice',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+  )
   .post(
     '/',
     async ({ body, status }) => {
@@ -143,15 +222,15 @@ export const usersModule = new Elysia({
       };
     },
     {
-      auth: {
-        roles: [...backofficeAdminRoles],
-      },
+      beforeHandle: authGuard({ roles: [...backofficeAdminRoles] }),
+      headers: authHeader,
       body: adminCreateUserRequest,
       response: {
         200: adminCreateUserResponse,
       },
       detail: {
         summary: 'Crear usuario desde backoffice',
+        security: [{ bearerAuth: [] }],
       },
     },
   )
@@ -212,15 +291,15 @@ export const usersModule = new Elysia({
       };
     },
     {
-      auth: {
-        roles: [...backofficeRoles],
-      },
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authHeader,
       body: blockUserRequest,
       response: {
         200: blockUserResponse,
       },
       detail: {
         summary: 'Bloquear usuario (temporal o permanente)',
+        security: [{ bearerAuth: [] }],
       },
     },
   )
@@ -262,70 +341,14 @@ export const usersModule = new Elysia({
       };
     },
     {
-      auth: {
-        roles: [...backofficeRoles],
-      },
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authHeader,
       response: {
         200: blockUserResponse,
       },
       detail: {
         summary: 'Desbloquear usuario',
-      },
-    },
-  )
-  .get(
-    '/me/cards',
-    async ({ auth, query, status }) => {
-      if (!auth || auth.type === 'api_key' || auth.type === 'dev_api_key') {
-        return status(403, {
-          error: {
-            code: 'FORBIDDEN',
-            message: 'Token de usuario requerido',
-          },
-        });
-      }
-
-      const cursorDate = parseCursor(query.cursor);
-      if (query.cursor && !cursorDate) {
-        return status(400, {
-          error: {
-            code: 'INVALID_CURSOR',
-            message: 'Cursor inválido',
-          },
-        });
-      }
-
-      const limit = parseLimit(query.limit);
-      let queryBuilder = db.select().from(cards);
-      if (cursorDate) {
-        queryBuilder = queryBuilder.where(and(eq(cards.userId, auth.userId), lt(cards.createdAt, cursorDate)));
-      } else {
-        queryBuilder = queryBuilder.where(eq(cards.userId, auth.userId));
-      }
-
-      const results = await queryBuilder.orderBy(desc(cards.createdAt), desc(cards.id)).limit(limit + 1);
-      const hasMore = results.length > limit;
-      const items = hasMore ? results.slice(0, limit) : results;
-      const nextCursor = hasMore ? items[items.length - 1]?.createdAt.toISOString() : null;
-
-      return {
-        data: items.map(serializeCard),
-        pagination: {
-          hasMore,
-          nextCursor: nextCursor ?? undefined,
-        },
-      };
-    },
-    {
-      auth: {
-        roles: [...allowedRoles],
-      },
-      query: cardListQuery,
-      response: {
-        200: cardListResponse,
-      },
-      detail: {
-        summary: 'Listar mis tarjetas',
+        security: [{ bearerAuth: [] }],
       },
     },
   )
@@ -366,14 +389,14 @@ export const usersModule = new Elysia({
       };
     },
     {
-      auth: {
-        roles: [...allowedRoles],
-      },
+      beforeHandle: authGuard({ roles: [...allowedRoles] }),
+      headers: authHeader,
       response: {
         200: userMeResponse,
       },
       detail: {
         summary: 'Obtener perfil del usuario autenticado',
+        security: [{ bearerAuth: [] }],
       },
     },
   )
@@ -469,15 +492,15 @@ export const usersModule = new Elysia({
       };
     },
     {
-      auth: {
-        roles: [...allowedRoles],
-      },
+      beforeHandle: authGuard({ roles: [...allowedRoles] }),
+      headers: authHeader,
       body: userMeUpdateRequest,
       response: {
         200: userMeResponse,
       },
       detail: {
         summary: 'Actualizar perfil del usuario autenticado',
+        security: [{ bearerAuth: [] }],
       },
     },
   );

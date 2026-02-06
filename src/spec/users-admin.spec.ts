@@ -22,6 +22,50 @@ const cleanupUser = async (email: string | null, phone: string) => {
 };
 
 describe('Backoffice user management', () => {
+  it('lists users with basic data for backoffice', async () => {
+    process.env.AUTH_DEV_MODE = 'true';
+
+    const email = `list_${crypto.randomUUID()}@qoa.test`;
+    const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
+
+    const [created] = await db
+      .insert(users)
+      .values({
+        email,
+        phone,
+        passwordHash: await Bun.password.hash('Password123!'),
+        role: 'consumer',
+      })
+      .returning({ id: users.id });
+
+    if (!created) {
+      throw new Error('No user created for list test');
+    }
+
+    const { data, error, status } = await api.v1.users.get({
+      query: {
+        limit: 10,
+        offset: 0,
+      },
+      headers: adminHeaders,
+    });
+
+    if (error) {
+      throw error.value;
+    }
+
+    if (!data) {
+      throw new Error('List users response missing');
+    }
+
+    const found = data.data.find((user) => user.id === created.id);
+    expect(status).toBe(200);
+    expect(found).toBeTruthy();
+    expect(found?.role).toBe('consumer');
+
+    await cleanupUser(email, phone);
+  });
+
   it('creates a user with temporary credentials', async () => {
     process.env.AUTH_DEV_MODE = 'true';
 
