@@ -12,7 +12,7 @@ const app = createApp();
 const api = treaty<App>(app);
 
 const createUser = async () => {
-  const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
+  const phone = `+52155${Math.floor(Math.random() * 10_000_000).toString().padStart(7, '0')}`;
   const email = `card_${crypto.randomUUID()}@qoa.test`;
 
   const [created] = await db
@@ -125,7 +125,6 @@ describe('Cards module', () => {
     expect(listStatus).toBe(200);
     expect(listData.data.some((card) => card.id === cardId)).toBe(true);
 
-    await db.delete(cards).where(eq(cards.id, cardId));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
   });

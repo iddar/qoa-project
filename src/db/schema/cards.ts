@@ -1,4 +1,4 @@
-import { pgEnum, pgTable, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { index, pgEnum, pgTable, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { stores } from './stores';
 import { users } from './users';
@@ -23,5 +23,8 @@ export const cards = pgTable(
   (table) => [
     uniqueIndex('cards_code_key').on(table.code),
     uniqueIndex('cards_user_campaign_key').on(table.userId, table.campaignId, table.storeId),
+    index('cards_user_idx').on(table.userId),
+    index('cards_campaign_idx').on(table.campaignId),
+    index('cards_store_idx').on(table.storeId),
   ],
 );

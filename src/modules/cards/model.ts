@@ -1,10 +1,6 @@
 import { t } from 'elysia';
+import { paginationSchema } from '../common/model';
 import { qrResponse } from '../stores/model';
-
-const paginationSchema = t.Object({
-  hasMore: t.Boolean(),
-  nextCursor: t.Optional(t.String()),
-});
 
 export const cardSchema = t.Object({
   id: t.String(),

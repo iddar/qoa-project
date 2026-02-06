@@ -1,33 +1,12 @@
 import { Elysia } from 'elysia';
 import { desc, eq, lt } from 'drizzle-orm';
 import { authPlugin } from '../../app/plugins/auth';
+import { parseLimit, parseCursor } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { stores } from '../../db/schema';
 import { qrResponse, storeCreateRequest, storeListQuery, storeListResponse, storeResponse } from './model';
 
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
-
 const generateStoreCode = () => `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
-
-const parseLimit = (limit?: string) => {
-  const parsed = Number(limit ?? DEFAULT_LIMIT);
-  if (!Number.isFinite(parsed)) {
-    return DEFAULT_LIMIT;
-  }
-  return Math.min(Math.max(parsed, 1), MAX_LIMIT);
-};
-
-const parseCursor = (cursor?: string) => {
-  if (!cursor) {
-    return null;
-  }
-  const parsed = new Date(cursor);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  return parsed;
-};
 
 const serializeStore = (store: typeof stores.$inferSelect) => ({
   id: store.id,

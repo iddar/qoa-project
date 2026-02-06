@@ -1,9 +1,5 @@
 import { t } from 'elysia';
-
-const paginationSchema = t.Object({
-  hasMore: t.Boolean(),
-  nextCursor: t.Optional(t.String()),
-});
+import { paginationSchema } from '../common/model';
 
 export const storeSchema = t.Object({
   id: t.String(),
