@@ -1,8 +1,10 @@
 import { Elysia } from 'elysia';
 import { and, desc, eq, lt, ne, or } from 'drizzle-orm';
 import { authPlugin } from '../../app/plugins/auth';
+import { parseLimit, parseCursor } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { cards, users } from '../../db/schema';
+import { serializeCard } from '../cards';
 import { cardListQuery, cardListResponse } from '../cards/model';
 import {
   adminCreateUserRequest,
@@ -17,38 +19,6 @@ const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg
 const backofficeAdminRoles = ['qoa_admin'] as const;
 const backofficeRoles = ['qoa_support', 'qoa_admin'] as const;
 const temporaryPasswordLength = 14;
-const DEFAULT_LIMIT = 20;
-const MAX_LIMIT = 100;
-
-const parseLimit = (limit?: string) => {
-  const parsed = Number(limit ?? DEFAULT_LIMIT);
-  if (!Number.isFinite(parsed)) {
-    return DEFAULT_LIMIT;
-  }
-  return Math.min(Math.max(parsed, 1), MAX_LIMIT);
-};
-
-const parseCursor = (cursor?: string) => {
-  if (!cursor) {
-    return null;
-  }
-  const parsed = new Date(cursor);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-  return parsed;
-};
-
-const serializeCard = (card: typeof cards.$inferSelect) => ({
-  id: card.id,
-  userId: card.userId,
-  campaignId: card.campaignId,
-  storeId: card.storeId ?? undefined,
-  code: card.code,
-  currentTierId: card.currentTierId ?? undefined,
-  status: card.status,
-  createdAt: card.createdAt.toISOString(),
-});
 
 const generateTemporaryPassword = () => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
@@ -326,9 +296,11 @@ export const usersModule = new Elysia({
       }
 
       const limit = parseLimit(query.limit);
-      let queryBuilder = db.select().from(cards).where(eq(cards.userId, auth.userId));
+      let queryBuilder = db.select().from(cards);
       if (cursorDate) {
         queryBuilder = queryBuilder.where(and(eq(cards.userId, auth.userId), lt(cards.createdAt, cursorDate)));
+      } else {
+        queryBuilder = queryBuilder.where(eq(cards.userId, auth.userId));
       }
 
       const results = await queryBuilder.orderBy(desc(cards.createdAt), desc(cards.id)).limit(limit + 1);

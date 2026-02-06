@@ -9,7 +9,7 @@ const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg
 
 const generateCardCode = () => `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 18)}`;
 
-const serializeCard = (card: typeof cards.$inferSelect) => ({
+export const serializeCard = (card: typeof cards.$inferSelect) => ({
   id: card.id,
   userId: card.userId,
   campaignId: card.campaignId,
