@@ -61,6 +61,45 @@ describe('Users me endpoint', () => {
     await deleteUser(user.id);
   });
 
+  it('returns current user profile with access token', async () => {
+    process.env.AUTH_DEV_MODE = 'false';
+    const user = await createConsumer();
+
+    const login = await api.v1.auth.login.post({
+      email: user.email,
+      password: 'Password123!',
+    });
+
+    if (login.error) {
+      throw login.error.value;
+    }
+
+    const accessToken = login.data?.data.accessToken;
+    if (!accessToken) {
+      throw new Error('Login response missing access token');
+    }
+
+    const { data, error, status } = await api.v1.users.me.get({
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (error) {
+      throw error.value;
+    }
+
+    if (!data) {
+      throw new Error('GET /users/me data missing');
+    }
+
+    expect(status).toBe(200);
+    expect(data.data.id).toBe(user.id);
+    expect(data.data.role).toBe('consumer');
+
+    await deleteUser(user.id);
+  });
+
   it('updates current user profile', async () => {
     process.env.AUTH_DEV_MODE = 'true';
     const user = await createConsumer();

@@ -1,0 +1,5 @@
+{
+  "name": "qoa",
+  "private": true,
+  "workspaces": ["src", "apps/*"]
+}

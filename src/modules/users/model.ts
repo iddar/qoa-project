@@ -21,6 +21,44 @@ export const userMeUpdateRequest = t.Object({
   email: t.Optional(t.String({ format: 'email' })),
 });
 
+export const userListQuery = t.Object({
+  limit: t.Optional(t.Integer({ minimum: 1, maximum: 100 })),
+  offset: t.Optional(t.Integer({ minimum: 0 })),
+  role: t.Optional(
+    t.Union([
+      t.Literal('consumer'),
+      t.Literal('customer'),
+      t.Literal('store_staff'),
+      t.Literal('store_admin'),
+      t.Literal('cpg_admin'),
+      t.Literal('qoa_support'),
+      t.Literal('qoa_admin'),
+    ]),
+  ),
+  status: t.Optional(t.Union([t.Literal('active'), t.Literal('suspended')])),
+});
+
+export const userListResponse = t.Object({
+  data: t.Array(
+    t.Object({
+      id: t.String(),
+      phone: t.Optional(t.String()),
+      email: t.Optional(t.String()),
+      name: t.Optional(t.String()),
+      role: t.String(),
+      status: t.String(),
+      tenantId: t.Optional(t.String()),
+      tenantType: t.Optional(tenantTypeSchema),
+      createdAt: t.String(),
+    }),
+  ),
+  meta: t.Object({
+    total: t.Integer(),
+    limit: t.Integer(),
+    offset: t.Integer(),
+  }),
+});
+
 export const adminCreateUserRequest = t.Object({
   phone: t.String({ minLength: 7 }),
   email: t.Optional(t.String({ format: 'email' })),

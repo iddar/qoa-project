@@ -7,6 +7,15 @@ export const openApiPlugin = openapi({
       version: '1.0.0',
       description: 'Internal API surface for QOA services.',
     },
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+        },
+      },
+    },
     tags: [
       {
         name: 'Health',
