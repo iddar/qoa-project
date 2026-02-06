@@ -15,14 +15,18 @@ const createUser = async () => {
   const phone = `+52155${Math.floor(Math.random() * 10_000_000).toString().padStart(7, '0')}`;
   const email = `store_${crypto.randomUUID()}@qoa.test`;
 
-  const [created] = await db
+  const [created] = (await db
     .insert(users)
     .values({
       phone,
       email,
       role: 'consumer',
     })
-    .returning({ id: users.id, email: users.email, phone: users.phone });
+    .returning({ id: users.id, email: users.email, phone: users.phone })) as Array<{
+    id: string;
+    email: string | null;
+    phone: string;
+  }>;
 
   if (!created) {
     throw new Error('Failed to create test user');

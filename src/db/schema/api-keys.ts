@@ -3,6 +3,12 @@ import { sql } from 'drizzle-orm';
 
 export const tenantType = pgEnum('tenant_type', ['cpg', 'store']);
 
+type ApiKeysTable = {
+  keyHash: unknown;
+  tenantId: unknown;
+  tenantType: unknown;
+};
+
 export const apiKeys = pgTable(
   'api_keys',
   {
@@ -19,7 +25,7 @@ export const apiKeys = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
+  (table: ApiKeysTable) => [
     index('api_keys_key_hash_idx').on(table.keyHash),
     index('api_keys_tenant_idx').on(table.tenantId, table.tenantType),
   ],

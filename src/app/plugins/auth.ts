@@ -4,6 +4,7 @@ import { Elysia } from 'elysia';
 import { createHash, randomBytes } from 'node:crypto';
 import { db } from '../../db/client';
 import { apiKeys, refreshTokens, users } from '../../db/schema';
+import type { AuthPluginContext, JwtSigner } from '../../types/handlers';
 
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.AUTH_ACCESS_TTL_SECONDS ?? 900);
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.AUTH_REFRESH_TTL_DAYS ?? 30);
@@ -31,6 +32,46 @@ export type AuthRequirement = {
   allowApiKey?: boolean;
 };
 
+type MacroContext = {
+  onBeforeHandle: (handler: (context: AuthPluginContext) => Promise<unknown> | unknown) => void;
+};
+
+type AuthContextState = AuthPluginContext & {
+  auth: AuthContext | null;
+};
+
+type ApiKeyRow = {
+  id: string;
+  scopes: string[] | null;
+  tenantId: string;
+  tenantType: 'cpg' | 'store';
+};
+
+type AuthUserRow = {
+  id: string;
+  status: string;
+  blockedUntil: Date | null;
+  tenantId: string | null;
+  tenantType: 'cpg' | 'store' | null;
+};
+
+type RefreshSessionRow = {
+  id: string;
+  userId: string;
+};
+
+type LoginUserRow = {
+  id: string;
+  email: string | null;
+  phone: string;
+  passwordHash: string | null;
+  role: string;
+  status: string;
+  blockedUntil: Date | null;
+  tenantId: string | null;
+  tenantType: 'cpg' | 'store' | null;
+};
+
 const toHash = (value: string) => createHash('sha256').update(value).digest('hex');
 
 const buildError = (code: string, message: string) => ({
@@ -56,9 +97,9 @@ export const authPlugin = new Elysia({ name: 'auth' })
     refreshTokenTtlDays: REFRESH_TOKEN_TTL_DAYS,
     generateRefreshToken: () => randomBytes(48).toString('base64url'),
   })
-  .macro(({ onBeforeHandle }) => ({
+  .macro(({ onBeforeHandle }: MacroContext) => ({
     auth: (requirement?: AuthRequirement) => {
-      onBeforeHandle(async (context: any) => {
+      onBeforeHandle(async (context) => {
         return applyAuth(context, requirement);
       });
     },
@@ -71,7 +112,7 @@ const isUserBlocked = (user: { status: string; blockedUntil: Date | null }) => {
 
   return Boolean(user.blockedUntil && user.blockedUntil.getTime() > Date.now());
 };
-const resolveAuth = async (context: any, requirement: AuthRequirement) => {
+const resolveAuth = async (context: AuthContextState, requirement: AuthRequirement) => {
   const devMode = process.env.AUTH_DEV_MODE === 'true' && process.env.NODE_ENV !== 'production';
   if (devMode) {
     const devAuth = resolveDevAuth(context);
@@ -88,7 +129,7 @@ const resolveAuth = async (context: any, requirement: AuthRequirement) => {
 
   if (apiKeyCandidate && (requirement.allowApiKey || !bearer)) {
     const apiKeyHash = toHash(apiKeyCandidate);
-    const [apiKey] = await db
+    const [apiKey] = (await db
       .select()
       .from(apiKeys)
       .where(
@@ -97,7 +138,7 @@ const resolveAuth = async (context: any, requirement: AuthRequirement) => {
           isNull(apiKeys.revokedAt),
           or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, new Date())),
         ),
-      );
+      )) as ApiKeyRow[];
 
     if (!apiKey) {
       return null;
@@ -145,7 +186,7 @@ const resolveAuth = async (context: any, requirement: AuthRequirement) => {
   }
 };
 
-const applyAuth = async (context: any, requirement?: AuthRequirement) => {
+const applyAuth = async (context: AuthContextState, requirement?: AuthRequirement) => {
   const requirementConfig = requirement ?? {};
   const authContext = await resolveAuth(context, requirementConfig);
 
@@ -154,7 +195,7 @@ const applyAuth = async (context: any, requirement?: AuthRequirement) => {
   }
 
   if (authContext.type === 'jwt') {
-    const [user] = await db.select().from(users).where(eq(users.id, authContext.userId));
+  const [user] = (await db.select().from(users).where(eq(users.id, authContext.userId))) as AuthUserRow[];
     if (!user) {
       return context.status(401, buildError('INVALID_TOKEN', 'Usuario inválido'));
     }
@@ -192,14 +233,15 @@ const applyAuth = async (context: any, requirement?: AuthRequirement) => {
   context.auth = authContext;
 };
 
-export const authGuard = (requirement?: AuthRequirement) => async (context: any) => applyAuth(context, requirement);
+export const authGuard = (requirement?: AuthRequirement) => async (context: AuthContextState) => applyAuth(context, requirement);
 
-const resolveDevAuth = (context: any): AuthContext | null => {
+const resolveDevAuth = (context: AuthContextState): AuthContext | null => {
   const typeHeader = context.request.headers.get('x-dev-auth-type');
   if (typeHeader === 'api_key') {
     const apiKeyId = context.request.headers.get('x-dev-api-key-id');
     const tenantId = context.request.headers.get('x-dev-tenant-id');
-    const tenantType = context.request.headers.get('x-dev-tenant-type');
+    const tenantTypeHeader = context.request.headers.get('x-dev-tenant-type');
+    const tenantType = tenantTypeHeader === 'cpg' || tenantTypeHeader === 'store' ? tenantTypeHeader : null;
     if (!apiKeyId || !tenantId || !tenantType) {
       return null;
     }
@@ -240,7 +282,7 @@ const parseScopes = (value: string | null) =>
         .filter(Boolean)
     : [];
 
-export const issueAccessToken = async (context: { jwt: { sign: (payload: Record<string, unknown>, options?: { exp?: number }) => Promise<string> } }, payload: {
+export const issueAccessToken = async (context: { jwt: JwtSigner }, payload: {
   sub: string;
   role: string;
   scopes?: string[];
@@ -279,10 +321,10 @@ export const persistRefreshToken = async (userId: string, refreshToken: string) 
 
 export const rotateRefreshToken = async (refreshToken: string) => {
   const tokenHash = toHash(refreshToken);
-  const [session] = await db
+  const [session] = (await db
     .select()
     .from(refreshTokens)
-    .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt), gt(refreshTokens.expiresAt, new Date())));
+    .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt), gt(refreshTokens.expiresAt, new Date())))) as RefreshSessionRow[];
 
   if (!session) {
     return null;
@@ -300,6 +342,6 @@ export const rotateRefreshToken = async (refreshToken: string) => {
 };
 
 export const findUserByEmail = async (email: string) => {
-  const [user] = await db.select().from(users).where(eq(users.email, email));
+  const [user] = (await db.select().from(users).where(eq(users.email, email))) as LoginUserRow[];
   return user ?? null;
 };

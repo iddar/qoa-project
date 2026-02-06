@@ -2,6 +2,11 @@ import { index, pgTable, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users';
 
+type RefreshTokensTable = {
+  tokenHash: unknown;
+  userId: unknown;
+};
+
 export const refreshTokens = pgTable(
   'refresh_tokens',
   {
@@ -14,5 +19,8 @@ export const refreshTokens = pgTable(
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index('refresh_tokens_token_hash_idx').on(table.tokenHash), index('refresh_tokens_user_idx').on(table.userId)],
+  (table: RefreshTokensTable) => [
+    index('refresh_tokens_token_hash_idx').on(table.tokenHash),
+    index('refresh_tokens_user_idx').on(table.userId),
+  ],
 );

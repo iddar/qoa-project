@@ -12,7 +12,7 @@ const createConsumer = async () => {
   const email = `me_${crypto.randomUUID()}@qoa.test`;
   const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
 
-  const [created] = await db
+  const [created] = (await db
     .insert(users)
     .values({
       email,
@@ -21,7 +21,7 @@ const createConsumer = async () => {
       passwordHash: await Bun.password.hash('Password123!'),
       role: 'consumer',
     })
-    .returning({ id: users.id, email: users.email });
+    .returning({ id: users.id, email: users.email })) as Array<{ id: string; email: string | null }>;
 
   if (!created) {
     throw new Error('No user created for /users/me tests');

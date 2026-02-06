@@ -4,11 +4,54 @@ import { authPlugin } from '../../app/plugins/auth';
 import { parseLimit, parseCursor } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { stores } from '../../db/schema';
+import type { StatusHandler } from '../../types/handlers';
 import { qrResponse, storeCreateRequest, storeListQuery, storeListResponse, storeResponse } from './model';
 
 const generateStoreCode = () => `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
 
-const serializeStore = (store: typeof stores.$inferSelect) => ({
+type StoreRow = {
+  id: string;
+  code: string;
+  name: string;
+  type: string | null;
+  address: string | null;
+  phone: string | null;
+  status: string;
+  createdAt: Date;
+};
+
+type StoreListQuery = {
+  limit?: string;
+  cursor?: string;
+};
+
+type StoreCreateBody = {
+  name: string;
+  type?: string;
+  address?: string;
+  phone?: string;
+};
+
+type StoreParams = {
+  storeId: string;
+};
+
+type StoreListContext = {
+  query: StoreListQuery;
+  status: StatusHandler;
+};
+
+type StoreCreateContext = {
+  body: StoreCreateBody;
+  status: StatusHandler;
+};
+
+type StoreParamsContext = {
+  params: StoreParams;
+  status: StatusHandler;
+};
+
+const serializeStore = (store: StoreRow) => ({
   id: store.id,
   code: store.code,
   name: store.name,
@@ -28,7 +71,7 @@ export const storesModule = new Elysia({
   .use(authPlugin)
   .get(
     '/',
-    async ({ query, status }) => {
+    async ({ query, status }: StoreListContext) => {
       const cursorDate = parseCursor(query.cursor);
       if (query.cursor && !cursorDate) {
         return status(400, {
@@ -45,7 +88,7 @@ export const storesModule = new Elysia({
         queryBuilder = queryBuilder.where(lt(stores.createdAt, cursorDate));
       }
 
-      const results = await queryBuilder.orderBy(desc(stores.createdAt), desc(stores.id)).limit(limit + 1);
+      const results = (await queryBuilder.orderBy(desc(stores.createdAt), desc(stores.id)).limit(limit + 1)) as StoreRow[];
 
       const hasMore = results.length > limit;
       const items = hasMore ? results.slice(0, limit) : results;
@@ -74,9 +117,9 @@ export const storesModule = new Elysia({
   )
   .post(
     '/',
-    async ({ body, status }) => {
+    async ({ body, status }: StoreCreateContext) => {
       const code = generateStoreCode();
-      const [created] = await db
+      const [created] = (await db
         .insert(stores)
         .values({
           code,
@@ -85,7 +128,7 @@ export const storesModule = new Elysia({
           address: body.address ?? null,
           phone: body.phone ?? null,
         })
-        .returning();
+        .returning()) as StoreRow[];
 
       if (!created) {
         return status(500, {
@@ -115,8 +158,8 @@ export const storesModule = new Elysia({
   )
   .get(
     '/:storeId',
-    async ({ params, status }) => {
-      const [store] = await db.select().from(stores).where(eq(stores.id, params.storeId));
+    async ({ params, status }: StoreParamsContext) => {
+      const [store] = (await db.select().from(stores).where(eq(stores.id, params.storeId))) as StoreRow[];
       if (!store) {
         return status(404, {
           error: {
@@ -144,8 +187,8 @@ export const storesModule = new Elysia({
   )
   .get(
     '/:storeId/qr',
-    async ({ params, status }) => {
-      const [store] = await db.select().from(stores).where(eq(stores.id, params.storeId));
+    async ({ params, status }: StoreParamsContext) => {
+      const [store] = (await db.select().from(stores).where(eq(stores.id, params.storeId))) as StoreRow[];
       if (!store) {
         return status(404, {
           error: {
