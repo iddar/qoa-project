@@ -11,6 +11,8 @@ import { getAccessToken } from "@/lib/auth";
 const navItems = [
   { href: "/", label: "Inicio" },
   { href: "/users", label: "Usuarios" },
+  { href: "/stores", label: "Tiendas" },
+  { href: "/cards", label: "Tarjetas" },
 ];
 
 function ApiStatus() {
