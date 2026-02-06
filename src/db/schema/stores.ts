@@ -16,5 +16,5 @@ export const stores = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
-  (table) => [uniqueIndex('stores_code_key').on(table.code)],
+  (table): any => [uniqueIndex('stores_code_key').on(table.code)],
 );

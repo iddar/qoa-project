@@ -10,5 +10,5 @@ export const tenants = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex('tenants_slug_idx').on(table.slug)],
+  (table): any => [uniqueIndex('tenants_slug_idx').on(table.slug)],
 );

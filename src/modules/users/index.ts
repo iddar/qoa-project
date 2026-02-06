@@ -47,7 +47,7 @@ export const usersModule = new Elysia({
   .use(authPlugin)
   .get(
     '/',
-    async ({ query, status }) => {
+    async ({ query, status }: any) => {
       const limit = Math.min(Math.max(Number(query.limit ?? 25), 1), 100);
       const offset = Math.max(Number(query.offset ?? 0), 0);
 
@@ -89,7 +89,7 @@ export const usersModule = new Elysia({
       const [{ total }] = await countQuery;
 
       return {
-        data: rows.map((user) => ({
+        data: rows.map((user: any) => ({
           ...user,
           phone: user.phone ?? undefined,
           email: user.email ?? undefined,
@@ -120,7 +120,7 @@ export const usersModule = new Elysia({
   )
   .post(
     '/',
-    async ({ body, status }) => {
+    async ({ body, status }: any) => {
       const email = body.email ? body.email.toLowerCase() : null;
       const conditions = [eq(users.phone, body.phone)];
       if (email) {
@@ -239,7 +239,7 @@ export const usersModule = new Elysia({
   )
   .post(
     '/:id/block',
-    async ({ params, body, status }) => {
+    async ({ params, body, status }: any) => {
       const untilDate = body.until ? new Date(body.until) : null;
       if (body.until && Number.isNaN(untilDate?.getTime())) {
         return status(400, {
@@ -308,7 +308,7 @@ export const usersModule = new Elysia({
   )
   .post(
     '/:id/unblock',
-    async ({ params, status }) => {
+    async ({ params, status }: any) => {
       const [updated] = await db
         .update(users)
         .set({
@@ -357,7 +357,7 @@ export const usersModule = new Elysia({
   )
   .get(
     '/me/cards',
-    async ({ auth, query, status }) => {
+    async ({ auth, query, status }: any) => {
       if (!auth || auth.type === 'api_key' || auth.type === 'dev_api_key') {
         return status(403, {
           error: {
@@ -413,7 +413,7 @@ export const usersModule = new Elysia({
   )
   .get(
     '/me',
-    async ({ auth, status }) => {
+    async ({ auth, status }: any) => {
       if (!auth || auth.type === 'api_key' || auth.type === 'dev_api_key') {
         return status(403, {
           error: {
@@ -461,7 +461,7 @@ export const usersModule = new Elysia({
   )
   .patch(
     '/me',
-    async ({ auth, body, status }) => {
+    async ({ auth, body, status }: any) => {
       if (!auth || auth.type === 'api_key' || auth.type === 'dev_api_key') {
         return status(403, {
           error: {

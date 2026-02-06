@@ -29,7 +29,7 @@ export const cardsModule = new Elysia({
   .use(authPlugin)
   .post(
     '/',
-    async ({ body, auth, status }) => {
+    async ({ body, auth, status }: any) => {
       // Auth is guaranteed by the auth macro, but TypeScript doesn't know that
       if (!auth) {
         return status(401, {
@@ -145,7 +145,7 @@ export const cardsModule = new Elysia({
   )
   .get(
     '/:cardId',
-    async ({ params, auth, status }) => {
+    async ({ params, auth, status }: any) => {
       // Auth is guaranteed by the auth macro, but TypeScript doesn't know that
       if (!auth) {
         return status(401, {
@@ -209,7 +209,7 @@ export const cardsModule = new Elysia({
   )
   .get(
     '/:cardId/qr',
-    async ({ params, auth, status }) => {
+    async ({ params, auth, status }: any) => {
       // Auth is guaranteed by the auth macro, but TypeScript doesn't know that
       if (!auth) {
         return status(401, {

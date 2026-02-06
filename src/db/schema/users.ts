@@ -23,7 +23,7 @@ export const users = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
-  (table) => [
+  (table): any => [
     uniqueIndex('users_phone_key').on(table.phone),
     uniqueIndex('users_email_key').on(table.email).where(sql`${table.email} is not null`),
     index('users_tenant_idx').on(table.tenantId, table.tenantType),

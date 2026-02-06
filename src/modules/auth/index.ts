@@ -36,7 +36,7 @@ export const authModule = new Elysia({
   .use(authPlugin)
   .post(
     '/signup',
-    async ({ body, jwt, authHelpers, status }) => {
+    async ({ body, jwt, authHelpers, status }: any) => {
       const email = body.email ? body.email.toLowerCase() : null;
       const role = body.role ?? 'consumer';
 
@@ -128,7 +128,7 @@ export const authModule = new Elysia({
   )
   .post(
     '/login',
-    async ({ body, jwt, authHelpers, status }) => {
+    async ({ body, jwt, authHelpers, status }: any) => {
       const email = body.email.toLowerCase();
       const user = await findUserByEmail(email);
 
@@ -191,7 +191,7 @@ export const authModule = new Elysia({
   )
   .post(
     '/refresh',
-    async ({ body, jwt, status }) => {
+    async ({ body, jwt, status }: any) => {
       const rotated = await rotateRefreshToken(body.refreshToken);
       if (!rotated) {
         return status(401, {
@@ -251,7 +251,7 @@ export const authModule = new Elysia({
   )
   .post(
     '/logout',
-    async ({ body, authHelpers }) => {
+    async ({ body, authHelpers }: any) => {
       const tokenHash = authHelpers.toHash(body.refreshToken);
       await db
         .update(refreshTokens)

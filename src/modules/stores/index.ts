@@ -28,7 +28,7 @@ export const storesModule = new Elysia({
   .use(authPlugin)
   .get(
     '/',
-    async ({ query, status }) => {
+    async ({ query, status }: any) => {
       const cursorDate = parseCursor(query.cursor);
       if (query.cursor && !cursorDate) {
         return status(400, {
@@ -74,7 +74,7 @@ export const storesModule = new Elysia({
   )
   .post(
     '/',
-    async ({ body, status }) => {
+    async ({ body, status }: any) => {
       const code = generateStoreCode();
       const [created] = await db
         .insert(stores)
@@ -115,7 +115,7 @@ export const storesModule = new Elysia({
   )
   .get(
     '/:storeId',
-    async ({ params, status }) => {
+    async ({ params, status }: any) => {
       const [store] = await db.select().from(stores).where(eq(stores.id, params.storeId));
       if (!store) {
         return status(404, {
@@ -144,7 +144,7 @@ export const storesModule = new Elysia({
   )
   .get(
     '/:storeId/qr',
-    async ({ params, status }) => {
+    async ({ params, status }: any) => {
       const [store] = await db.select().from(stores).where(eq(stores.id, params.storeId));
       if (!store) {
         return status(404, {

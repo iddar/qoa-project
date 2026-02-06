@@ -56,7 +56,7 @@ export const authPlugin = new Elysia({ name: 'auth' })
     refreshTokenTtlDays: REFRESH_TOKEN_TTL_DAYS,
     generateRefreshToken: () => randomBytes(48).toString('base64url'),
   })
-  .macro(({ onBeforeHandle }) => ({
+  .macro(({ onBeforeHandle }: any) => ({
     auth: (requirement?: AuthRequirement) => {
       onBeforeHandle(async (context: any) => {
         return applyAuth(context, requirement);

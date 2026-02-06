@@ -20,7 +20,7 @@ export const cards = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
-  (table) => [
+  (table): any => [
     uniqueIndex('cards_code_key').on(table.code),
     uniqueIndex('cards_user_campaign_key').on(table.userId, table.campaignId, table.storeId),
     index('cards_user_idx').on(table.userId),
