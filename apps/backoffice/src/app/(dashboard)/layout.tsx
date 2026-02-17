@@ -14,6 +14,7 @@ const navItems = [
   { href: "/stores", label: "Tiendas" },
   { href: "/cards", label: "Tarjetas" },
   { href: "/campaigns", label: "Campañas" },
+  { href: "/transactions", label: "Transacciones" },
 ];
 
 function ApiStatus() {
