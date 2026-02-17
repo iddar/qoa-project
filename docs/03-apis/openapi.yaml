@@ -1041,6 +1041,35 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionDetailResponse'
 
+  /transactions/webhook:
+    post:
+      tags: [Transactions]
+      summary: Ingestar transacción por webhook
+      description: Aplica idempotencia por hash del payload para reintentos del proveedor
+      operationId: ingestTransactionWebhook
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionWebhookCreate'
+      responses:
+        '200':
+          description: Evento duplicado procesado previamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionWebhookResponse'
+        '201':
+          description: Evento procesado por primera vez
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionWebhookResponse'
+
   # ==================== REWARDS ====================
   /rewards:
     get:
@@ -2370,6 +2399,44 @@ components:
           $ref: '#/components/schemas/Pagination'
         meta:
           $ref: '#/components/schemas/Meta'
+
+    TransactionWebhookCreate:
+      type: object
+      required: [source, userId, storeId, items]
+      properties:
+        source:
+          type: string
+        externalEventId:
+          type: string
+        userId:
+          type: string
+        storeId:
+          type: string
+        cardId:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TransactionItem'
+        metadata:
+          type: object
+
+    TransactionWebhookResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/TransactionWithAccumulations'
+        meta:
+          type: object
+          properties:
+            replayed:
+              type: boolean
+            hash:
+              type: string
+            externalEventId:
+              type: string
+              nullable: true
 
     # ===== Reward =====
     Reward:

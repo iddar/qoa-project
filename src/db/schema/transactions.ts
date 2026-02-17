@@ -16,6 +16,13 @@ type TransactionItemsTable = {
   transactionId: unknown;
 };
 
+type WebhookReceiptsTable = {
+  source: unknown;
+  hash: unknown;
+  transactionId: unknown;
+  receivedAt: unknown;
+};
+
 export const transactions = pgTable(
   'transactions',
   {
@@ -60,4 +67,28 @@ export const transactionItems = pgTable(
     metadata: text('metadata'),
   },
   (table: TransactionItemsTable) => [index('transaction_items_transaction_idx').on(table.transactionId)],
+);
+
+export const webhookReceipts = pgTable(
+  'webhook_receipts',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
+    source: text('source').notNull(),
+    hash: text('hash').notNull(),
+    externalEventId: text('external_event_id'),
+    transactionId: uuid('transaction_id').references(() => transactions.id, { onDelete: 'set null' }),
+    payload: text('payload').notNull(),
+    status: text('status').notNull().default('processed'),
+    error: text('error'),
+    receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+    processedAt: timestamp('processed_at', { withTimezone: true }),
+  },
+  (table: WebhookReceiptsTable) => [
+    uniqueIndex('webhook_receipts_hash_key').on(table.hash),
+    index('webhook_receipts_source_idx').on(table.source),
+    index('webhook_receipts_tx_idx').on(table.transactionId),
+    index('webhook_receipts_received_at_idx').on(table.receivedAt),
+  ],
 );

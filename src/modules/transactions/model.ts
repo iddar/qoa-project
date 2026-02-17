@@ -56,6 +56,16 @@ export const transactionCreateRequest = t.Object({
   idempotencyKey: t.Optional(t.String()),
 });
 
+export const transactionWebhookRequest = t.Object({
+  source: t.String(),
+  externalEventId: t.Optional(t.String()),
+  userId: t.String({ format: 'uuid' }),
+  storeId: t.String({ format: 'uuid' }),
+  cardId: t.Optional(t.String({ format: 'uuid' })),
+  items: t.Array(transactionItemCreate),
+  metadata: t.Optional(t.String()),
+});
+
 export const transactionListQuery = t.Object({
   userId: t.Optional(t.String({ format: 'uuid' })),
   storeId: t.Optional(t.String({ format: 'uuid' })),
@@ -77,4 +87,15 @@ export const transactionDetailResponse = t.Object({
 export const transactionListResponse = t.Object({
   data: t.Array(transactionSchema),
   pagination: paginationSchema,
+});
+
+export const webhookReplayMeta = t.Object({
+  replayed: t.Boolean(),
+  hash: t.String(),
+  externalEventId: t.Optional(t.String()),
+});
+
+export const transactionWebhookResponse = t.Object({
+  data: transactionWithAccumulations,
+  meta: webhookReplayMeta,
 });

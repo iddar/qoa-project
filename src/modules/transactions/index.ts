@@ -1,9 +1,10 @@
 import { and, desc, eq, gt, lt, or } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
+import { createHash } from 'node:crypto';
 import { authGuard, authPlugin } from '../../app/plugins/auth';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { cards, stores, transactionItems, transactions, users } from '../../db/schema';
+import { cards, stores, transactionItems, transactions, users, webhookReceipts } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import {
   transactionCreateRequest,
@@ -11,6 +12,8 @@ import {
   transactionListQuery,
   transactionListResponse,
   transactionResponse,
+  transactionWebhookRequest,
+  transactionWebhookResponse,
 } from './model';
 
 const allowedRoles = ['store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
@@ -77,6 +80,31 @@ type ParamsContext = {
   status: StatusHandler;
 };
 
+type WebhookContext = {
+  body: {
+    source: string;
+    externalEventId?: string;
+    userId: string;
+    storeId: string;
+    cardId?: string;
+    items: Array<{
+      productId: string;
+      quantity?: number;
+      amount?: number;
+      metadata?: string;
+    }>;
+    metadata?: string;
+  };
+  status: StatusHandler;
+};
+
+type WebhookReceiptRow = {
+  id: string;
+  hash: string;
+  externalEventId: string | null;
+  transactionId: string | null;
+};
+
 const buildItemsMap = (items: TransactionItemRow[]) => {
   const map = new Map<string, TransactionItemRow[]>();
   for (const item of items) {
@@ -107,6 +135,155 @@ const toDetailPayload = (tx: TransactionRow, items: TransactionItemRow[]) => ({
   accumulations: [],
 });
 
+const normalizeItems = (items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>) =>
+  items.map((item) => {
+    const quantity = Math.max(item.quantity ?? 1, 1);
+    const amount = item.amount ?? 0;
+    return {
+      productId: item.productId,
+      quantity,
+      amount,
+      metadata: item.metadata ?? null,
+    };
+  });
+
+const ensureTransactionEntities = async (
+  payload: { userId: string; storeId: string; cardId?: string },
+  status: StatusHandler,
+) => {
+  const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.id, payload.userId))) as Array<{
+    id: string;
+  }>;
+  if (!user) {
+    return status(404, {
+      error: {
+        code: 'USER_NOT_FOUND',
+        message: 'Usuario no encontrado',
+      },
+    });
+  }
+
+  const [store] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.id, payload.storeId))) as Array<{
+    id: string;
+  }>;
+  if (!store) {
+    return status(404, {
+      error: {
+        code: 'STORE_NOT_FOUND',
+        message: 'Tienda no encontrada',
+      },
+    });
+  }
+
+  if (payload.cardId) {
+    const [card] = (await db.select({ id: cards.id }).from(cards).where(eq(cards.id, payload.cardId))) as Array<{
+      id: string;
+    }>;
+    if (!card) {
+      return status(404, {
+        error: {
+          code: 'CARD_NOT_FOUND',
+          message: 'Tarjeta no encontrada',
+        },
+      });
+    }
+  }
+
+  return null;
+};
+
+const createOrReplayTransaction = async (payload: {
+  userId: string;
+  storeId: string;
+  cardId?: string;
+  metadata?: string;
+  idempotencyKey?: string;
+  items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>;
+}) => {
+  if (payload.idempotencyKey) {
+    const [existing] = (await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.idempotencyKey, payload.idempotencyKey))) as TransactionRow[];
+
+    if (existing) {
+      const existingItems = (await db
+        .select()
+        .from(transactionItems)
+        .where(eq(transactionItems.transactionId, existing.id))) as TransactionItemRow[];
+
+      return {
+        statusCode: 200,
+        transaction: existing,
+        items: existingItems,
+      };
+    }
+  }
+
+  const normalizedItems = normalizeItems(payload.items);
+  const totalAmount = normalizedItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+
+  const [created] = (await db
+    .insert(transactions)
+    .values({
+      userId: payload.userId,
+      storeId: payload.storeId,
+      cardId: payload.cardId ?? null,
+      totalAmount,
+      metadata: payload.metadata ?? null,
+      idempotencyKey: payload.idempotencyKey ?? null,
+    })
+    .returning()) as TransactionRow[];
+
+  if (!created) {
+    return null;
+  }
+
+  await db.insert(transactionItems).values(
+    normalizedItems.map((item) => ({
+      transactionId: created.id,
+      productId: item.productId,
+      quantity: item.quantity,
+      amount: item.amount,
+      metadata: item.metadata,
+    })),
+  );
+
+  const createdItems = (await db
+    .select()
+    .from(transactionItems)
+    .where(eq(transactionItems.transactionId, created.id))) as TransactionItemRow[];
+
+  return {
+    statusCode: 201,
+    transaction: created,
+    items: createdItems,
+  };
+};
+
+const createWebhookHash = (payload: {
+  source: string;
+  externalEventId?: string;
+  userId: string;
+  storeId: string;
+  cardId?: string;
+  items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>;
+  metadata?: string;
+}) =>
+  createHash('sha256')
+    .update(
+      JSON.stringify({
+        source: payload.source,
+        externalEventId: payload.externalEventId ?? null,
+        userId: payload.userId,
+        storeId: payload.storeId,
+        cardId: payload.cardId ?? null,
+        items: payload.items,
+        metadata: payload.metadata ?? null,
+      }),
+    )
+    .digest('hex');
+
 export const transactionsModule = new Elysia({
   prefix: '/transactions',
   detail: {
@@ -126,88 +303,13 @@ export const transactionsModule = new Elysia({
         });
       }
 
-      const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.id, body.userId))) as Array<{
-        id: string;
-      }>;
-      if (!user) {
-        return status(404, {
-          error: {
-            code: 'USER_NOT_FOUND',
-            message: 'Usuario no encontrado',
-          },
-        });
+      const validationError = await ensureTransactionEntities(body, status);
+      if (validationError) {
+        return validationError;
       }
 
-      const [store] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.id, body.storeId))) as Array<{
-        id: string;
-      }>;
-      if (!store) {
-        return status(404, {
-          error: {
-            code: 'STORE_NOT_FOUND',
-            message: 'Tienda no encontrada',
-          },
-        });
-      }
-
-      if (body.cardId) {
-        const [card] = (await db.select({ id: cards.id }).from(cards).where(eq(cards.id, body.cardId))) as Array<{
-          id: string;
-        }>;
-        if (!card) {
-          return status(404, {
-            error: {
-              code: 'CARD_NOT_FOUND',
-              message: 'Tarjeta no encontrada',
-            },
-          });
-        }
-      }
-
-      if (body.idempotencyKey) {
-        const [existing] = (await db
-          .select()
-          .from(transactions)
-          .where(eq(transactions.idempotencyKey, body.idempotencyKey))) as TransactionRow[];
-
-        if (existing) {
-          const existingItems = (await db
-            .select()
-            .from(transactionItems)
-            .where(eq(transactionItems.transactionId, existing.id))) as TransactionItemRow[];
-
-          return status(200, {
-            data: toDetailPayload(existing, existingItems),
-          });
-        }
-      }
-
-      const normalizedItems = body.items.map((item) => {
-        const quantity = Math.max(item.quantity ?? 1, 1);
-        const amount = item.amount ?? 0;
-        return {
-          productId: item.productId,
-          quantity,
-          amount,
-          metadata: item.metadata ?? null,
-        };
-      });
-
-      const totalAmount = normalizedItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
-
-      const [created] = (await db
-        .insert(transactions)
-        .values({
-          userId: body.userId,
-          storeId: body.storeId,
-          cardId: body.cardId ?? null,
-          totalAmount,
-          metadata: body.metadata ?? null,
-          idempotencyKey: body.idempotencyKey ?? null,
-        })
-        .returning()) as TransactionRow[];
-
-      if (!created) {
+      const outcome = await createOrReplayTransaction(body);
+      if (!outcome) {
         return status(500, {
           error: {
             code: 'TRANSACTION_CREATE_FAILED',
@@ -216,23 +318,8 @@ export const transactionsModule = new Elysia({
         });
       }
 
-      await db.insert(transactionItems).values(
-        normalizedItems.map((item) => ({
-          transactionId: created.id,
-          productId: item.productId,
-          quantity: item.quantity,
-          amount: item.amount,
-          metadata: item.metadata,
-        })),
-      );
-
-      const createdItems = (await db
-        .select()
-        .from(transactionItems)
-        .where(eq(transactionItems.transactionId, created.id))) as TransactionItemRow[];
-
-      return status(201, {
-        data: toDetailPayload(created, createdItems),
+      return status(outcome.statusCode, {
+        data: toDetailPayload(outcome.transaction, outcome.items),
       });
     },
     {
@@ -245,6 +332,102 @@ export const transactionsModule = new Elysia({
       },
       detail: {
         summary: 'Registrar transacción',
+      },
+    },
+  )
+  .post(
+    '/webhook',
+    async ({ body, status }: WebhookContext) => {
+      if (body.items.length === 0) {
+        return status(400, {
+          error: {
+            code: 'INVALID_ARGUMENT',
+            message: 'Debes enviar al menos un item',
+          },
+        });
+      }
+
+      const hash = createWebhookHash(body);
+      const [existingReceipt] = (await db
+        .select({
+          id: webhookReceipts.id,
+          hash: webhookReceipts.hash,
+          externalEventId: webhookReceipts.externalEventId,
+          transactionId: webhookReceipts.transactionId,
+        })
+        .from(webhookReceipts)
+        .where(eq(webhookReceipts.hash, hash))) as WebhookReceiptRow[];
+
+      if (existingReceipt?.transactionId) {
+        const [existingTx] = (await db
+          .select()
+          .from(transactions)
+          .where(eq(transactions.id, existingReceipt.transactionId))) as TransactionRow[];
+        if (existingTx) {
+          const existingItems = (await db
+            .select()
+            .from(transactionItems)
+            .where(eq(transactionItems.transactionId, existingTx.id))) as TransactionItemRow[];
+
+          return status(200, {
+            data: toDetailPayload(existingTx, existingItems),
+            meta: {
+              replayed: true,
+              hash: existingReceipt.hash,
+              externalEventId: existingReceipt.externalEventId ?? undefined,
+            },
+          });
+        }
+      }
+
+      const validationError = await ensureTransactionEntities(body, status);
+      if (validationError) {
+        return validationError;
+      }
+
+      const outcome = await createOrReplayTransaction({
+        ...body,
+        idempotencyKey: hash,
+      });
+
+      if (!outcome) {
+        return status(500, {
+          error: {
+            code: 'TRANSACTION_CREATE_FAILED',
+            message: 'No se pudo crear la transacción',
+          },
+        });
+      }
+
+      await db.insert(webhookReceipts).values({
+        source: body.source,
+        hash,
+        externalEventId: body.externalEventId ?? null,
+        transactionId: outcome.transaction.id,
+        payload: JSON.stringify(body),
+        status: 'processed',
+        processedAt: new Date(),
+      });
+
+      return status(outcome.statusCode, {
+        data: toDetailPayload(outcome.transaction, outcome.items),
+        meta: {
+          replayed: false,
+          hash,
+          externalEventId: body.externalEventId ?? undefined,
+        },
+      });
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authHeader,
+      body: transactionWebhookRequest,
+      response: {
+        200: transactionWebhookResponse,
+        201: transactionWebhookResponse,
+      },
+      detail: {
+        summary: 'Ingestar transacción por webhook con idempotencia',
       },
     },
   )

@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { stores, transactions, users } from '../db/schema';
+import { stores, transactions, users, webhookReceipts } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -172,6 +172,70 @@ describe('Transactions module', () => {
     expect(detail.data.items.length).toBe(1);
 
     await db.delete(transactions).where(eq(transactions.id, txId));
+    await db.delete(stores).where(eq(stores.id, store.id));
+    await db.delete(users).where(eq(users.id, user.id));
+  });
+
+  it('deduplicates webhook retries using payload hash', async () => {
+    const user = await createUser();
+    const store = await createStore();
+
+    const payload = {
+      source: 'tconecta',
+      externalEventId: `evt_${crypto.randomUUID()}`,
+      userId: user.id,
+      storeId: store.id,
+      items: [
+        {
+          productId: 'sku-webhook-01',
+          quantity: 1,
+          amount: 25,
+        },
+      ],
+    };
+
+    const {
+      data: first,
+      error: firstError,
+      status: firstStatus,
+    } = await api.v1.transactions.webhook.post(payload, {
+      headers: adminHeaders,
+    });
+
+    if (firstError) {
+      throw firstError.value;
+    }
+    if (!first) {
+      throw new Error('First webhook response missing');
+    }
+
+    expect(firstStatus).toBe(201);
+    expect(first.meta.replayed).toBe(false);
+
+    const {
+      data: second,
+      error: secondError,
+      status: secondStatus,
+    } = await api.v1.transactions.webhook.post(payload, {
+      headers: adminHeaders,
+    });
+
+    if (secondError) {
+      throw secondError.value;
+    }
+    if (!second) {
+      throw new Error('Second webhook response missing');
+    }
+
+    expect(secondStatus).toBe(200);
+    expect(second.meta.replayed).toBe(true);
+    expect(second.data.id).toBe(first.data.id);
+
+    const receipts = await db.select().from(webhookReceipts).where(eq(webhookReceipts.hash, first.meta.hash));
+    expect(receipts.length).toBe(1);
+
+    await db.delete(webhookReceipts).where(eq(webhookReceipts.hash, first.meta.hash));
+    await db.delete(transactions).where(eq(transactions.id, first.data.id));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
   });
