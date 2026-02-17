@@ -160,6 +160,27 @@ Siempre que se cree o modifique un endpoint:
 - Actualiza/crea sus tests en `src/spec/`.
 - Sincroniza la definición en `/Users/iddar/Developer/projects/qoa/docs/03-apis/openapi.yaml`.
 
+### Usuarios de prueba para apps
+
+Para facilitar QA manual de flujos en backoffice y apps cliente, existen seeds por entorno:
+
+```bash
+cd src
+bun run db:seed:development
+bun run db:seed:local
+bun run db:seed:test
+```
+
+Credenciales de prueba (password compartido):
+
+- Password: `Password123!`
+- `qoa_admin`: `admin.<entorno>@qoa.local`
+- `qoa_support`: `support.<entorno>@qoa.local`
+- `store_admin`: `store.<entorno>@qoa.local`
+- `consumer`: `consumer.<entorno>@qoa.local`
+
+Donde `<entorno>` puede ser `development`, `local` o `test`.
+
 ### Migraciones con Drizzle ORM
 
 1. Define/actualiza las tablas en `src/db/schema/*.ts` (p. ej. `tenants`).
