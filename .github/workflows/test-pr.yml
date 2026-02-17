@@ -1,0 +1,91 @@
+name: Test PR
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - '.github/workflows/test-pr.yml'
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: qoa_local
+          POSTGRES_USER: qoa
+          POSTGRES_PASSWORD: supersecret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U qoa -d qoa_local"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - name: Install dependencies
+        working-directory: ./src
+        run: bun install
+
+      - name: Run database migrations
+        working-directory: ./src
+        env:
+          DATABASE_URL: postgres://qoa:supersecret@localhost:5432/qoa_local
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: qoa_local
+          POSTGRES_USER: qoa
+          POSTGRES_PASSWORD: supersecret
+        run: bun run db:migrate
+
+      - name: Run linter
+        working-directory: ./src
+        run: bun run lint
+
+      - name: Run type check
+        working-directory: ./src
+        run: bun run typecheck
+
+      - name: Run tests
+        working-directory: ./src
+        env:
+          NODE_ENV: test
+          PORT: 3000
+          JWT_SECRET: test-secret
+          AUTH_ACCESS_TTL_SECONDS: 900
+          AUTH_REFRESH_TTL_DAYS: 30
+          AUTH_DEV_MODE: true
+          DATABASE_URL: postgres://qoa:supersecret@localhost:5432/qoa_local
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_DB: qoa_local
+          POSTGRES_USER: qoa
+          POSTGRES_PASSWORD: supersecret
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_URL: redis://localhost:6379/0
+        run: bun test spec
