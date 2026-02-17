@@ -303,10 +303,7 @@ export const authModule = new Elysia({
     '/logout',
     async ({ body, authHelpers }: LogoutContext) => {
       const tokenHash = authHelpers.toHash(body.refreshToken);
-      await db
-        .update(refreshTokens)
-        .set({ revokedAt: new Date() })
-        .where(eq(refreshTokens.tokenHash, tokenHash));
+      await db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.tokenHash, tokenHash));
 
       return new Response(null, { status: 204 });
     },

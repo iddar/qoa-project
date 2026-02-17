@@ -26,7 +26,9 @@ describe('Backoffice user management', () => {
     process.env.AUTH_DEV_MODE = 'true';
 
     const email = `list_${crypto.randomUUID()}@qoa.test`;
-    const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
+    const phone = `+52155${Math.floor(Math.random() * 1_000_0000)
+      .toString()
+      .padStart(7, '0')}`;
 
     const [created] = (await db
       .insert(users)
@@ -70,7 +72,9 @@ describe('Backoffice user management', () => {
     process.env.AUTH_DEV_MODE = 'true';
 
     const email = `staff_${crypto.randomUUID()}@qoa.test`;
-    const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
+    const phone = `+52155${Math.floor(Math.random() * 1_000_0000)
+      .toString()
+      .padStart(7, '0')}`;
 
     const { data, error, status } = await api.v1.users.post(
       {
@@ -103,7 +107,9 @@ describe('Backoffice user management', () => {
     process.env.AUTH_DEV_MODE = 'true';
 
     const email = `block_${crypto.randomUUID()}@qoa.test`;
-    const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
+    const phone = `+52155${Math.floor(Math.random() * 1_000_0000)
+      .toString()
+      .padStart(7, '0')}`;
 
     const [created] = (await db
       .insert(users)
@@ -119,9 +125,11 @@ describe('Backoffice user management', () => {
       throw new Error('No user created for block test');
     }
 
-    const { data: blockData, error: blockError, status: blockStatus } = await api.v1.users(
-      { id: created.id },
-    ).block.post(
+    const {
+      data: blockData,
+      error: blockError,
+      status: blockStatus,
+    } = await api.v1.users({ id: created.id }).block.post(
       {
         until: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
         reason: 'Fraude sospechado',
@@ -140,9 +148,11 @@ describe('Backoffice user management', () => {
     expect(blockStatus).toBe(200);
     expect(blockData.data.blockedUntil).toBeTruthy();
 
-    const { data: unblockData, error: unblockError, status: unblockStatus } = await api.v1.users(
-      { id: created.id },
-    ).unblock.post(undefined, { headers: adminHeaders });
+    const {
+      data: unblockData,
+      error: unblockError,
+      status: unblockStatus,
+    } = await api.v1.users({ id: created.id }).unblock.post(undefined, { headers: adminHeaders });
 
     if (unblockError) {
       throw unblockError.value;

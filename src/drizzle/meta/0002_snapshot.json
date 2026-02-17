@@ -401,12 +401,8 @@
           "name": "refresh_tokens_user_id_users_id_fk",
           "tableFrom": "refresh_tokens",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -422,30 +418,17 @@
     "public.user_role": {
       "name": "user_role",
       "schema": "public",
-      "values": [
-        "consumer",
-        "customer",
-        "store_staff",
-        "store_admin",
-        "cpg_admin",
-        "qoa_admin"
-      ]
+      "values": ["consumer", "customer", "store_staff", "store_admin", "cpg_admin", "qoa_admin"]
     },
     "public.user_status": {
       "name": "user_status",
       "schema": "public",
-      "values": [
-        "active",
-        "suspended"
-      ]
+      "values": ["active", "suspended"]
     },
     "public.tenant_type": {
       "name": "tenant_type",
       "schema": "public",
-      "values": [
-        "cpg",
-        "store"
-      ]
+      "values": ["cpg", "store"]
     }
   },
   "schemas": {},

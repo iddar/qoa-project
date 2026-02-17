@@ -18,7 +18,15 @@ import {
   userMeUpdateRequest,
 } from './model';
 
-const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
+const allowedRoles = [
+  'consumer',
+  'customer',
+  'store_staff',
+  'store_admin',
+  'cpg_admin',
+  'qoa_support',
+  'qoa_admin',
+] as const;
 const backofficeAdminRoles = ['qoa_admin'] as const;
 const backofficeRoles = ['qoa_support', 'qoa_admin'] as const;
 const temporaryPasswordLength = 14;
@@ -637,21 +645,17 @@ export const usersModule = new Elysia({
         patch.email = email ?? null;
       }
 
-      const [updated] = (await db
-        .update(users)
-        .set(patch)
-        .where(eq(users.id, auth.userId))
-        .returning({
-          id: users.id,
-          phone: users.phone,
-          email: users.email,
-          name: users.name,
-          role: users.role,
-          status: users.status,
-          tenantId: users.tenantId,
-          tenantType: users.tenantType,
-          blockedUntil: users.blockedUntil,
-        })) as Array<{
+      const [updated] = (await db.update(users).set(patch).where(eq(users.id, auth.userId)).returning({
+        id: users.id,
+        phone: users.phone,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        status: users.status,
+        tenantId: users.tenantId,
+        tenantType: users.tenantType,
+        blockedUntil: users.blockedUntil,
+      })) as Array<{
         id: string;
         phone: string;
         email: string | null;

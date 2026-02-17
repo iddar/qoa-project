@@ -12,11 +12,16 @@ type ApiKeysTable = {
 export const apiKeys = pgTable(
   'api_keys',
   {
-    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
     name: varchar('name', { length: 100 }).notNull(),
     keyHash: varchar('key_hash', { length: 255 }).notNull(),
     keyPrefix: varchar('key_prefix', { length: 20 }).notNull(),
-    scopes: text('scopes').array().notNull().default(sql`'{}'::text[]`),
+    scopes: text('scopes')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     tenantId: uuid('tenant_id').notNull(),
     tenantType: tenantType('tenant_type').notNull(),
     rateLimit: integer('rate_limit').notNull().default(60),

@@ -4,7 +4,7 @@
 
 **Qoa** es un sistema centralizado de administración de programas de lealtad. El MVP "Conectados" se enfoca en loyalty para tenderos vía WhatsApp/QR.
 
-**Estado Actual:** Fase de documentación/scaffolding - sin código implementado.
+**Estado Actual:** Backend operativo en `src` con módulos `auth`, `users`, `stores`, `cards`; backoffice base en `apps/backoffice`; pruebas `spec` en verde con entorno de test y migraciones aplicadas.
 
 ---
 
@@ -96,10 +96,10 @@
 **Objetivo:** Construir API y lógica de negocio
 
 **Stack Tecnológico:**
-- **Runtime:** Node.js 20 / Bun
+- **Runtime:** Bun
 - **Framework:** Elysia
 - **ORM:** Drizzle ORM
-- **BD:** PostgreSQL 16
+- **BD:** PostgreSQL
 - **Cache/Queue:** Redis + BullMQ
 - **WhatsApp:** Twilio o 360Dialog
 - **Validación:** elysia incluye typeBox { t }  optional: Zod
@@ -113,6 +113,11 @@
 | 2 | 7-8 | Módulos Users, Stores, Cards + WhatsApp básico |
 | 3 | 9-10 | Módulos Campaigns, Transactions, motor de reglas |
 | 4 | 11-12 | Módulos Rewards, Reports, Jobs recordatorios |
+
+**Avance real actual (2026-02-17):**
+- Sprint 1: mayormente completo, pendiente middleware de errores global y traza `trace_id` end-to-end.
+- Sprint 2: `users`, `stores` y `cards` implementados y validados por tests de integración.
+- Próxima fase recomendada: Sprint 3 (`campaigns`, `transactions`, motor de reglas).
 
 **Estructura del proyecto:**
 ```
@@ -227,7 +232,7 @@ Para validar el plan:
 
 ## Próximos Pasos Inmediatos
 
-1. **Completar Fase 1** - Escribir documentos de visión, alcance, glosario y NFRs
-2. **Escribir ADR-0001** - Decidir estilo arquitectónico (recomendación: Modular Monolith)
-3. **POC WhatsApp** - Validar integración con proveedor seleccionado
-4. **Diseñar OpenAPI** - Definir contratos antes de código
+1. **Cerrar deuda de plataforma** - Implementar middleware de errores global y `trace_id` consistente en logs/respuestas.
+2. **Iniciar Sprint 3** - Implementar módulo `campaigns` (modelo, migraciones, endpoints y tests).
+3. **Continuar con transactions** - Alta de `transactions` e idempotencia de ingestión/webhooks.
+4. **Mantener contrato actualizado** - Sincronizar `docs/03-apis/openapi.yaml` en cada endpoint nuevo/modificado.

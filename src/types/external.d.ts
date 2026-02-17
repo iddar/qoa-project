@@ -102,7 +102,9 @@ declare module 'drizzle-orm/pg-core' {
   };
 
   export const index: (name: string) => { on: (...columns: unknown[]) => unknown };
-  export const uniqueIndex: (name: string) => { on: (...columns: unknown[]) => { where: (condition: unknown) => unknown } };
+  export const uniqueIndex: (name: string) => {
+    on: (...columns: unknown[]) => { where: (condition: unknown) => unknown };
+  };
   export const integer: (name: string) => ColumnBuilder;
   export const serial: (name: string) => ColumnBuilder;
   export const pgEnum: (name: string, values: readonly string[]) => (columnName: string) => ColumnBuilder;
@@ -154,6 +156,8 @@ declare module 'bun:test' {
 }
 
 declare module 'node:crypto' {
-  export const createHash: (algorithm: string) => { update: (data: string) => { digest: (encoding: string) => string } };
+  export const createHash: (algorithm: string) => {
+    update: (data: string) => { digest: (encoding: string) => string };
+  };
   export const randomBytes: (size: number) => { toString: (encoding: string) => string };
 }

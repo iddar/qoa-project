@@ -10,7 +10,9 @@ const api = treaty<App>(app);
 
 const createConsumer = async () => {
   const email = `me_${crypto.randomUUID()}@qoa.test`;
-  const phone = `+52155${Math.floor(Math.random() * 1_000_0000).toString().padStart(7, '0')}`;
+  const phone = `+52155${Math.floor(Math.random() * 1_000_0000)
+    .toString()
+    .padStart(7, '0')}`;
 
   const [created] = (await db
     .insert(users)

@@ -10,7 +10,9 @@ type RefreshTokensTable = {
 export const refreshTokens = pgTable(
   'refresh_tokens',
   {
-    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),

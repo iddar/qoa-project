@@ -12,7 +12,9 @@ const app = createApp();
 const api = treaty<App>(app);
 
 const createUser = async () => {
-  const phone = `+52155${Math.floor(Math.random() * 10_000_000).toString().padStart(7, '0')}`;
+  const phone = `+52155${Math.floor(Math.random() * 10_000_000)
+    .toString()
+    .padStart(7, '0')}`;
   const email = `card_${crypto.randomUUID()}@qoa.test`;
   const password = 'Password123!';
 
@@ -66,7 +68,11 @@ describe('Cards module', () => {
   it('creates cards, fetches QR payload, and lists user cards', async () => {
     const user = await createUser();
     const store = await createStore();
-    const { data: loginData, error: loginError, status: loginStatus } = await api.v1.auth.login.post({
+    const {
+      data: loginData,
+      error: loginError,
+      status: loginStatus,
+    } = await api.v1.auth.login.post({
       email: user.email,
       password: user.password,
     });
@@ -82,7 +88,11 @@ describe('Cards module', () => {
     expect(loginStatus).toBe(200);
     const authHeaders = buildAuthHeaders(loginData.data.accessToken);
 
-    const { data: created, error: createError, status: createStatus } = await api.v1.cards.post(
+    const {
+      data: created,
+      error: createError,
+      status: createStatus,
+    } = await api.v1.cards.post(
       {
         userId: user.id,
         campaignId: crypto.randomUUID(),
@@ -106,7 +116,11 @@ describe('Cards module', () => {
 
     const cardId = created.data.id;
 
-    const { data: fetched, error: fetchError, status: fetchStatus } = await api.v1.cards({ cardId }).get({
+    const {
+      data: fetched,
+      error: fetchError,
+      status: fetchStatus,
+    } = await api.v1.cards({ cardId }).get({
       headers: authHeaders,
     });
 
@@ -121,7 +135,11 @@ describe('Cards module', () => {
     expect(fetchStatus).toBe(200);
     expect(fetched.data.id).toBe(cardId);
 
-    const { data: qrData, error: qrError, status: qrStatus } = await api.v1.cards({ cardId }).qr.get({
+    const {
+      data: qrData,
+      error: qrError,
+      status: qrStatus,
+    } = await api.v1.cards({ cardId }).qr.get({
       headers: authHeaders,
     });
 
@@ -137,7 +155,11 @@ describe('Cards module', () => {
     expect(qrData.data.payload.entityType).toBe('card');
     expect(qrData.data.payload.entityId).toBe(cardId);
 
-    const { data: listData, error: listError, status: listStatus } = await api.v1.users.me.cards.get({
+    const {
+      data: listData,
+      error: listError,
+      status: listStatus,
+    } = await api.v1.users.me.cards.get({
       headers: authHeaders,
     });
 

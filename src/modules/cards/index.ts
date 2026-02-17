@@ -6,7 +6,15 @@ import { cards, stores, users } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import { cardCreateRequest, cardDetailResponse, cardResponse, qrResponse } from './model';
 
-const allowedRoles = ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
+const allowedRoles = [
+  'consumer',
+  'customer',
+  'store_staff',
+  'store_admin',
+  'cpg_admin',
+  'qoa_support',
+  'qoa_admin',
+] as const;
 
 const generateCardCode = () => `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 18)}`;
 
@@ -102,7 +110,9 @@ export const cardsModule = new Elysia({
         }
       }
 
-      const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.id, body.userId))) as Array<{ id: string }>;
+      const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.id, body.userId))) as Array<{
+        id: string;
+      }>;
       if (!user) {
         return status(404, {
           error: {
@@ -113,10 +123,9 @@ export const cardsModule = new Elysia({
       }
 
       if (body.storeId) {
-        const [store] = (await db
-          .select({ id: stores.id })
-          .from(stores)
-          .where(eq(stores.id, body.storeId))) as Array<{ id: string }>;
+        const [store] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.id, body.storeId))) as Array<{
+          id: string;
+        }>;
         if (!store) {
           return status(404, {
             error: {

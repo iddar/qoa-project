@@ -51,17 +51,17 @@
 ## Fase 5: Implementación Backend
 
 ### Sprint 1
-- [x] Setup proyecto (tsconfig, eslint, prettier)
+- [x] Setup proyecto (tsconfig, oxlint, oxfmt)
 - [x] Configuración base de datos y migraciones
-- [x] Middleware logging con trace_id
-- [ ] Middleware manejo de errores
+- [ ] Middleware logging con trace_id end-to-end
+- [ ] Middleware manejo de errores global
 - [x] Health check endpoint
 - [x] Docker Compose para desarrollo
 
 ### Sprint 2
-- [ ] Módulo Users
-- [ ] Módulo Stores
-- [ ] Módulo Cards
+- [x] Módulo Users
+- [x] Módulo Stores
+- [x] Módulo Cards
 - [ ] Integración WhatsApp básica
 
 ### Sprint 3
@@ -82,7 +82,7 @@
 
 - [ ] App Tarjeta Digital (PWA)
 - [ ] Dashboard Tienda
-- [ ] Admin Panel
+- [ ] Admin Panel (parcial: backoffice base en `apps/backoffice`)
 - [ ] Tests E2E
 
 ---
@@ -118,6 +118,8 @@
 | 2026-01-29 | ADR-0009: Stack de implementación (Bun, Elysia, Transactional Outbox) aprobado |
 | 2026-01-29 | Fase 3 completada: OpenAPI, AsyncAPI, flujos de auth, catálogo de errores |
 | 2026-01-29 | Fase 4 completada: Modelo ER, diccionario de datos, índices, eventos de dominio |
+| 2026-02-17 | Sprint 2 actualizado: módulos Users, Stores y Cards implementados y cubiertos por tests |
+| 2026-02-17 | Normalización de auth con `beforeHandle: authGuard(...)` en Users/Stores/Cards |
 
 ---
 

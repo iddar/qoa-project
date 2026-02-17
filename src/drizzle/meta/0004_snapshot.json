@@ -435,12 +435,8 @@
           "name": "refresh_tokens_user_id_users_id_fk",
           "tableFrom": "refresh_tokens",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -695,12 +691,8 @@
           "name": "cards_user_id_users_id_fk",
           "tableFrom": "cards",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -708,12 +700,8 @@
           "name": "cards_store_id_stores_id_fk",
           "tableFrom": "cards",
           "tableTo": "stores",
-          "columnsFrom": [
-            "store_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["store_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -729,47 +717,27 @@
     "public.user_role": {
       "name": "user_role",
       "schema": "public",
-      "values": [
-        "consumer",
-        "customer",
-        "store_staff",
-        "store_admin",
-        "cpg_admin",
-        "qoa_support",
-        "qoa_admin"
-      ]
+      "values": ["consumer", "customer", "store_staff", "store_admin", "cpg_admin", "qoa_support", "qoa_admin"]
     },
     "public.user_status": {
       "name": "user_status",
       "schema": "public",
-      "values": [
-        "active",
-        "suspended"
-      ]
+      "values": ["active", "suspended"]
     },
     "public.tenant_type": {
       "name": "tenant_type",
       "schema": "public",
-      "values": [
-        "cpg",
-        "store"
-      ]
+      "values": ["cpg", "store"]
     },
     "public.store_status": {
       "name": "store_status",
       "schema": "public",
-      "values": [
-        "active",
-        "inactive"
-      ]
+      "values": ["active", "inactive"]
     },
     "public.card_status": {
       "name": "card_status",
       "schema": "public",
-      "values": [
-        "active",
-        "inactive"
-      ]
+      "values": ["active", "inactive"]
     }
   },
   "schemas": {},

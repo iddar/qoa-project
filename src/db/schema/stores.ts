@@ -10,7 +10,9 @@ type StoresTable = {
 export const stores = pgTable(
   'stores',
   {
-    id: uuid('id').primaryKey().default(sql`uuidv7()`),
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
     code: varchar('code', { length: 32 }).notNull(),
     name: varchar('name', { length: 200 }).notNull(),
     type: varchar('type', { length: 100 }),

@@ -144,10 +144,7 @@ const resolveAuth = async (context: AuthContextState, requirement: AuthRequireme
       return null;
     }
 
-    await db
-      .update(apiKeys)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(apiKeys.id, apiKey.id));
+    await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, apiKey.id));
 
     return {
       type: 'api_key',
@@ -168,7 +165,9 @@ const resolveAuth = async (context: AuthContextState, requirement: AuthRequireme
       return null;
     }
 
-    const scopes = Array.isArray(payload.scopes) ? payload.scopes.filter((scope: unknown) => typeof scope === 'string') : [];
+    const scopes = Array.isArray(payload.scopes)
+      ? payload.scopes.filter((scope: unknown) => typeof scope === 'string')
+      : [];
     const role = typeof payload.role === 'string' ? payload.role : 'consumer';
     const tenantId = typeof payload.tenantId === 'string' ? payload.tenantId : null;
     const tenantType = payload.tenantType === 'cpg' || payload.tenantType === 'store' ? payload.tenantType : null;
@@ -195,7 +194,7 @@ const applyAuth = async (context: AuthContextState, requirement?: AuthRequiremen
   }
 
   if (authContext.type === 'jwt') {
-  const [user] = (await db.select().from(users).where(eq(users.id, authContext.userId))) as AuthUserRow[];
+    const [user] = (await db.select().from(users).where(eq(users.id, authContext.userId))) as AuthUserRow[];
     if (!user) {
       return context.status(401, buildError('INVALID_TOKEN', 'Usuario inválido'));
     }
@@ -233,7 +232,8 @@ const applyAuth = async (context: AuthContextState, requirement?: AuthRequiremen
   context.auth = authContext;
 };
 
-export const authGuard = (requirement?: AuthRequirement) => async (context: AuthContextState) => applyAuth(context, requirement);
+export const authGuard = (requirement?: AuthRequirement) => async (context: AuthContextState) =>
+  applyAuth(context, requirement);
 
 const resolveDevAuth = (context: AuthContextState): AuthContext | null => {
   const typeHeader = context.request.headers.get('x-dev-auth-type');
@@ -282,13 +282,16 @@ const parseScopes = (value: string | null) =>
         .filter(Boolean)
     : [];
 
-export const issueAccessToken = async (context: { jwt: JwtSigner }, payload: {
-  sub: string;
-  role: string;
-  scopes?: string[];
-  tenantId?: string | null;
-  tenantType?: 'cpg' | 'store' | null;
-}) => {
+export const issueAccessToken = async (
+  context: { jwt: JwtSigner },
+  payload: {
+    sub: string;
+    role: string;
+    scopes?: string[];
+    tenantId?: string | null;
+    tenantType?: 'cpg' | 'store' | null;
+  },
+) => {
   const token = await context.jwt.sign(
     {
       ...payload,
@@ -324,7 +327,13 @@ export const rotateRefreshToken = async (refreshToken: string) => {
   const [session] = (await db
     .select()
     .from(refreshTokens)
-    .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt), gt(refreshTokens.expiresAt, new Date())))) as RefreshSessionRow[];
+    .where(
+      and(
+        eq(refreshTokens.tokenHash, tokenHash),
+        isNull(refreshTokens.revokedAt),
+        gt(refreshTokens.expiresAt, new Date()),
+      ),
+    )) as RefreshSessionRow[];
 
   if (!session) {
     return null;
