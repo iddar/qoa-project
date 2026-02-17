@@ -517,9 +517,7 @@ export const usersModule = new Elysia({
       };
     },
     {
-      auth: {
-        roles: [...allowedRoles],
-      },
+      beforeHandle: authGuard({ roles: [...allowedRoles] }),
       query: cardListQuery,
       response: {
         200: cardListResponse,

@@ -14,12 +14,14 @@ const api = treaty<App>(app);
 const createUser = async () => {
   const phone = `+52155${Math.floor(Math.random() * 10_000_000).toString().padStart(7, '0')}`;
   const email = `store_${crypto.randomUUID()}@qoa.test`;
+  const password = 'Password123!';
 
   const [created] = (await db
     .insert(users)
     .values({
       phone,
       email,
+      passwordHash: await Bun.password.hash(password),
       role: 'consumer',
     })
     .returning({ id: users.id, email: users.email, phone: users.phone })) as Array<{
@@ -32,25 +34,50 @@ const createUser = async () => {
     throw new Error('Failed to create test user');
   }
 
-  return created;
+  if (!created.email) {
+    throw new Error('Failed to create test user email');
+  }
+
+  return {
+    ...created,
+    email: created.email,
+    password,
+  };
 };
 
-const buildAuthHeaders = (userId: string) => ({
-  'x-dev-user-id': userId,
-  'x-dev-user-role': 'consumer',
+const buildAuthHeaders = (accessToken: string) => ({
+  authorization: `Bearer ${accessToken}`,
 });
 
 describe('Stores module', () => {
   it('creates, fetches, and returns QR payload for stores', async () => {
     const user = await createUser();
-    const authHeaders = buildAuthHeaders(user.id);
-
-    const { data: created, error: createError, status: createStatus } = await api.v1.stores.post({
-      name: 'Tienda Central',
-      type: 'tiendita',
-      address: 'Calle 123',
-      $headers: authHeaders,
+    const { data: loginData, error: loginError, status: loginStatus } = await api.v1.auth.login.post({
+      email: user.email,
+      password: user.password,
     });
+
+    if (loginError) {
+      throw loginError.value;
+    }
+
+    if (!loginData) {
+      throw new Error('Login response missing');
+    }
+
+    expect(loginStatus).toBe(200);
+    const authHeaders = buildAuthHeaders(loginData.data.accessToken);
+
+    const { data: created, error: createError, status: createStatus } = await api.v1.stores.post(
+      {
+        name: 'Tienda Central',
+        type: 'tiendita',
+        address: 'Calle 123',
+      },
+      {
+        headers: authHeaders,
+      },
+    );
 
     if (createError) {
       throw createError.value;
@@ -66,8 +93,10 @@ describe('Stores module', () => {
     const storeId = created.data.id;
 
     const { data: listed, error: listError, status: listStatus } = await api.v1.stores.get({
-      limit: '20',
-      $headers: authHeaders,
+      query: {
+        limit: '20',
+      },
+      headers: authHeaders,
     });
 
     if (listError) {
@@ -82,7 +111,7 @@ describe('Stores module', () => {
     expect(listed.data.some((store: { id: string }) => store.id === storeId)).toBe(true);
 
     const { data: fetched, error: fetchError, status: fetchStatus } = await api.v1.stores({ storeId }).get({
-      $headers: authHeaders,
+      headers: authHeaders,
     });
 
     if (fetchError) {
@@ -97,7 +126,7 @@ describe('Stores module', () => {
     expect(fetched.data.id).toBe(storeId);
 
     const { data: qrData, error: qrError, status: qrStatus } = await api.v1.stores({ storeId }).qr.get({
-      $headers: authHeaders,
+      headers: authHeaders,
     });
 
     if (qrError) {

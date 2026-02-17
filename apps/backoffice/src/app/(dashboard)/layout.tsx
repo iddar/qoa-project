@@ -124,7 +124,7 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isLoading, isAuthenticated } = useAuth();
+  const { isLoading, isAuthenticated, logout } = useAuth();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -144,7 +144,7 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <aside className="w-64 border-r border-zinc-200 bg-zinc-50 p-4 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
+      <aside className="flex w-64 flex-col border-r border-zinc-200 bg-zinc-50 p-4 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
         <div className="mb-8">
           <h1 className="text-lg font-semibold">Qoa</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -166,6 +166,29 @@ export default function DashboardLayout({
             </Link>
           ))}
         </nav>
+        <div className="mt-auto border-t border-zinc-200 pt-4 dark:border-zinc-800">
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-red-600 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-red-400"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" x2="9" y1="12" y2="12" />
+            </svg>
+            Cerrar sesión
+          </button>
+        </div>
       </aside>
       <div className="flex flex-1 flex-col">
         <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6 dark:border-zinc-800 dark:bg-zinc-950">

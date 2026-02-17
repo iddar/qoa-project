@@ -1,6 +1,6 @@
 import { Elysia } from 'elysia';
 import { and, eq, isNull } from 'drizzle-orm';
-import { authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { db } from '../../db/client';
 import { cards, stores, users } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
@@ -171,9 +171,7 @@ export const cardsModule = new Elysia({
       });
     },
     {
-      auth: {
-        allowApiKey: true,
-      },
+      beforeHandle: authGuard({ allowApiKey: true }),
       body: cardCreateRequest,
       response: {
         201: cardResponse,
@@ -239,9 +237,7 @@ export const cardsModule = new Elysia({
       };
     },
     {
-      auth: {
-        allowApiKey: true,
-      },
+      beforeHandle: authGuard({ allowApiKey: true }),
       response: {
         200: cardDetailResponse,
       },
@@ -306,9 +302,7 @@ export const cardsModule = new Elysia({
       };
     },
     {
-      auth: {
-        roles: [...allowedRoles],
-      },
+      beforeHandle: authGuard({ roles: [...allowedRoles] }),
       response: {
         200: qrResponse,
       },

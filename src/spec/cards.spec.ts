@@ -14,21 +14,31 @@ const api = treaty<App>(app);
 const createUser = async () => {
   const phone = `+52155${Math.floor(Math.random() * 10_000_000).toString().padStart(7, '0')}`;
   const email = `card_${crypto.randomUUID()}@qoa.test`;
+  const password = 'Password123!';
 
   const [created] = (await db
     .insert(users)
     .values({
       phone,
       email,
+      passwordHash: await Bun.password.hash(password),
       role: 'consumer',
     })
-    .returning({ id: users.id })) as Array<{ id: string }>;
+    .returning({ id: users.id, email: users.email })) as Array<{ id: string; email: string | null }>;
 
   if (!created) {
     throw new Error('Failed to create test user');
   }
 
-  return created;
+  if (!created.email) {
+    throw new Error('Test user email missing');
+  }
+
+  return {
+    id: created.id,
+    email: created.email,
+    password,
+  };
 };
 
 const createStore = async () => {
@@ -48,16 +58,29 @@ const createStore = async () => {
   return created;
 };
 
-const buildAuthHeaders = (userId: string) => ({
-  'x-dev-user-id': userId,
-  'x-dev-user-role': 'consumer',
+const buildAuthHeaders = (accessToken: string) => ({
+  authorization: `Bearer ${accessToken}`,
 });
 
 describe('Cards module', () => {
   it('creates cards, fetches QR payload, and lists user cards', async () => {
     const user = await createUser();
     const store = await createStore();
-    const authHeaders = buildAuthHeaders(user.id);
+    const { data: loginData, error: loginError, status: loginStatus } = await api.v1.auth.login.post({
+      email: user.email,
+      password: user.password,
+    });
+
+    if (loginError) {
+      throw loginError.value;
+    }
+
+    if (!loginData) {
+      throw new Error('Login response missing');
+    }
+
+    expect(loginStatus).toBe(200);
+    const authHeaders = buildAuthHeaders(loginData.data.accessToken);
 
     const { data: created, error: createError, status: createStatus } = await api.v1.cards.post(
       {

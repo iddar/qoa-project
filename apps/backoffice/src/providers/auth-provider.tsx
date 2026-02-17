@@ -13,6 +13,7 @@ import {
   ensureAuth,
   clearTokens,
   getAccessToken,
+  isTokenExpired,
 } from "@/lib/auth";
 
 type AuthState = {
@@ -34,6 +35,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(t);
       setIsLoading(false);
     });
+  }, []);
+
+  useEffect(() => {
+    const checkToken = () => {
+      const currentToken = getAccessToken();
+      if (currentToken && isTokenExpired(currentToken)) {
+        clearTokens();
+        setToken(null);
+      }
+    };
+
+    const interval = setInterval(checkToken, 60_000);
+    return () => clearInterval(interval);
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {

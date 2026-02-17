@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm/sql';
-import { authPlugin } from '../../app/plugins/auth';
+import { authGuard, authPlugin } from '../../app/plugins/auth';
 import { parseLimit, parseCursor } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { stores } from '../../db/schema';
@@ -129,9 +129,7 @@ export const storesModule = new Elysia({
       };
     },
     {
-      auth: {
-        allowApiKey: true,
-      },
+      beforeHandle: authGuard({ allowApiKey: true }),
       query: storeListQuery,
       response: {
         200: storeListResponse,
@@ -170,9 +168,7 @@ export const storesModule = new Elysia({
       });
     },
     {
-      auth: {
-        allowApiKey: true,
-      },
+      beforeHandle: authGuard({ allowApiKey: true }),
       body: storeCreateRequest,
       response: {
         201: storeResponse,
@@ -200,9 +196,7 @@ export const storesModule = new Elysia({
       };
     },
     {
-      auth: {
-        allowApiKey: true,
-      },
+      beforeHandle: authGuard({ allowApiKey: true }),
       response: {
         200: storeResponse,
       },
@@ -237,9 +231,7 @@ export const storesModule = new Elysia({
       };
     },
     {
-      auth: {
-        allowApiKey: true,
-      },
+      beforeHandle: authGuard({ allowApiKey: true }),
       response: {
         200: qrResponse,
       },
