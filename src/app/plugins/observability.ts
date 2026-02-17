@@ -15,8 +15,7 @@ type ErrorEnvelope = {
   };
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
 const isErrorEnvelope = (value: unknown): value is ErrorEnvelope => {
   if (!isObject(value)) {
@@ -155,10 +154,13 @@ export const observabilityPlugin = new Elysia({ name: 'observability' })
       }
 
       if (response.status === 422) {
-        return new Response(JSON.stringify(enrichWithTraceMeta(mapErrorPayload('VALIDATION', new Error('VALIDATION')), traceId)), {
-          status: response.status,
-          headers: responseHeaders,
-        });
+        return new Response(
+          JSON.stringify(enrichWithTraceMeta(mapErrorPayload('VALIDATION', new Error('VALIDATION')), traceId)),
+          {
+            status: response.status,
+            headers: responseHeaders,
+          },
+        );
       }
 
       return new Response(rawBody, {

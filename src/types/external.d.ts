@@ -8,6 +8,12 @@ declare module 'elysia' {
 
     use(plugin: unknown): this;
 
+    onRequest(handler: (context: any) => unknown | Promise<unknown>): this;
+
+    mapResponse(handler: (context: any) => unknown | Promise<unknown>): this;
+
+    onError(handler: (context: any) => unknown | Promise<unknown>): this;
+
     get<TContext>(
       path: string,
       handler: (context: TContext) => unknown | Promise<unknown>,
@@ -33,6 +39,8 @@ declare module 'elysia' {
     macro<TContext, TResult>(factory: (context: TContext) => TResult): this;
 
     listen(port: number | string, callback?: () => void): this;
+
+    handle(request: Request): Promise<Response>;
   }
 
   export const t: {
@@ -135,7 +143,11 @@ declare module 'postgres' {
     prepare?: boolean;
   };
 
-  const postgres: (connectionString: string, options?: PostgresOptions) => unknown;
+  type PostgresClient = {
+    end: () => Promise<void>;
+  };
+
+  const postgres: (connectionString: string, options?: PostgresOptions) => PostgresClient;
   export default postgres;
 }
 

@@ -35,10 +35,14 @@ type DbClient = {
   execute: (query: unknown) => Promise<unknown[]>;
 };
 
-const client = postgres(connectionString, {
+export const sqlClient = postgres(connectionString, {
   prepare: false,
 });
 
-export const db = drizzle(client) as DbClient;
+export const db = drizzle(sqlClient) as DbClient;
+
+export const closeDbConnection = async () => {
+  await sqlClient.end();
+};
 
 export type Database = typeof db;

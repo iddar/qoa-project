@@ -1,15 +1,36 @@
-# src
+# Qoa Core API
 
-To install dependencies:
+## Setup
 
 ```bash
 bun install
 ```
 
-To run:
+## Run API
 
 ```bash
-bun run index.ts
+bun --env-file=.env.development run dev
 ```
 
-This project was created using `bun init` in bun v1.3.8. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+## Migrations
+
+```bash
+bun run db:migrate
+```
+
+## Seed users for app testing
+
+```bash
+bun run db:seed:development
+bun run db:seed:local
+bun run db:seed:test
+```
+
+Default seed credentials use password `Password123!` and include:
+
+- `qoa_admin`
+- `qoa_support`
+- `store_admin`
+- `consumer`
+
+Each environment uses isolated emails (`*.development@qoa.local`, `*.local@qoa.local`, `*.test@qoa.local`).
