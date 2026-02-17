@@ -168,18 +168,28 @@ export default function CardsPage() {
                   Ver payload QR
                 </button>
               </div>
-              {qrPayload?.cardId === card.id && (
+              {qrPayload?.cardId === card.id && (() => {
+                const activeQrPayload = qrPayload;
+                if (!activeQrPayload) {
+                  return null;
+                }
+
+                return (
                 <div className="mt-3 text-xs text-zinc-600 dark:text-zinc-300">
                   <p className="font-semibold">Payload actual</p>
                   <pre className="mt-2 overflow-auto whitespace-pre-wrap">
                     {JSON.stringify(
-                      { code: qrPayload.code, payload: qrPayload.payload },
+                      {
+                        code: activeQrPayload.code,
+                        payload: activeQrPayload.payload,
+                      },
                       null,
                       2,
                     )}
                   </pre>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
         </div>

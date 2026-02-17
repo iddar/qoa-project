@@ -51,6 +51,9 @@ export default function LoginPage() {
           <p className="text-sm text-zinc-500 dark:text-zinc-300">
             Inicia sesión para continuar
           </p>
+          <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
+            Usuario semilla sugerido: admin.development@qoa.local / Password123!
+          </p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           {error && (

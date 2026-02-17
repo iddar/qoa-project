@@ -112,7 +112,7 @@ export default function StoresPage() {
           )}
 
           <ul className="mt-4 divide-y divide-zinc-200 dark:divide-zinc-800">
-            {stores.map((store) => (
+            {stores.map((store: { id: string; name: string; code: string; type?: string }) => (
               <li key={store.id} className="py-4">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
@@ -141,18 +141,28 @@ export default function StoresPage() {
                     </button>
                   </div>
                 </div>
-                {qrPayload?.storeId === store.id && (
+                {qrPayload?.storeId === store.id && (() => {
+                  const activeQrPayload = qrPayload;
+                  if (!activeQrPayload) {
+                    return null;
+                  }
+
+                  return (
                   <div className="mt-3 rounded-md bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300">
                     <p className="font-semibold">Payload actual</p>
                     <pre className="mt-2 overflow-auto whitespace-pre-wrap">
                       {JSON.stringify(
-                        { code: qrPayload.code, payload: qrPayload.payload },
+                        {
+                          code: activeQrPayload.code,
+                          payload: activeQrPayload.payload,
+                        },
                         null,
                         2,
                       )}
                     </pre>
                   </div>
-                )}
+                  );
+                })()}
               </li>
             ))}
           </ul>

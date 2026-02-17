@@ -13,6 +13,7 @@ const navItems = [
   { href: "/users", label: "Usuarios" },
   { href: "/stores", label: "Tiendas" },
   { href: "/cards", label: "Tarjetas" },
+  { href: "/campaigns", label: "Campañas" },
 ];
 
 function ApiStatus() {
@@ -96,12 +97,12 @@ function ProfileButton() {
   const name = data?.data?.name;
   const email = data?.data?.email;
   const initials = name
-    ? name
-        .split(" ")
-        .map((w) => w[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase()
+      ? name
+          .split(" ")
+          .map((w: string) => w[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase()
     : email
       ? email[0]!.toUpperCase()
       : "?";
