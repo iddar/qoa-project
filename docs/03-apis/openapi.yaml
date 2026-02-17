@@ -602,7 +602,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [draft, active, paused, ended]
+            enum: [draft, ready_for_review, in_review, rejected, confirmed, active, paused, ended]
         - name: cpgId
           in: query
           schema:
@@ -1757,7 +1757,7 @@ components:
             $ref: '#/components/schemas/CampaignPolicy'
         status:
           type: string
-          enum: [draft, active, paused, ended]
+          enum: [draft, ready_for_review, in_review, rejected, confirmed, active, paused, ended]
         validityType:
           type: string
           enum: [indefinite, date_range]

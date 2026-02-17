@@ -37,6 +37,10 @@ export const openApiPlugin = openapi({
         name: 'Cards',
         description: 'Consumer card issuance endpoints.',
       },
+      {
+        name: 'Campaigns',
+        description: 'Campaign lifecycle and audit endpoints.',
+      },
     ],
   },
 });

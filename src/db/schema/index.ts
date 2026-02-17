@@ -4,3 +4,4 @@ export * from './api-keys';
 export * from './refresh-tokens';
 export * from './stores';
 export * from './cards';
+export * from './campaigns';
