@@ -175,6 +175,15 @@ export default function CampaignsPage() {
         </p>
       </div>
 
+      <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+        <p className="font-semibold">Flujo recomendado</p>
+        <p className="mt-1">
+          Crea campaña en draft, envíala a revisión, aprueba, confirma y activa.
+          El panel de auditoría te permite validar quién movió cada estado y en
+          qué momento para mantener trazabilidad.
+        </p>
+      </section>
+
       <section className="grid gap-6 lg:grid-cols-[minmax(0,_2fr)_minmax(0,_1fr)]">
         <div className="space-y-6">
           <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">

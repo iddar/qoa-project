@@ -198,6 +198,10 @@ export default function DashboardLayout({
           <ProfileButton />
         </header>
         <main className="flex-1 bg-white p-8 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+          <p className="mb-4 text-xs text-zinc-500 dark:text-zinc-300">
+            Panel interno para operación: cada módulo incluye contexto funcional,
+            estados esperados y acciones recomendadas para QA y soporte.
+          </p>
           {children}
         </main>
       </div>

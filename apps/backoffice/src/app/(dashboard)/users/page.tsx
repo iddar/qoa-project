@@ -138,6 +138,15 @@ export default function UsersPage() {
         </p>
       </div>
 
+      <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+        <p className="font-semibold">Contexto operativo</p>
+        <p className="mt-1">
+          Esta pantalla sirve para controlar acceso operativo por rol y tenant.
+          Para roles de tienda/CPG define tenant para restringir alcance. Usa
+          bloquear/desbloquear para soporte y control de fraude.
+        </p>
+      </section>
+
       <section className="grid gap-6 lg:grid-cols-[minmax(0,_2fr)_minmax(0,_1fr)]">
         <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <h2 className="text-lg font-semibold">Listado</h2>
