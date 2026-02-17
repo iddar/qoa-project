@@ -1056,6 +1056,13 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/TransactionWebhookCreate'
+      parameters:
+        - name: x-webhook-signature
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Firma HMAC SHA-256 del payload (hex), validada si existe secret configurado
       responses:
         '200':
           description: Evento duplicado procesado previamente
@@ -1063,6 +1070,64 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionWebhookResponse'
+
+  /transactions/webhook-receipts:
+    get:
+      tags: [Transactions]
+      summary: Listar recibos de webhook
+      operationId: listTransactionWebhookReceipts
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de recibos de webhook
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionWebhookReceiptListResponse'
+
+  /transactions/webhook-metrics:
+    get:
+      tags: [Transactions]
+      summary: Obtener métricas de webhooks de transacciones
+      operationId: getTransactionWebhookMetrics
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: source
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Métricas agregadas de ingestión de webhooks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionWebhookMetricsResponse'
         '201':
           description: Evento procesado por primera vez
           content:
@@ -2437,6 +2502,65 @@ components:
             externalEventId:
               type: string
               nullable: true
+
+    TransactionWebhookReceipt:
+      type: object
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        hash:
+          type: string
+        externalEventId:
+          type: string
+          nullable: true
+        transactionId:
+          type: string
+          nullable: true
+        status:
+          type: string
+        replayCount:
+          type: integer
+        error:
+          type: string
+          nullable: true
+        receivedAt:
+          type: string
+          format: date-time
+        lastReceivedAt:
+          type: string
+          format: date-time
+          nullable: true
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    TransactionWebhookReceiptListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TransactionWebhookReceipt'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    TransactionWebhookMetricsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            totalReceived:
+              type: integer
+            processed:
+              type: integer
+            replayed:
+              type: integer
+            errors:
+              type: integer
 
     # ===== Reward =====
     Reward:

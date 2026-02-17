@@ -99,3 +99,44 @@ export const transactionWebhookResponse = t.Object({
   data: transactionWithAccumulations,
   meta: webhookReplayMeta,
 });
+
+export const webhookReceiptSchema = t.Object({
+  id: t.String(),
+  source: t.String(),
+  hash: t.String(),
+  externalEventId: t.Optional(t.String()),
+  transactionId: t.Optional(t.String()),
+  status: t.String(),
+  replayCount: t.Number(),
+  error: t.Optional(t.String()),
+  receivedAt: t.String(),
+  lastReceivedAt: t.Optional(t.String()),
+  processedAt: t.Optional(t.String()),
+});
+
+export const webhookReceiptListQuery = t.Object({
+  source: t.Optional(t.String()),
+  status: t.Optional(t.String()),
+  limit: t.Optional(t.String()),
+  cursor: t.Optional(t.String()),
+});
+
+export const webhookReceiptListResponse = t.Object({
+  data: t.Array(webhookReceiptSchema),
+  pagination: paginationSchema,
+});
+
+export const webhookMetricsQuery = t.Object({
+  source: t.Optional(t.String()),
+  from: t.Optional(t.String()),
+  to: t.Optional(t.String()),
+});
+
+export const webhookMetricsResponse = t.Object({
+  data: t.Object({
+    totalReceived: t.Number(),
+    processed: t.Number(),
+    replayed: t.Number(),
+    errors: t.Number(),
+  }),
+});

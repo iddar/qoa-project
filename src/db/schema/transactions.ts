@@ -81,8 +81,10 @@ export const webhookReceipts = pgTable(
     transactionId: uuid('transaction_id').references(() => transactions.id, { onDelete: 'set null' }),
     payload: text('payload').notNull(),
     status: text('status').notNull().default('processed'),
+    replayCount: integer('replay_count').notNull().default(0),
     error: text('error'),
     receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+    lastReceivedAt: timestamp('last_received_at', { withTimezone: true }),
     processedAt: timestamp('processed_at', { withTimezone: true }),
   },
   (table: WebhookReceiptsTable) => [

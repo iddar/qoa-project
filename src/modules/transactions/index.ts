@@ -1,6 +1,6 @@
-import { and, desc, eq, gt, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { authGuard, authPlugin } from '../../app/plugins/auth';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
@@ -12,6 +12,10 @@ import {
   transactionListQuery,
   transactionListResponse,
   transactionResponse,
+  webhookMetricsQuery,
+  webhookMetricsResponse,
+  webhookReceiptListQuery,
+  webhookReceiptListResponse,
   transactionWebhookRequest,
   transactionWebhookResponse,
 } from './model';
@@ -21,6 +25,19 @@ const authHeader = t.Object({
   authorization: t.Optional(
     t.String({
       description: 'Bearer <accessToken>',
+    }),
+  ),
+});
+
+const webhookHeaderSchema = t.Object({
+  authorization: t.Optional(
+    t.String({
+      description: 'Bearer <accessToken>',
+    }),
+  ),
+  'x-webhook-signature': t.Optional(
+    t.String({
+      description: 'HMAC SHA-256 hexadecimal del payload',
     }),
   ),
 });
@@ -95,14 +112,41 @@ type WebhookContext = {
     }>;
     metadata?: string;
   };
+  headers: Record<string, string | undefined>;
   status: StatusHandler;
 };
 
 type WebhookReceiptRow = {
   id: string;
+  source: string;
   hash: string;
   externalEventId: string | null;
   transactionId: string | null;
+  status: string;
+  replayCount: number;
+  error: string | null;
+  receivedAt: Date;
+  lastReceivedAt: Date | null;
+  processedAt: Date | null;
+};
+
+type ReceiptListContext = {
+  query: {
+    source?: string;
+    status?: string;
+    limit?: string;
+    cursor?: string;
+  };
+  status: StatusHandler;
+};
+
+type MetricsContext = {
+  query: {
+    source?: string;
+    from?: string;
+    to?: string;
+  };
+  status: StatusHandler;
 };
 
 const buildItemsMap = (items: TransactionItemRow[]) => {
@@ -284,6 +328,45 @@ const createWebhookHash = (payload: {
     )
     .digest('hex');
 
+const resolveWebhookSecret = (source: string) => {
+  const normalized = source
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_');
+  const specificKey = `WEBHOOK_SECRET_${normalized}`;
+  return process.env[specificKey] ?? process.env.WEBHOOK_SECRET_DEFAULT ?? null;
+};
+
+const toSignature = (secret: string, payload: string) => createHmac('sha256', secret).update(payload).digest('hex');
+
+const signatureMatches = (provided: string | undefined, expected: string) => {
+  if (!provided) {
+    return false;
+  }
+
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  const providedBuffer = Buffer.from(provided, 'utf8');
+  if (expectedBuffer.length !== providedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(expectedBuffer, providedBuffer);
+};
+
+const toWebhookReceiptPayload = (receipt: WebhookReceiptRow) => ({
+  id: receipt.id,
+  source: receipt.source,
+  hash: receipt.hash,
+  externalEventId: receipt.externalEventId ?? undefined,
+  transactionId: receipt.transactionId ?? undefined,
+  status: receipt.status,
+  replayCount: receipt.replayCount,
+  error: receipt.error ?? undefined,
+  receivedAt: receipt.receivedAt.toISOString(),
+  lastReceivedAt: receipt.lastReceivedAt ? receipt.lastReceivedAt.toISOString() : undefined,
+  processedAt: receipt.processedAt ? receipt.processedAt.toISOString() : undefined,
+});
+
 export const transactionsModule = new Elysia({
   prefix: '/transactions',
   detail: {
@@ -337,7 +420,7 @@ export const transactionsModule = new Elysia({
   )
   .post(
     '/webhook',
-    async ({ body, status }: WebhookContext) => {
+    async ({ body, headers, status }: WebhookContext) => {
       if (body.items.length === 0) {
         return status(400, {
           error: {
@@ -347,18 +430,48 @@ export const transactionsModule = new Elysia({
         });
       }
 
+      const rawPayload = JSON.stringify(body);
+      const secret = resolveWebhookSecret(body.source);
+      if (secret) {
+        const expected = toSignature(secret, rawPayload);
+        const signature = headers['x-webhook-signature'];
+        if (!signatureMatches(signature, expected)) {
+          return status(401, {
+            error: {
+              code: 'INVALID_WEBHOOK_SIGNATURE',
+              message: 'Firma de webhook inválida',
+            },
+          });
+        }
+      }
+
       const hash = createWebhookHash(body);
       const [existingReceipt] = (await db
         .select({
           id: webhookReceipts.id,
+          source: webhookReceipts.source,
           hash: webhookReceipts.hash,
           externalEventId: webhookReceipts.externalEventId,
           transactionId: webhookReceipts.transactionId,
+          status: webhookReceipts.status,
+          replayCount: webhookReceipts.replayCount,
+          error: webhookReceipts.error,
+          receivedAt: webhookReceipts.receivedAt,
+          lastReceivedAt: webhookReceipts.lastReceivedAt,
+          processedAt: webhookReceipts.processedAt,
         })
         .from(webhookReceipts)
         .where(eq(webhookReceipts.hash, hash))) as WebhookReceiptRow[];
 
       if (existingReceipt?.transactionId) {
+        await db
+          .update(webhookReceipts)
+          .set({
+            replayCount: existingReceipt.replayCount + 1,
+            lastReceivedAt: new Date(),
+          })
+          .where(eq(webhookReceipts.id, existingReceipt.id));
+
         const [existingTx] = (await db
           .select()
           .from(transactions)
@@ -380,8 +493,35 @@ export const transactionsModule = new Elysia({
         }
       }
 
+      if (existingReceipt && !existingReceipt.transactionId) {
+        await db
+          .update(webhookReceipts)
+          .set({
+            replayCount: existingReceipt.replayCount + 1,
+            lastReceivedAt: new Date(),
+          })
+          .where(eq(webhookReceipts.id, existingReceipt.id));
+
+        return status(409, {
+          error: {
+            code: 'WEBHOOK_ALREADY_REJECTED',
+            message: 'El webhook ya fue rechazado previamente para este hash',
+          },
+        });
+      }
+
       const validationError = await ensureTransactionEntities(body, status);
       if (validationError) {
+        await db.insert(webhookReceipts).values({
+          source: body.source,
+          hash,
+          externalEventId: body.externalEventId ?? null,
+          payload: rawPayload,
+          status: 'error',
+          error: 'VALIDATION_FAILED',
+          processedAt: new Date(),
+        });
+
         return validationError;
       }
 
@@ -404,7 +544,7 @@ export const transactionsModule = new Elysia({
         hash,
         externalEventId: body.externalEventId ?? null,
         transactionId: outcome.transaction.id,
-        payload: JSON.stringify(body),
+        payload: rawPayload,
         status: 'processed',
         processedAt: new Date(),
       });
@@ -420,7 +560,7 @@ export const transactionsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: webhookHeaderSchema,
       body: transactionWebhookRequest,
       response: {
         200: transactionWebhookResponse,
@@ -428,6 +568,130 @@ export const transactionsModule = new Elysia({
       },
       detail: {
         summary: 'Ingestar transacción por webhook con idempotencia',
+      },
+    },
+  )
+  .get(
+    '/webhook-receipts',
+    async ({ query, status }: ReceiptListContext) => {
+      const cursorDate = parseCursor(query.cursor);
+      if (query.cursor && !cursorDate) {
+        return status(400, {
+          error: {
+            code: 'INVALID_CURSOR',
+            message: 'Cursor inválido',
+          },
+        });
+      }
+
+      const conditions = [];
+      if (query.source) {
+        conditions.push(eq(webhookReceipts.source, query.source));
+      }
+      if (query.status) {
+        conditions.push(eq(webhookReceipts.status, query.status));
+      }
+      if (cursorDate) {
+        conditions.push(lt(webhookReceipts.receivedAt, cursorDate));
+      }
+
+      let queryBuilder = db.select().from(webhookReceipts);
+      if (conditions.length > 0) {
+        queryBuilder = queryBuilder.where(and(...conditions));
+      }
+
+      const limit = parseLimit(query.limit);
+      const rows = (await queryBuilder
+        .orderBy(desc(webhookReceipts.receivedAt), desc(webhookReceipts.id))
+        .limit(limit + 1)) as WebhookReceiptRow[];
+
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const nextCursor = hasMore ? items[items.length - 1]?.receivedAt.toISOString() : null;
+
+      return {
+        data: items.map(toWebhookReceiptPayload),
+        pagination: {
+          hasMore,
+          nextCursor: nextCursor ?? undefined,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authHeader,
+      query: webhookReceiptListQuery,
+      response: {
+        200: webhookReceiptListResponse,
+      },
+      detail: {
+        summary: 'Listar recibos de webhooks de transacciones',
+      },
+    },
+  )
+  .get(
+    '/webhook-metrics',
+    async ({ query, status }: MetricsContext) => {
+      const fromDate = query.from ? new Date(query.from) : null;
+      const toDate = query.to ? new Date(query.to) : null;
+      if ((fromDate && Number.isNaN(fromDate.getTime())) || (toDate && Number.isNaN(toDate.getTime()))) {
+        return status(400, {
+          error: {
+            code: 'INVALID_ARGUMENT',
+            message: 'Rango de fechas inválido',
+          },
+        });
+      }
+
+      const conditions = [];
+      if (query.source) {
+        conditions.push(eq(webhookReceipts.source, query.source));
+      }
+      if (fromDate) {
+        conditions.push(gt(webhookReceipts.receivedAt, fromDate));
+      }
+      if (toDate) {
+        conditions.push(lt(webhookReceipts.receivedAt, toDate));
+      }
+
+      let metricsQuery = db
+        .select({
+          totalReceived: sql<number>`count(*)::int`,
+          processed: sql<number>`sum(case when ${webhookReceipts.status} = 'processed' then 1 else 0 end)::int`,
+          replayed: sql<number>`sum(${webhookReceipts.replayCount})::int`,
+          errors: sql<number>`sum(case when ${webhookReceipts.status} = 'error' then 1 else 0 end)::int`,
+        })
+        .from(webhookReceipts);
+
+      if (conditions.length > 0) {
+        metricsQuery = metricsQuery.where(and(...conditions));
+      }
+
+      const [metrics] = (await metricsQuery) as Array<{
+        totalReceived: number | null;
+        processed: number | null;
+        replayed: number | null;
+        errors: number | null;
+      }>;
+
+      return {
+        data: {
+          totalReceived: metrics?.totalReceived ?? 0,
+          processed: metrics?.processed ?? 0,
+          replayed: metrics?.replayed ?? 0,
+          errors: metrics?.errors ?? 0,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authHeader,
+      query: webhookMetricsQuery,
+      response: {
+        200: webhookMetricsResponse,
+      },
+      detail: {
+        summary: 'Métricas de ingestión webhook de transacciones',
       },
     },
   )

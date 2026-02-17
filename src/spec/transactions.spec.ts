@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
+import { createHmac } from 'node:crypto';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
 import { stores, transactions, users, webhookReceipts } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
+process.env.WEBHOOK_SECRET_TCONECTA = 'test_webhook_secret';
 
 const app = createApp();
 const api = treaty<App>(app);
@@ -16,6 +18,11 @@ const adminHeaders = {
   'x-dev-user-id': 'dev-admin',
   'x-dev-user-role': 'qoa_admin',
 };
+
+const webhookSignature = (payload: unknown) =>
+  createHmac('sha256', process.env.WEBHOOK_SECRET_TCONECTA ?? '')
+    .update(JSON.stringify(payload))
+    .digest('hex');
 
 const createUser = async () => {
   const phone = `+52155${Math.floor(Math.random() * 10_000_000)
@@ -194,12 +201,17 @@ describe('Transactions module', () => {
       ],
     };
 
+    const signature = webhookSignature(payload);
+
     const {
       data: first,
       error: firstError,
       status: firstStatus,
     } = await api.v1.transactions.webhook.post(payload, {
-      headers: adminHeaders,
+      headers: {
+        ...adminHeaders,
+        'x-webhook-signature': signature,
+      },
     });
 
     if (firstError) {
@@ -217,7 +229,10 @@ describe('Transactions module', () => {
       error: secondError,
       status: secondStatus,
     } = await api.v1.transactions.webhook.post(payload, {
-      headers: adminHeaders,
+      headers: {
+        ...adminHeaders,
+        'x-webhook-signature': signature,
+      },
     });
 
     if (secondError) {
@@ -238,5 +253,83 @@ describe('Transactions module', () => {
     await db.delete(transactions).where(eq(transactions.id, first.data.id));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
+  });
+
+  it('rejects webhook with invalid signature', async () => {
+    const user = await createUser();
+    const store = await createStore();
+
+    const payload = {
+      source: 'tconecta',
+      externalEventId: `evt_${crypto.randomUUID()}`,
+      userId: user.id,
+      storeId: store.id,
+      items: [
+        {
+          productId: 'sku-signature-01',
+          quantity: 1,
+          amount: 10,
+        },
+      ],
+    };
+
+    const { error, status } = await api.v1.transactions.webhook.post(payload, {
+      headers: {
+        ...adminHeaders,
+        'x-webhook-signature': 'bad-signature',
+      },
+    });
+
+    if (!error) {
+      throw new Error('Expected invalid signature error');
+    }
+
+    expect(status).toBe(401);
+    expect(error.value.error.code).toBe('INVALID_WEBHOOK_SIGNATURE');
+
+    await db.delete(stores).where(eq(stores.id, store.id));
+    await db.delete(users).where(eq(users.id, user.id));
+  });
+
+  it('returns webhook receipts and metrics', async () => {
+    const {
+      data: receipts,
+      error: receiptsError,
+      status: receiptsStatus,
+    } = await api.v1.transactions['webhook-receipts'].get({
+      query: {
+        limit: '10',
+      },
+      headers: adminHeaders,
+    });
+
+    if (receiptsError) {
+      throw receiptsError.value;
+    }
+    if (!receipts) {
+      throw new Error('Webhook receipts response missing');
+    }
+
+    expect(receiptsStatus).toBe(200);
+    expect(Array.isArray(receipts.data)).toBe(true);
+
+    const {
+      data: metrics,
+      error: metricsError,
+      status: metricsStatus,
+    } = await api.v1.transactions['webhook-metrics'].get({
+      headers: adminHeaders,
+    });
+
+    if (metricsError) {
+      throw metricsError.value;
+    }
+    if (!metrics) {
+      throw new Error('Webhook metrics response missing');
+    }
+
+    expect(metricsStatus).toBe(200);
+    expect(typeof metrics.data.totalReceived).toBe('number');
+    expect(typeof metrics.data.replayed).toBe('number');
   });
 });
