@@ -59,12 +59,16 @@ describe('Cards module', () => {
     const store = await createStore();
     const authHeaders = buildAuthHeaders(user.id);
 
-    const { data: created, error: createError, status: createStatus } = await api.v1.cards.post({
-      userId: user.id,
-      campaignId: crypto.randomUUID(),
-      storeId: store.id,
-      $headers: authHeaders,
-    });
+    const { data: created, error: createError, status: createStatus } = await api.v1.cards.post(
+      {
+        userId: user.id,
+        campaignId: crypto.randomUUID(),
+        storeId: store.id,
+      },
+      {
+        headers: authHeaders,
+      },
+    );
 
     if (createError) {
       throw createError.value;
@@ -80,7 +84,7 @@ describe('Cards module', () => {
     const cardId = created.data.id;
 
     const { data: fetched, error: fetchError, status: fetchStatus } = await api.v1.cards({ cardId }).get({
-      $headers: authHeaders,
+      headers: authHeaders,
     });
 
     if (fetchError) {
@@ -95,7 +99,7 @@ describe('Cards module', () => {
     expect(fetched.data.id).toBe(cardId);
 
     const { data: qrData, error: qrError, status: qrStatus } = await api.v1.cards({ cardId }).qr.get({
-      $headers: authHeaders,
+      headers: authHeaders,
     });
 
     if (qrError) {
@@ -111,7 +115,7 @@ describe('Cards module', () => {
     expect(qrData.data.payload.entityId).toBe(cardId);
 
     const { data: listData, error: listError, status: listStatus } = await api.v1.users.me.cards.get({
-      $headers: authHeaders,
+      headers: authHeaders,
     });
 
     if (listError) {

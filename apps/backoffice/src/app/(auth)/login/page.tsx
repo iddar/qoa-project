@@ -21,7 +21,9 @@ export default function LoginPage() {
   if (isLoading || isAuthenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-zinc-400">Cargando...</p>
+        <p className="text-sm text-zinc-400 dark:text-zinc-400">
+          Cargando...
+        </p>
       </div>
     );
   }
@@ -46,7 +48,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         <div>
           <h1 className="text-2xl font-semibold">Qoa Backoffice</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-zinc-500 dark:text-zinc-300">
             Inicia sesión para continuar
           </p>
         </div>

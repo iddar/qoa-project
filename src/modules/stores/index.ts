@@ -1,5 +1,6 @@
 import { Elysia } from 'elysia';
-import { desc, eq, lt } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
+import { sql } from 'drizzle-orm/sql';
 import { authPlugin } from '../../app/plugins/auth';
 import { parseLimit, parseCursor } from '../../app/utils/pagination';
 import { db } from '../../db/client';
@@ -18,6 +19,17 @@ type StoreRow = {
   phone: string | null;
   status: string;
   createdAt: Date;
+};
+
+type StoreListRow = {
+  id: string;
+  code: string;
+  name: string;
+  type: string | null;
+  address: string | null;
+  phone: string | null;
+  status: string;
+  created_at: Date | string;
 };
 
 type StoreListQuery = {
@@ -83,12 +95,26 @@ export const storesModule = new Elysia({
       }
 
       const limit = parseLimit(query.limit);
-      let queryBuilder = db.select().from(stores);
-      if (cursorDate) {
-        queryBuilder = queryBuilder.where(lt(stores.createdAt, cursorDate));
-      }
-
-      const results = (await queryBuilder.orderBy(desc(stores.createdAt), desc(stores.id)).limit(limit + 1)) as StoreRow[];
+      const safeLimit = Math.trunc(limit) + 1;
+      const cursorFilter = cursorDate ? sql`where "stores"."created_at" < ${cursorDate}` : sql``;
+      const listQuery = sql`
+        select "id", "code", "name", "type", "address", "phone", "status", "created_at"
+        from "stores"
+        ${cursorFilter}
+        order by "stores"."created_at" desc, "stores"."id" desc
+        limit ${sql.raw(String(safeLimit))}
+      `;
+      const rawResults = (await db.execute(listQuery)) as StoreListRow[];
+      const results = rawResults.map((store) => ({
+        id: store.id,
+        code: store.code,
+        name: store.name,
+        type: store.type,
+        address: store.address,
+        phone: store.phone,
+        status: store.status,
+        createdAt: store.created_at instanceof Date ? store.created_at : new Date(store.created_at),
+      }));
 
       const hasMore = results.length > limit;
       const items = hasMore ? results.slice(0, limit) : results;

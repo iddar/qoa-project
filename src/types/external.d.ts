@@ -87,6 +87,10 @@ declare module 'drizzle-orm/bun-sql' {
   export const drizzle: (client: unknown) => unknown;
 }
 
+declare module 'drizzle-orm/postgres-js' {
+  export const drizzle: (client: unknown) => unknown;
+}
+
 declare module 'drizzle-orm/pg-core' {
   type ColumnBuilder = {
     notNull: () => ColumnBuilder;
@@ -122,6 +126,15 @@ declare module 'bun' {
   export class SQL {
     constructor(connectionString: string);
   }
+}
+
+declare module 'postgres' {
+  type PostgresOptions = {
+    prepare?: boolean;
+  };
+
+  const postgres: (connectionString: string, options?: PostgresOptions) => unknown;
+  export default postgres;
 }
 
 declare module 'bun:test' {

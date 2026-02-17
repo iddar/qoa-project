@@ -83,7 +83,7 @@ export default function StoresPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Tiendas</h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-zinc-500 dark:text-zinc-300">
             Administra las tiendas creadas en el core y genera payloads de QR.
           </p>
         </div>
@@ -94,7 +94,9 @@ export default function StoresPage() {
           <h2 className="text-lg font-semibold">Listado de tiendas</h2>
 
           {isLoading && (
-            <p className="mt-4 text-sm text-zinc-400">Cargando tiendas...</p>
+            <p className="mt-4 text-sm text-zinc-400 dark:text-zinc-400">
+              Cargando tiendas...
+            </p>
           )}
 
           {error && (
@@ -104,7 +106,7 @@ export default function StoresPage() {
           )}
 
           {!isLoading && !error && stores.length === 0 && (
-            <p className="mt-4 text-sm text-zinc-500">
+            <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-300">
               Aún no hay tiendas registradas.
             </p>
           )}
@@ -117,10 +119,16 @@ export default function StoresPage() {
                     <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                       {store.name}
                     </p>
-                    <p className="text-xs text-zinc-500">ID: {store.id}</p>
-                    <p className="text-xs text-zinc-500">Código: {store.code}</p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-300">
+                      ID: {store.id}
+                    </p>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-300">
+                      Código: {store.code}
+                    </p>
                     {store.type && (
-                      <p className="text-xs text-zinc-500">Tipo: {store.type}</p>
+                      <p className="text-xs text-zinc-500 dark:text-zinc-300">
+                        Tipo: {store.type}
+                      </p>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -161,7 +169,7 @@ export default function StoresPage() {
               }}
             >
               <div>
-                <label className="text-xs font-medium text-zinc-500">
+                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                   Nombre
                 </label>
                 <input
@@ -174,7 +182,7 @@ export default function StoresPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-zinc-500">
+                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                   Tipo (opcional)
                 </label>
                 <input
@@ -186,7 +194,7 @@ export default function StoresPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-zinc-500">
+                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                   Dirección (opcional)
                 </label>
                 <input
@@ -198,7 +206,7 @@ export default function StoresPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-zinc-500">
+                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                   Teléfono (opcional)
                 </label>
                 <input
@@ -230,7 +238,9 @@ export default function StoresPage() {
           </div>
 
           {fetchQr.isPending && (
-            <p className="text-xs text-zinc-400">Cargando payload QR...</p>
+            <p className="text-xs text-zinc-400 dark:text-zinc-400">
+              Cargando payload QR...
+            </p>
           )}
           {fetchQr.isError && (
             <p className="text-xs text-red-500">

@@ -65,6 +65,22 @@ describe('Stores module', () => {
 
     const storeId = created.data.id;
 
+    const { data: listed, error: listError, status: listStatus } = await api.v1.stores.get({
+      limit: '20',
+      $headers: authHeaders,
+    });
+
+    if (listError) {
+      throw listError.value;
+    }
+
+    if (!listed) {
+      throw new Error('Store list missing');
+    }
+
+    expect(listStatus).toBe(200);
+    expect(listed.data.some((store: { id: string }) => store.id === storeId)).toBe(true);
+
     const { data: fetched, error: fetchError, status: fetchStatus } = await api.v1.stores({ storeId }).get({
       $headers: authHeaders,
     });

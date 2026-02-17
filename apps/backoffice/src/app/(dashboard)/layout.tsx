@@ -28,7 +28,7 @@ function ApiStatus() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+      <div className="flex items-center gap-1.5 text-xs text-zinc-400 dark:text-zinc-400">
         <span className="h-2 w-2 rounded-full bg-zinc-300" />
         API
       </div>
@@ -48,7 +48,7 @@ function ApiStatus() {
     process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
   return (
-    <div className="flex items-center gap-3 text-xs text-zinc-500">
+    <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-300">
       <span className="flex items-center gap-1.5">
         <span className="h-2 w-2 rounded-full bg-green-500" />
         API {data?.status}
@@ -135,17 +135,21 @@ export default function DashboardLayout({
   if (isLoading || !isAuthenticated) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <p className="text-sm text-zinc-400">Cargando...</p>
+        <p className="text-sm text-zinc-400 dark:text-zinc-400">
+          Cargando...
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-64 border-r border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="flex min-h-screen bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <aside className="w-64 border-r border-zinc-200 bg-zinc-50 p-4 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100">
         <div className="mb-8">
           <h1 className="text-lg font-semibold">Qoa</h1>
-          <p className="text-sm text-zinc-500">Backoffice</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            Backoffice
+          </p>
         </div>
         <nav className="flex flex-col gap-1">
           {navItems.map((item) => (
@@ -154,8 +158,8 @@ export default function DashboardLayout({
               href={item.href}
               className={`rounded-md px-3 py-2 text-sm transition-colors ${
                 pathname === item.href
-                  ? "bg-zinc-200 font-medium dark:bg-zinc-800"
-                  : "hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                  ? "bg-zinc-200 font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
               }`}
             >
               {item.label}
@@ -164,11 +168,13 @@ export default function DashboardLayout({
         </nav>
       </aside>
       <div className="flex flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b border-zinc-200 px-6 dark:border-zinc-800">
+        <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6 dark:border-zinc-800 dark:bg-zinc-950">
           <ApiStatus />
           <ProfileButton />
         </header>
-        <main className="flex-1 p-8">{children}</main>
+        <main className="flex-1 bg-white p-8 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+          {children}
+        </main>
       </div>
     </div>
   );

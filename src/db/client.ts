@@ -1,9 +1,7 @@
-import { drizzle } from 'drizzle-orm/bun-sql';
-import { SQL } from 'bun';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 
 const connectionString = process.env.DATABASE_URL ?? 'postgres://qoa:supersecret@127.0.0.1:5432/qoa_local';
-
-const sql = new SQL(connectionString);
 
 type DbQuery = Promise<unknown[]> & {
   from: (...args: unknown[]) => DbQuery;
@@ -34,8 +32,13 @@ type DbClient = {
   insert: (...args: unknown[]) => DbInsert;
   update: (...args: unknown[]) => DbUpdate;
   delete: (...args: unknown[]) => DbDelete;
+  execute: (query: unknown) => Promise<unknown[]>;
 };
 
-export const db = drizzle(sql) as DbClient;
+const client = postgres(connectionString, {
+  prepare: false,
+});
+
+export const db = drizzle(client) as DbClient;
 
 export type Database = typeof db;

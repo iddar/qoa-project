@@ -93,7 +93,7 @@ export default function CardsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold">Tarjetas</h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-zinc-500 dark:text-zinc-300">
           Crea tarjetas y consulta el payload QR de una tarjeta específica.
         </p>
       </div>
@@ -111,7 +111,7 @@ export default function CardsPage() {
             }}
           >
             <div className="flex-1">
-              <label className="text-xs font-medium text-zinc-500">
+              <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                 ID de tarjeta
               </label>
               <input
@@ -129,7 +129,7 @@ export default function CardsPage() {
           </form>
 
           {isLoading && (
-            <p className="mt-4 text-sm text-zinc-400">
+            <p className="mt-4 text-sm text-zinc-400 dark:text-zinc-400">
               Buscando información de la tarjeta...
             </p>
           )}
@@ -139,7 +139,7 @@ export default function CardsPage() {
             </p>
           )}
           {!isLoading && !error && lookupId && !hasCard && (
-            <p className="mt-4 text-sm text-zinc-500">
+            <p className="mt-4 text-sm text-zinc-500 dark:text-zinc-300">
               No hay datos para la tarjeta consultada.
             </p>
           )}
@@ -149,7 +149,10 @@ export default function CardsPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-2">
                   {cardSummary.map((item) => (
-                    <div key={item.label} className="text-xs text-zinc-500">
+                    <div
+                      key={item.label}
+                      className="text-xs text-zinc-500 dark:text-zinc-300"
+                    >
                       <span className="font-medium text-zinc-700 dark:text-zinc-200">
                         {item.label}:
                       </span>{" "}
@@ -191,7 +194,7 @@ export default function CardsPage() {
             }}
           >
             <div>
-              <label className="text-xs font-medium text-zinc-500">
+              <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                 ID de usuario
               </label>
               <input
@@ -204,7 +207,7 @@ export default function CardsPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-zinc-500">
+              <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                 ID de campaña
               </label>
               <input
@@ -220,7 +223,7 @@ export default function CardsPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-medium text-zinc-500">
+              <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                 ID de tienda (opcional)
               </label>
               <input
@@ -253,7 +256,9 @@ export default function CardsPage() {
       </section>
 
       {fetchQr.isPending && (
-        <p className="text-xs text-zinc-400">Cargando payload QR...</p>
+        <p className="text-xs text-zinc-400 dark:text-zinc-400">
+          Cargando payload QR...
+        </p>
       )}
       {fetchQr.isError && (
         <p className="text-xs text-red-500">

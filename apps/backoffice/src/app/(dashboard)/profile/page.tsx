@@ -37,7 +37,9 @@ export default function ProfilePage() {
       <h1 className="mb-6 text-2xl font-semibold">Mi perfil</h1>
 
       {isLoading && (
-        <p className="text-sm text-zinc-400">Cargando perfil...</p>
+        <p className="text-sm text-zinc-400 dark:text-zinc-400">
+          Cargando perfil...
+        </p>
       )}
 
       {error && (
@@ -63,7 +65,7 @@ export default function ProfilePage() {
               <p className="text-lg font-medium">
                 {user.name ?? "Sin nombre"}
               </p>
-              <p className="text-sm text-zinc-500">
+              <p className="text-sm text-zinc-500 dark:text-zinc-300">
                 {roleLabels[user.role] ?? user.role}
               </p>
             </div>
@@ -72,25 +74,35 @@ export default function ProfilePage() {
           <div className="rounded-lg border border-zinc-200 dark:border-zinc-800">
             <dl className="divide-y divide-zinc-200 dark:divide-zinc-800">
               <div className="flex justify-between px-4 py-3">
-                <dt className="text-sm text-zinc-500">ID</dt>
+                <dt className="text-sm text-zinc-500 dark:text-zinc-300">
+                  ID
+                </dt>
                 <dd className="font-mono text-sm">{user.id}</dd>
               </div>
               <div className="flex justify-between px-4 py-3">
-                <dt className="text-sm text-zinc-500">Email</dt>
+                <dt className="text-sm text-zinc-500 dark:text-zinc-300">
+                  Email
+                </dt>
                 <dd className="text-sm">{user.email ?? "—"}</dd>
               </div>
               <div className="flex justify-between px-4 py-3">
-                <dt className="text-sm text-zinc-500">Teléfono</dt>
+                <dt className="text-sm text-zinc-500 dark:text-zinc-300">
+                  Teléfono
+                </dt>
                 <dd className="text-sm">{user.phone}</dd>
               </div>
               <div className="flex justify-between px-4 py-3">
-                <dt className="text-sm text-zinc-500">Rol</dt>
+                <dt className="text-sm text-zinc-500 dark:text-zinc-300">
+                  Rol
+                </dt>
                 <dd className="text-sm">
                   {roleLabels[user.role] ?? user.role}
                 </dd>
               </div>
               <div className="flex justify-between px-4 py-3">
-                <dt className="text-sm text-zinc-500">Estado</dt>
+                <dt className="text-sm text-zinc-500 dark:text-zinc-300">
+                  Estado
+                </dt>
                 <dd className="text-sm">
                   <span
                     className={
@@ -105,7 +117,9 @@ export default function ProfilePage() {
               </div>
               {user.tenantId && (
                 <div className="flex justify-between px-4 py-3">
-                  <dt className="text-sm text-zinc-500">Tenant</dt>
+                  <dt className="text-sm text-zinc-500 dark:text-zinc-300">
+                    Tenant
+                  </dt>
                   <dd className="font-mono text-sm">
                     {user.tenantType}: {user.tenantId}
                   </dd>
