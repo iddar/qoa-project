@@ -1,6 +1,4 @@
-import { Elysia } from 'elysia';
-
-const TRACE_HEADER = 'x-trace-id';
+export const TRACE_HEADER = 'x-trace-id';
 const REQUEST_ID_HEADER = 'x-request-id';
 
 type ErrorEnvelope = {
@@ -15,6 +13,24 @@ type ErrorEnvelope = {
   };
 };
 
+type HookContext = {
+  request: Request;
+  set: {
+    headers: Record<string, string>;
+  };
+  store: Record<string, unknown>;
+};
+
+type MapResponseContext = HookContext & {
+  response: unknown;
+};
+
+type ErrorContext = HookContext & {
+  code: string;
+  error: Error;
+  path: string;
+};
+
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 
 const isErrorEnvelope = (value: unknown): value is ErrorEnvelope => {
@@ -23,11 +39,7 @@ const isErrorEnvelope = (value: unknown): value is ErrorEnvelope => {
   }
 
   const maybeError = value.error;
-  if (!isObject(maybeError)) {
-    return false;
-  }
-
-  return typeof maybeError.code === 'string' && typeof maybeError.message === 'string';
+  return isObject(maybeError) && typeof maybeError.code === 'string' && typeof maybeError.message === 'string';
 };
 
 const toTraceId = (request: Request) => {
@@ -44,19 +56,13 @@ const toTraceId = (request: Request) => {
   return crypto.randomUUID();
 };
 
-const enrichWithTraceMeta = (value: ErrorEnvelope, traceId: string): ErrorEnvelope => {
-  if (value.meta?.traceId && value.meta.requestId) {
-    return value;
-  }
-
-  return {
-    ...value,
-    meta: {
-      requestId: traceId,
-      traceId,
-    },
-  };
-};
+const enrichWithTraceMeta = (value: ErrorEnvelope, traceId: string): ErrorEnvelope => ({
+  ...value,
+  meta: {
+    requestId: traceId,
+    traceId,
+  },
+});
 
 const mapErrorCode = (code: string) => {
   if (code === 'VALIDATION' || code === 'PARSE') {
@@ -107,88 +113,35 @@ const mapErrorPayload = (code: string, error: Error): ErrorEnvelope => {
   };
 };
 
-export const observabilityPlugin = new Elysia({ name: 'observability' })
-  .onRequest(({ request, set, store }) => {
-    const traceId = toTraceId(request);
-    store.traceId = traceId;
-    set.headers[TRACE_HEADER] = traceId;
-  })
-  .mapResponse(async ({ response, store, set }) => {
-    const traceId = typeof store.traceId === 'string' ? store.traceId : crypto.randomUUID();
-    set.headers[TRACE_HEADER] = traceId;
+export const registerTraceContext = ({ request, set, store }: HookContext) => {
+  const traceId = toTraceId(request);
+  store.traceId = traceId;
+  set.headers[TRACE_HEADER] = traceId;
+};
 
-    if (response instanceof Response) {
-      const responseHeaders = new Headers(response.headers);
-      responseHeaders.set(TRACE_HEADER, traceId);
+export const attachTraceToErrorResponses = (context: MapResponseContext) => {
+  const traceId = typeof context.store.traceId === 'string' ? context.store.traceId : toTraceId(context.request);
+  context.set.headers[TRACE_HEADER] = traceId;
 
-      if (!responseHeaders.get('content-type')?.includes('application/json')) {
-        return new Response(response.body, {
-          status: response.status,
-          headers: responseHeaders,
-        });
-      }
+  if (isErrorEnvelope(context.response)) {
+    return enrichWithTraceMeta(context.response, traceId);
+  }
+};
 
-      const rawBody = await response.text();
-      if (!rawBody) {
-        return new Response(rawBody, {
-          status: response.status,
-          headers: responseHeaders,
-        });
-      }
+export const normalizeUnhandledErrors = ({ code, error, path, request, set, store }: ErrorContext) => {
+  const traceId = typeof store.traceId === 'string' ? store.traceId : toTraceId(request);
+  set.headers[TRACE_HEADER] = traceId;
 
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(rawBody);
-      } catch {
-        return new Response(rawBody, {
-          status: response.status,
-          headers: responseHeaders,
-        });
-      }
+  const statusCode = mapErrorCode(code);
+  const payload = enrichWithTraceMeta(mapErrorPayload(code, error), traceId);
 
-      if (isErrorEnvelope(parsed)) {
-        return new Response(JSON.stringify(enrichWithTraceMeta(parsed, traceId)), {
-          status: response.status,
-          headers: responseHeaders,
-        });
-      }
+  console.error(`[trace:${traceId}] ${request.method} ${path} -> ${statusCode} (${code})`);
 
-      if (response.status === 422) {
-        return new Response(
-          JSON.stringify(enrichWithTraceMeta(mapErrorPayload('VALIDATION', new Error('VALIDATION')), traceId)),
-          {
-            status: response.status,
-            headers: responseHeaders,
-          },
-        );
-      }
-
-      return new Response(rawBody, {
-        status: response.status,
-        headers: responseHeaders,
-      });
-    }
-
-    if (!isErrorEnvelope(response)) {
-      return;
-    }
-
-    return enrichWithTraceMeta(response, traceId);
-  })
-  .onError(({ code, error, path, request, set, store }) => {
-    const traceId = typeof store.traceId === 'string' ? store.traceId : toTraceId(request);
-    set.headers[TRACE_HEADER] = traceId;
-
-    const statusCode = mapErrorCode(code);
-    const payload = enrichWithTraceMeta(mapErrorPayload(code, error), traceId);
-
-    console.error(`[trace:${traceId}] ${request.method} ${path} -> ${statusCode} (${code})`);
-
-    return new Response(JSON.stringify(payload), {
-      status: statusCode,
-      headers: {
-        'content-type': 'application/json',
-        [TRACE_HEADER]: traceId,
-      },
-    });
+  return new Response(JSON.stringify(payload), {
+    status: statusCode,
+    headers: {
+      'content-type': 'application/json',
+      [TRACE_HEADER]: traceId,
+    },
   });
+};

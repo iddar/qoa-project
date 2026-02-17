@@ -8,14 +8,16 @@ import { cardsModule } from '../modules/cards';
 import { healthModule } from '../modules/health';
 import { storesModule } from '../modules/stores';
 import { usersModule } from '../modules/users';
-import { observabilityPlugin } from './plugins/observability';
+import { attachTraceToErrorResponses, normalizeUnhandledErrors, registerTraceContext } from './plugins/observability';
 import { openApiPlugin } from './plugins/openapi';
 
 export const createApp = () =>
   new Elysia({ name: 'qoa-app', prefix: '/v1' })
     .use(Logestic.preset('common'))
     .use(cors())
-    .use(observabilityPlugin)
+    .onRequest(registerTraceContext)
+    .mapResponse(attachTraceToErrorResponses)
+    .onError(normalizeUnhandledErrors)
     .use(openApiPlugin)
     .use(healthModule)
     .use(authModule)

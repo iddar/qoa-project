@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'bun:test';
+import { Elysia } from 'elysia';
 import { createApp } from '../app';
+import {
+  attachTraceToErrorResponses,
+  normalizeUnhandledErrors,
+  registerTraceContext,
+} from '../app/plugins/observability';
 
 type ErrorResponse = {
   error: {
@@ -11,11 +17,6 @@ type ErrorResponse = {
     requestId: string;
     traceId: string;
   };
-};
-
-type ValidationErrorResponse = {
-  type: string;
-  message: string;
 };
 
 const app = createApp();
@@ -37,10 +38,12 @@ describe('Observability middleware', () => {
       }),
     );
 
-    const payload = (await response.json()) as ValidationErrorResponse;
+    const payload = (await response.json()) as ErrorResponse;
 
-    expect(response.status).toBe(422);
-    expect(payload.type).toBe('validation');
+    expect(response.status).toBe(400);
+    expect(payload.error.code).toBe('INVALID_ARGUMENT');
+    expect(payload.meta?.traceId).toBe(traceId ?? undefined);
+    expect(payload.meta?.requestId).toBe(traceId ?? undefined);
     expect(response.headers.get('x-trace-id')).toBe(traceId);
   });
 
@@ -63,6 +66,26 @@ describe('Observability middleware', () => {
 
     expect(response.status).toBe(401);
     expect(payload.error.code).toBe('UNAUTHORIZED');
+    expect(Boolean(traceId)).toBe(true);
+  });
+
+  it('normalizes unhandled errors with trace metadata', async () => {
+    const failingApp = new Elysia()
+      .onRequest(registerTraceContext)
+      .mapResponse(attachTraceToErrorResponses)
+      .onError(normalizeUnhandledErrors)
+      .get('/boom', () => {
+        throw new Error('boom');
+      });
+
+    const response = await failingApp.handle(new Request('http://e.ly/boom'));
+    const payload = (await response.json()) as ErrorResponse;
+    const traceId = response.headers.get('x-trace-id');
+
+    expect(response.status).toBe(500);
+    expect(payload.error.code).toBe('INTERNAL_ERROR');
+    expect(payload.meta?.traceId).toBe(traceId ?? undefined);
+    expect(payload.meta?.requestId).toBe(traceId ?? undefined);
     expect(Boolean(traceId)).toBe(true);
   });
 });
