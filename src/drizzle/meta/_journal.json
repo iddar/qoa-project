@@ -43,6 +43,13 @@
       "when": 1771367998503,
       "tag": "0005_nappy_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1771368649459,
+      "tag": "0006_eager_black_widow",
+      "breakpoints": true
     }
   ]
 }

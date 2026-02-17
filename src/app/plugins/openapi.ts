@@ -41,6 +41,10 @@ export const openApiPlugin = openapi({
         name: 'Campaigns',
         description: 'Campaign lifecycle and audit endpoints.',
       },
+      {
+        name: 'Transactions',
+        description: 'Transaction registration and retrieval endpoints.',
+      },
     ],
   },
 });

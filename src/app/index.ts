@@ -8,6 +8,7 @@ import { campaignsModule } from '../modules/campaigns';
 import { cardsModule } from '../modules/cards';
 import { healthModule } from '../modules/health';
 import { storesModule } from '../modules/stores';
+import { transactionsModule } from '../modules/transactions';
 import { usersModule } from '../modules/users';
 import { attachTraceToErrorResponses, normalizeUnhandledErrors, registerTraceContext } from './plugins/observability';
 import { openApiPlugin } from './plugins/openapi';
@@ -25,6 +26,7 @@ export const createApp = () =>
     .use(campaignsModule)
     .use(usersModule)
     .use(storesModule)
-    .use(cardsModule);
+    .use(cardsModule)
+    .use(transactionsModule);
 
 export type App = ReturnType<typeof createApp>;

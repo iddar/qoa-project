@@ -1010,6 +1010,12 @@ paths:
             schema:
               $ref: '#/components/schemas/TransactionCreate'
       responses:
+        '200':
+          description: Transacción previamente registrada (idempotencia)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionResponse'
         '201':
           description: Transacción creada
           content:
@@ -2333,6 +2339,9 @@ components:
         metadata:
           type: object
           description: Datos adicionales de la transacción
+        idempotencyKey:
+          type: string
+          description: Clave única para evitar duplicados en reintentos de ingestión
 
     TransactionResponse:
       type: object
