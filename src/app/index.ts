@@ -8,12 +8,14 @@ import { cardsModule } from '../modules/cards';
 import { healthModule } from '../modules/health';
 import { storesModule } from '../modules/stores';
 import { usersModule } from '../modules/users';
+import { observabilityPlugin } from './plugins/observability';
 import { openApiPlugin } from './plugins/openapi';
 
 export const createApp = () =>
   new Elysia({ name: 'qoa-app', prefix: '/v1' })
     .use(Logestic.preset('common'))
     .use(cors())
+    .use(observabilityPlugin)
     .use(openApiPlugin)
     .use(healthModule)
     .use(authModule)
