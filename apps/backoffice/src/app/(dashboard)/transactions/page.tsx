@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
@@ -12,6 +12,18 @@ type TransactionForm = {
   quantity: string;
   amount: string;
   idempotencyKey: string;
+};
+
+type TransactionFilterForm = {
+  userId: string;
+  storeId: string;
+  from: string;
+  to: string;
+};
+
+type ReceiptFilterForm = {
+  source: string;
+  status: string;
 };
 
 type TransactionRow = {
@@ -27,9 +39,14 @@ type WebhookReceipt = {
   id: string;
   source: string;
   status: string;
+  hash: string;
   replayCount: number;
   transactionId?: string;
+  externalEventId?: string;
   receivedAt: string;
+  lastReceivedAt?: string;
+  processedAt?: string;
+  error?: string;
 };
 
 type WebhookMetrics = {
@@ -39,7 +56,7 @@ type WebhookMetrics = {
   errors: number;
 };
 
-const emptyForm: TransactionForm = {
+const emptyTxForm: TransactionForm = {
   userId: "",
   storeId: "",
   productId: "",
@@ -48,16 +65,60 @@ const emptyForm: TransactionForm = {
   idempotencyKey: "",
 };
 
+const emptyTxFilters: TransactionFilterForm = {
+  userId: "",
+  storeId: "",
+  from: "",
+  to: "",
+};
+
+const emptyReceiptFilters: ReceiptFilterForm = {
+  source: "",
+  status: "",
+};
+
+const compactHash = (hash: string) =>
+  hash.length <= 16 ? hash : `${hash.slice(0, 10)}...${hash.slice(-6)}`;
+
 export default function TransactionsPage() {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState<TransactionForm>(emptyForm);
+  const [form, setForm] = useState<TransactionForm>(emptyTxForm);
+  const [txFilters, setTxFilters] = useState<TransactionFilterForm>(
+    emptyTxFilters,
+  );
+  const [receiptFilters, setReceiptFilters] = useState<ReceiptFilterForm>(
+    emptyReceiptFilters,
+  );
+  const [expandedReceiptId, setExpandedReceiptId] = useState<string | null>(
+    null,
+  );
+
+  const txQuery = useMemo(
+    () => ({
+      limit: "50",
+      userId: txFilters.userId || undefined,
+      storeId: txFilters.storeId || undefined,
+      from: txFilters.from || undefined,
+      to: txFilters.to || undefined,
+    }),
+    [txFilters],
+  );
+
+  const receiptsQuery = useMemo(
+    () => ({
+      limit: "20",
+      source: receiptFilters.source || undefined,
+      status: receiptFilters.status || undefined,
+    }),
+    [receiptFilters],
+  );
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["transactions"],
+    queryKey: ["transactions", txQuery],
     queryFn: async () => {
       const token = getAccessToken();
       const { data, error } = await api.v1.transactions.get({
-        query: { limit: "50" },
+        query: txQuery,
         headers: { authorization: `Bearer ${token}` },
       });
       if (error) throw error;
@@ -66,10 +127,13 @@ export default function TransactionsPage() {
   });
 
   const { data: webhookMetricsData } = useQuery({
-    queryKey: ["transactions-webhook-metrics"],
+    queryKey: ["transactions-webhook-metrics", receiptFilters.source],
     queryFn: async () => {
       const token = getAccessToken();
       const { data, error } = await api.v1.transactions["webhook-metrics"].get({
+        query: {
+          source: receiptFilters.source || undefined,
+        },
         headers: { authorization: `Bearer ${token}` },
       });
       if (error) throw error;
@@ -79,11 +143,11 @@ export default function TransactionsPage() {
   });
 
   const { data: webhookReceiptsData } = useQuery({
-    queryKey: ["transactions-webhook-receipts"],
+    queryKey: ["transactions-webhook-receipts", receiptsQuery],
     queryFn: async () => {
       const token = getAccessToken();
       const { data, error } = await api.v1.transactions["webhook-receipts"].get({
-        query: { limit: "20" },
+        query: receiptsQuery,
         headers: { authorization: `Bearer ${token}` },
       });
       if (error) throw error;
@@ -116,7 +180,7 @@ export default function TransactionsPage() {
       return data;
     },
     onSuccess: () => {
-      setForm(emptyForm);
+      setForm(emptyTxForm);
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
   });
@@ -145,10 +209,9 @@ export default function TransactionsPage() {
       <section className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
         <p className="font-semibold">Cómo usar esta pantalla</p>
         <p className="mt-1">
-          1) Usa &quot;Registrar transacción&quot; para pruebas manuales. 2) Revisa
-          métricas de webhook para detectar duplicados/reintentos. 3) Consulta el
-          historial para correlacionar cada compra con su comportamiento de
-          ingestión.
+          1) Usa &quot;Registrar transacción&quot; para pruebas manuales. 2) Filtra
+          transacciones/recibos para investigar incidencias puntuales. 3) Revisa
+          métricas de webhook para detectar duplicados y errores de firma.
         </p>
       </section>
 
@@ -185,6 +248,44 @@ export default function TransactionsPage() {
                 final ya desduplicada por idempotency key.
               </p>
             </div>
+          </div>
+
+          <div className="mt-3 grid gap-2 rounded-md border border-zinc-200 bg-zinc-50 p-3 sm:grid-cols-2 dark:border-zinc-800 dark:bg-zinc-900">
+            <input
+              placeholder="Filtrar por userId"
+              value={txFilters.userId}
+              onChange={(event) =>
+                setTxFilters((prev) => ({ ...prev, userId: event.target.value }))
+              }
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            />
+            <input
+              placeholder="Filtrar por storeId"
+              value={txFilters.storeId}
+              onChange={(event) =>
+                setTxFilters((prev) => ({
+                  ...prev,
+                  storeId: event.target.value,
+                }))
+              }
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            />
+            <input
+              type="datetime-local"
+              value={txFilters.from}
+              onChange={(event) =>
+                setTxFilters((prev) => ({ ...prev, from: event.target.value }))
+              }
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            />
+            <input
+              type="datetime-local"
+              value={txFilters.to}
+              onChange={(event) =>
+                setTxFilters((prev) => ({ ...prev, to: event.target.value }))
+              }
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            />
           </div>
 
           {isLoading && (
@@ -328,29 +429,87 @@ export default function TransactionsPage() {
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h2 className="text-lg font-semibold">Recibos de webhook</h2>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-300">
-          Registro de eventos entrantes por hash de payload. `replayCount`
-          aumenta cuando llega el mismo evento de nuevo.
-        </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold">Recibos de webhook</h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-300">
+              Registro de eventos entrantes por hash de payload. Abre un recibo
+              para ver el detalle operativo.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:w-[380px]">
+            <input
+              placeholder="Filtrar source"
+              value={receiptFilters.source}
+              onChange={(event) =>
+                setReceiptFilters((prev) => ({
+                  ...prev,
+                  source: event.target.value,
+                }))
+              }
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            />
+            <input
+              placeholder="Filtrar status"
+              value={receiptFilters.status}
+              onChange={(event) =>
+                setReceiptFilters((prev) => ({
+                  ...prev,
+                  status: event.target.value,
+                }))
+              }
+              className="rounded-md border border-zinc-200 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            />
+          </div>
+        </div>
 
         <ul className="mt-4 divide-y divide-zinc-200 dark:divide-zinc-800">
-          {webhookReceipts.map((receipt) => (
-            <li key={receipt.id} className="py-3">
-              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-                {receipt.source} · {receipt.status}
-              </p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-300">
-                tx: {receipt.transactionId ?? "sin tx"}
-              </p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-300">
-                replays: {receipt.replayCount}
-              </p>
-              <p className="text-xs text-zinc-500 dark:text-zinc-300">
-                {new Date(receipt.receivedAt).toLocaleString()}
-              </p>
-            </li>
-          ))}
+          {webhookReceipts.map((receipt) => {
+            const expanded = expandedReceiptId === receipt.id;
+            return (
+              <li key={receipt.id} className="py-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedReceiptId((prev) =>
+                      prev === receipt.id ? null : receipt.id,
+                    )
+                  }
+                  className="w-full text-left"
+                >
+                  <p className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                    {receipt.source} · {receipt.status} · hash {compactHash(receipt.hash)}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-300">
+                    tx: {receipt.transactionId ?? "sin tx"} · replays: {receipt.replayCount}
+                  </p>
+                </button>
+
+                {expanded && (
+                  <div className="mt-2 rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+                    <p className="text-zinc-600 dark:text-zinc-300">
+                      hash: {receipt.hash}
+                    </p>
+                    <p className="text-zinc-600 dark:text-zinc-300">
+                      externalEventId: {receipt.externalEventId ?? "-"}
+                    </p>
+                    <p className="text-zinc-600 dark:text-zinc-300">
+                      receivedAt: {new Date(receipt.receivedAt).toLocaleString()}
+                    </p>
+                    <p className="text-zinc-600 dark:text-zinc-300">
+                      lastReceivedAt: {receipt.lastReceivedAt ? new Date(receipt.lastReceivedAt).toLocaleString() : "-"}
+                    </p>
+                    <p className="text-zinc-600 dark:text-zinc-300">
+                      processedAt: {receipt.processedAt ? new Date(receipt.processedAt).toLocaleString() : "-"}
+                    </p>
+                    <p className="text-zinc-600 dark:text-zinc-300">
+                      error: {receipt.error ?? "-"}
+                    </p>
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </section>
     </div>
