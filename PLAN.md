@@ -117,7 +117,7 @@
 **Avance real actual (2026-02-18):**
 - Sprint 1: completo (middleware global de errores + `trace_id` en respuestas de error).
 - Sprint 2: `users`, `stores` y `cards` implementados y validados por tests de integración.
-- Sprint 3: `campaigns` y `transactions` implementados con tests; pendiente motor de reglas + balance tracking.
+- Sprint 3: catálogo (`cpgs`, `brands`, `products`), `campaigns` y `transactions` implementados con tests; pendiente motor de reglas + balance tracking.
 - Webhooks de transacciones: firma HMAC opcional por fuente, desduplicación por hash y endpoints de observabilidad (`webhook-receipts`, `webhook-metrics`).
 
 **Estructura del proyecto:**

@@ -65,6 +65,7 @@
 - [ ] Integración WhatsApp básica
 
 ### Sprint 3
+- [x] Catálogo base (CPGs, Brands, Products)
 - [x] Módulo Campaigns
 - [x] Módulo Transactions
 - [ ] Motor de reglas (puntos/estampas)
@@ -121,6 +122,7 @@
 | 2026-02-17 | Sprint 2 actualizado: módulos Users, Stores y Cards implementados y cubiertos por tests |
 | 2026-02-17 | Normalización de auth con `beforeHandle: authGuard(...)` en Users/Stores/Cards |
 | 2026-02-18 | Sprint 3 parcial: Campaigns + Transactions implementados, incluyendo webhook idempotente con receipts y métricas |
+| 2026-02-18 | Catálogo CPG/Brands/Products implementado en backend + backoffice |
 
 ---
 
