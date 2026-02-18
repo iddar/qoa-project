@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, or } from 'drizzle-orm';
 import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { allUserRoles } from '../../app/plugins/roles';
@@ -115,7 +115,7 @@ const isCpgScopedAuth = (auth: AuthContext) => {
     return auth.tenantType === 'cpg';
   }
 
-  return auth.role === 'cpg_admin' && auth.tenantType === 'cpg';
+  return auth.type === 'jwt' || auth.type === 'dev' ? auth.role === 'cpg_admin' && auth.tenantType === 'cpg' : false;
 };
 
 const validateCampaignScope = (auth: AuthContext, campaign: CampaignScopeRow, status: StatusHandler) => {
@@ -217,7 +217,11 @@ export const rewardsModule = new Elysia({
           };
         }
 
-        conditions.push(inArray(rewards.campaignId, tenantCampaignIds));
+        conditions.push(
+          tenantCampaignIds.length === 1
+            ? eq(rewards.campaignId, tenantCampaignIds[0] ?? '')
+            : or(...tenantCampaignIds.map((campaignId) => eq(rewards.campaignId, campaignId))),
+        );
       }
 
       if (isTruthy(query.available)) {

@@ -436,7 +436,7 @@ export const reportsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_support', 'qoa_admin'], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       query: reportSummaryQuery,
       response: {
         200: cpgReportSummaryResponse,
@@ -573,7 +573,7 @@ export const reportsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_support', 'qoa_admin'], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       query: reportSummaryQuery,
       response: {
         200: campaignReportSummaryResponse,
