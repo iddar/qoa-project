@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { balances, cards, campaigns, redemptions, rewards, stores, users } from '../db/schema';
+import { balances, campaigns, cards, cpgs, redemptions, rewards, stores, users } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -147,5 +147,129 @@ describe('Rewards module', () => {
     await db.delete(campaigns).where(eq(campaigns.id, campaign!.id));
     await db.delete(stores).where(eq(stores.id, store!.id));
     await db.delete(users).where(eq(users.id, user!.id));
+  });
+
+  it('enforces cpg tenant scope for rewards list/create/get', async () => {
+    const [ownedCpg] = (await db
+      .insert(cpgs)
+      .values({
+        name: `CPG Rewards Own ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: cpgs.id })) as Array<{ id: string }>;
+
+    const [foreignCpg] = (await db
+      .insert(cpgs)
+      .values({
+        name: `CPG Rewards Foreign ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: cpgs.id })) as Array<{ id: string }>;
+
+    if (!ownedCpg || !foreignCpg) {
+      throw new Error('Failed to create CPG records');
+    }
+
+    const [ownedCampaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign Rewards Own ${crypto.randomUUID().slice(0, 6)}`,
+        cpgId: ownedCpg.id,
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    const [foreignCampaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign Rewards Foreign ${crypto.randomUUID().slice(0, 6)}`,
+        cpgId: foreignCpg.id,
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    if (!ownedCampaign || !foreignCampaign) {
+      throw new Error('Failed to create campaign records');
+    }
+
+    const [ownedReward] = (await db
+      .insert(rewards)
+      .values({
+        campaignId: ownedCampaign.id,
+        name: `Reward Own ${crypto.randomUUID().slice(0, 5)}`,
+        cost: 10,
+        stock: 5,
+        status: 'active',
+      })
+      .returning({ id: rewards.id })) as Array<{ id: string }>;
+
+    const [foreignReward] = (await db
+      .insert(rewards)
+      .values({
+        campaignId: foreignCampaign.id,
+        name: `Reward Foreign ${crypto.randomUUID().slice(0, 5)}`,
+        cost: 10,
+        stock: 5,
+        status: 'active',
+      })
+      .returning({ id: rewards.id })) as Array<{ id: string }>;
+
+    if (!ownedReward || !foreignReward) {
+      throw new Error('Failed to create reward records');
+    }
+
+    const cpgHeaders = {
+      authorization: 'Bearer dev-token',
+      'x-dev-user-id': 'dev-cpg-admin-rewards',
+      'x-dev-user-role': 'cpg_admin',
+      'x-dev-tenant-id': ownedCpg.id,
+      'x-dev-tenant-type': 'cpg',
+    };
+
+    const ownList = await api.v1.rewards.get({
+      headers: cpgHeaders,
+    });
+
+    if (ownList.error) {
+      throw ownList.error.value;
+    }
+    if (!ownList.data) {
+      throw new Error('Rewards list response missing');
+    }
+
+    expect(ownList.status).toBe(200);
+    expect(ownList.data.data.some((item: { id: string }) => item.id === ownedReward.id)).toBe(true);
+    expect(ownList.data.data.some((item: { id: string }) => item.id === foreignReward.id)).toBe(false);
+
+    const forbiddenCreate = await api.v1.rewards.post(
+      {
+        campaignId: foreignCampaign.id,
+        name: `Reward Blocked ${crypto.randomUUID().slice(0, 5)}`,
+        cost: 8,
+        stock: 3,
+      },
+      {
+        headers: cpgHeaders,
+      },
+    );
+
+    if (!forbiddenCreate.error) {
+      throw new Error('Expected forbidden reward create');
+    }
+
+    expect(forbiddenCreate.status).toBe(403);
+
+    const forbiddenGet = await api.v1.rewards({ rewardId: foreignReward.id }).get({
+      headers: cpgHeaders,
+    });
+
+    if (!forbiddenGet.error) {
+      throw new Error('Expected forbidden reward get');
+    }
+
+    expect(forbiddenGet.status).toBe(403);
+
+    await db.delete(rewards).where(eq(rewards.id, foreignReward.id));
+    await db.delete(rewards).where(eq(rewards.id, ownedReward.id));
+    await db.delete(campaigns).where(eq(campaigns.id, foreignCampaign.id));
+    await db.delete(campaigns).where(eq(campaigns.id, ownedCampaign.id));
+    await db.delete(cpgs).where(eq(cpgs.id, foreignCpg.id));
+    await db.delete(cpgs).where(eq(cpgs.id, ownedCpg.id));
   });
 });

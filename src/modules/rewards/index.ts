@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, lt, or } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
@@ -51,6 +51,11 @@ type CardBalanceRow = {
   campaignId: string;
   current: number;
   lifetime: number;
+};
+
+type CampaignScopeRow = {
+  id: string;
+  cpgId: string | null;
 };
 
 type RewardListContext = {
@@ -111,15 +116,47 @@ const ensureReward = async (rewardId: string) => {
 
 const ensureCampaignExists = async (campaignId: string) => {
   const [campaign] = (await db
-    .select({ id: campaigns.id })
+    .select({ id: campaigns.id, cpgId: campaigns.cpgId })
     .from(campaigns)
-    .where(eq(campaigns.id, campaignId))) as Array<{
-    id: string;
-  }>;
+    .where(eq(campaigns.id, campaignId))) as CampaignScopeRow[];
   return campaign ?? null;
 };
 
 const isTruthy = (value?: string) => ['1', 'true', 'yes'].includes((value ?? '').toLowerCase());
+
+const isCpgScopedAuth = (auth: AuthContext) => {
+  if (auth.type === 'api_key' || auth.type === 'dev_api_key') {
+    return auth.tenantType === 'cpg';
+  }
+
+  return auth.role === 'cpg_admin' && auth.tenantType === 'cpg';
+};
+
+const validateCampaignScope = (auth: AuthContext, campaign: CampaignScopeRow, status: StatusHandler) => {
+  if (!isCpgScopedAuth(auth)) {
+    return null;
+  }
+
+  if (!auth.tenantId) {
+    return status(403, {
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Usuario CPG sin tenant asociado',
+      },
+    });
+  }
+
+  if (campaign.cpgId !== auth.tenantId) {
+    return status(403, {
+      error: {
+        code: 'FORBIDDEN',
+        message: 'No puedes operar recompensas de otro CPG',
+      },
+    });
+  }
+
+  return null;
+};
 
 export const rewardsModule = new Elysia({
   prefix: '/rewards',
@@ -151,8 +188,50 @@ export const rewardsModule = new Elysia({
       }
 
       const conditions = [];
+      if (isCpgScopedAuth(auth) && !auth.tenantId) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Usuario CPG sin tenant asociado',
+          },
+        });
+      }
+
       if (query.campaignId) {
+        const campaign = await ensureCampaignExists(query.campaignId);
+        if (!campaign) {
+          return status(404, {
+            error: {
+              code: 'CAMPAIGN_NOT_FOUND',
+              message: 'Campaña no encontrada',
+            },
+          });
+        }
+
+        const scopeError = validateCampaignScope(auth, campaign, status);
+        if (scopeError) {
+          return scopeError;
+        }
+
         conditions.push(eq(rewards.campaignId, query.campaignId));
+      } else if (isCpgScopedAuth(auth) && auth.tenantId) {
+        const tenantCampaignRows = (await db
+          .select({ id: campaigns.id })
+          .from(campaigns)
+          .where(eq(campaigns.cpgId, auth.tenantId))) as Array<{ id: string }>;
+
+        const tenantCampaignIds = tenantCampaignRows.map((item) => item.id);
+        if (tenantCampaignIds.length === 0) {
+          return {
+            data: [],
+            pagination: {
+              hasMore: false,
+              nextCursor: undefined,
+            },
+          };
+        }
+
+        conditions.push(inArray(rewards.campaignId, tenantCampaignIds));
       }
 
       if (isTruthy(query.available)) {
@@ -219,6 +298,11 @@ export const rewardsModule = new Elysia({
         });
       }
 
+      const scopeError = validateCampaignScope(auth, campaign, status);
+      if (scopeError) {
+        return scopeError;
+      }
+
       const [created] = (await db
         .insert(rewards)
         .values({
@@ -280,6 +364,21 @@ export const rewardsModule = new Elysia({
         });
       }
 
+      const campaign = await ensureCampaignExists(reward.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      const scopeError = validateCampaignScope(auth, campaign, status);
+      if (scopeError) {
+        return scopeError;
+      }
+
       return {
         data: serializeReward(reward),
       };
@@ -315,6 +414,21 @@ export const rewardsModule = new Elysia({
             message: 'Recompensa no encontrada',
           },
         });
+      }
+
+      const campaign = await ensureCampaignExists(reward.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      const scopeError = validateCampaignScope(auth, campaign, status);
+      if (scopeError) {
+        return scopeError;
       }
 
       if (reward.status !== 'active') {
