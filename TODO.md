@@ -139,6 +139,7 @@
 | 2026-02-18 | CPG Portal agrega módulo de recompensas y nueva métrica de efectividad (canjes por recompensa activa) |
 | 2026-02-18 | Fase 6 acelera: creadas apps Store Dashboard y Digital Wallet con flujos funcionales iniciales |
 | 2026-02-18 | UX de Digital Wallet reforzada con experiencia mobile-first para tarjeta, historial y recompensas |
+| 2026-02-18 | Wallet completa flujo manual de compra por payload y agrupación de transacciones por tienda/marca/campaña |
 
 ---
 

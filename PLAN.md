@@ -131,6 +131,7 @@
 - CPG Portal v2.1: módulo de recompensas con creación/listado por campaña y KPI de efectividad de canje.
 - Fase 6 en ejecución activa: nuevas apps `apps/store-dashboard` y `apps/digital-wallet` con autenticación y flujos operativos iniciales.
 - Fase 6 UX: wallet mobile-first mejorada con navegación inferior, tarjeta QR destacada, resumen de actividad e interfaz de recompensas.
+- Fase 6 flujo completo wallet: registro manual de compra por payload y análisis de transacciones agrupadas (tienda/marca/campaña).
 
 **Estructura del proyecto:**
 ```
