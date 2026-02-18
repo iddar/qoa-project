@@ -1,15 +1,17 @@
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { brands, campaignAuditLogs, campaignPolicies, campaigns, products } from '../../db/schema';
+import { brands, campaignAuditLogs, campaignPolicies, campaignSubscriptions, campaigns, products } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import {
   campaignAuditListResponse,
   campaignAuditQuery,
   campaignCreateRequest,
+  campaignSubscribeResponse,
+  campaignSubscriptionListResponse,
   campaignListQuery,
   campaignListResponse,
   campaignNoteRequest,
@@ -26,10 +28,12 @@ const allowedRoles = ['cpg_admin', 'qoa_support', 'qoa_admin'] as const;
 
 type CampaignRow = {
   id: string;
+  key: string | null;
   name: string;
   description: string | null;
   cpgId: string | null;
   status: string;
+  enrollmentMode: 'open' | 'opt_in' | 'system_universal';
   startsAt: Date | null;
   endsAt: Date | null;
   version: number;
@@ -70,6 +74,7 @@ type CampaignListContext = {
   query: {
     status?: string;
     cpgId?: string;
+    enrollmentMode?: 'open' | 'opt_in' | 'system_universal';
     limit?: string;
     cursor?: string;
   };
@@ -80,8 +85,10 @@ type CampaignCreateContext = {
   auth: AuthContext | null;
   body: {
     name: string;
+    key?: string;
     description?: string;
     cpgId?: string;
+    enrollmentMode?: 'open' | 'opt_in' | 'system_universal';
     startsAt?: string;
     endsAt?: string;
   };
@@ -100,10 +107,22 @@ type CampaignUpdateContext = {
   body: {
     name?: string;
     description?: string;
+    enrollmentMode?: 'open' | 'opt_in' | 'system_universal';
     startsAt?: string;
     endsAt?: string;
     status?: string;
   };
+  status: StatusHandler;
+};
+
+type CampaignSubscribeContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string };
+  status: StatusHandler;
+};
+
+type CampaignSubscriptionsMeContext = {
+  auth: AuthContext | null;
   status: StatusHandler;
 };
 
@@ -181,10 +200,12 @@ const isUuid = (value: string) =>
 
 const serializeCampaign = (campaign: CampaignRow) => ({
   id: campaign.id,
+  key: campaign.key ?? undefined,
   name: campaign.name,
   description: campaign.description ?? undefined,
   cpgId: campaign.cpgId ?? undefined,
   status: campaign.status,
+  enrollmentMode: campaign.enrollmentMode,
   startsAt: campaign.startsAt ? campaign.startsAt.toISOString() : undefined,
   endsAt: campaign.endsAt ? campaign.endsAt.toISOString() : undefined,
   version: campaign.version,
@@ -401,6 +422,203 @@ export const campaignsModule = new Elysia({
 })
   .use(authPlugin)
   .get(
+    '/discover',
+    async ({ auth, status }: CampaignSubscriptionsMeContext) => {
+      if (!auth || !isUserAuth(auth)) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const rows = (await db
+        .select({
+          id: campaigns.id,
+          key: campaigns.key,
+          name: campaigns.name,
+          description: campaigns.description,
+          cpgId: campaigns.cpgId,
+          status: campaigns.status,
+          enrollmentMode: campaigns.enrollmentMode,
+          startsAt: campaigns.startsAt,
+          endsAt: campaigns.endsAt,
+          version: campaigns.version,
+          createdBy: campaigns.createdBy,
+          updatedBy: campaigns.updatedBy,
+          createdAt: campaigns.createdAt,
+          updatedAt: campaigns.updatedAt,
+        })
+        .from(campaigns)
+        .where(and(eq(campaigns.status, 'active')))
+        .orderBy(desc(campaigns.createdAt))) as CampaignRow[];
+
+      const filtered = rows.filter((row) => row.enrollmentMode !== 'system_universal');
+      return {
+        data: filtered.map(serializeCampaign),
+        pagination: {
+          hasMore: false,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['consumer', 'customer'] }),
+      headers: authorizationHeader,
+      response: {
+        200: campaignListResponse,
+      },
+      detail: {
+        summary: 'Descubrir campañas para wallet',
+      },
+    },
+  )
+  .get(
+    '/subscriptions/me',
+    async ({ auth, status }: CampaignSubscriptionsMeContext) => {
+      if (!auth || !isUserAuth(auth)) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const rows = (await db.execute(sql`
+        select
+          cs.campaign_id as "campaignId",
+          c.name as "campaignName",
+          c.enrollment_mode as "enrollmentMode",
+          cs.status,
+          cs.subscribed_at as "subscribedAt"
+        from campaign_subscriptions cs
+        inner join campaigns c on c.id = cs.campaign_id
+        where cs.user_id = ${auth.userId}
+        order by cs.created_at desc
+      `)) as Array<{
+        campaignId: string;
+        campaignName: string;
+        enrollmentMode: 'open' | 'opt_in' | 'system_universal';
+        status: string;
+        subscribedAt: Date | null;
+      }>;
+
+      return {
+        data: rows.map((row) => ({
+          campaignId: row.campaignId,
+          campaignName: row.campaignName,
+          enrollmentMode: row.enrollmentMode,
+          status: row.status,
+          subscribedAt:
+            row.subscribedAt instanceof Date
+              ? row.subscribedAt.toISOString()
+              : typeof row.subscribedAt === 'string'
+                ? new Date(row.subscribedAt).toISOString()
+                : undefined,
+        })),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['consumer', 'customer'] }),
+      headers: authorizationHeader,
+      response: {
+        200: campaignSubscriptionListResponse,
+      },
+      detail: {
+        summary: 'Listar suscripciones de campañas del usuario',
+      },
+    },
+  )
+  .post(
+    '/:campaignId/subscribe',
+    async ({ auth, params, status }: CampaignSubscribeContext) => {
+      if (!auth || !isUserAuth(auth)) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const [campaign] = (await db
+        .select({ id: campaigns.id, status: campaigns.status, enrollmentMode: campaigns.enrollmentMode })
+        .from(campaigns)
+        .where(eq(campaigns.id, params.campaignId))) as Array<{
+        id: string;
+        status: string;
+        enrollmentMode: 'open' | 'opt_in' | 'system_universal';
+      }>;
+
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (campaign.status !== 'active') {
+        return status(422, {
+          error: {
+            code: 'CAMPAIGN_NOT_ACTIVE',
+            message: 'Solo se permiten suscripciones a campañas activas',
+          },
+        });
+      }
+
+      const now = new Date();
+      const [existing] = (await db
+        .select({ id: campaignSubscriptions.id })
+        .from(campaignSubscriptions)
+        .where(and(eq(campaignSubscriptions.userId, auth.userId), eq(campaignSubscriptions.campaignId, campaign.id)))) as Array<{
+        id: string;
+      }>;
+
+      if (existing) {
+        await db
+          .update(campaignSubscriptions)
+          .set({
+            status: 'subscribed',
+            subscribedAt: now,
+            leftAt: null,
+            updatedAt: now,
+          })
+          .where(eq(campaignSubscriptions.id, existing.id));
+      } else {
+        await db.insert(campaignSubscriptions).values({
+          userId: auth.userId,
+          campaignId: campaign.id,
+          status: 'subscribed',
+          invitedAt: campaign.enrollmentMode === 'opt_in' ? now : null,
+          subscribedAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      return {
+        data: {
+          campaignId: campaign.id,
+          status: 'subscribed',
+          subscribedAt: now.toISOString(),
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['consumer', 'customer'] }),
+      headers: authorizationHeader,
+      response: {
+        200: campaignSubscribeResponse,
+      },
+      detail: {
+        summary: 'Suscribirse a campaña',
+      },
+    },
+  )
+  .get(
     '/',
     async ({ auth, query, status }: CampaignListContext) => {
       if (!auth) {
@@ -425,6 +643,10 @@ export const campaignsModule = new Elysia({
       const conditions = [];
       if (query.status) {
         conditions.push(eq(campaigns.status, query.status));
+      }
+
+      if (query.enrollmentMode) {
+        conditions.push(eq(campaigns.enrollmentMode, query.enrollmentMode));
       }
 
       if (query.cpgId) {
@@ -538,9 +760,11 @@ export const campaignsModule = new Elysia({
       const [created] = (await db
         .insert(campaigns)
         .values({
+          key: body.key ?? null,
           name: body.name,
           description: body.description ?? null,
           cpgId,
+          enrollmentMode: body.enrollmentMode ?? 'opt_in',
           startsAt,
           endsAt,
           createdBy: resolveActorUserId(auth),
@@ -685,11 +909,12 @@ export const campaignsModule = new Elysia({
 
       const [updated] = (await db
         .update(campaigns)
-        .set({
-          name: body.name ?? campaign.name,
-          description: body.description ?? campaign.description,
-          startsAt,
-          endsAt,
+          .set({
+            name: body.name ?? campaign.name,
+            description: body.description ?? campaign.description,
+            enrollmentMode: body.enrollmentMode ?? campaign.enrollmentMode,
+            startsAt,
+            endsAt,
           status: body.status ?? campaign.status,
           version: campaign.version + 1,
           updatedBy: resolveActorUserId(auth),

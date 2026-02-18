@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { campaignPolicies, campaigns } from '../db/schema';
+import { campaignPolicies, campaignSubscriptions, campaigns, users } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -221,5 +221,89 @@ describe('Campaigns module', () => {
     expect(status).toBe(200);
     expect(Array.isArray(data.data)).toBe(true);
     expect(typeof data.pagination.hasMore).toBe('boolean');
+  });
+
+  it('supports wallet discovery and subscription flow', async () => {
+    const [walletUser] = (await db
+      .insert(users)
+      .values({
+        phone: `+52155${Math.floor(Math.random() * 10_000_000)
+          .toString()
+          .padStart(7, '0')}`,
+        email: `wallet_campaign_${crypto.randomUUID()}@qoa.test`,
+        role: 'consumer',
+      })
+      .returning({ id: users.id })) as Array<{ id: string }>;
+
+    if (!walletUser) {
+      throw new Error('Failed to create wallet user');
+    }
+
+    const [campaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign Discover ${crypto.randomUUID().slice(0, 6)}`,
+        status: 'active',
+        enrollmentMode: 'opt_in',
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    if (!campaign) {
+      throw new Error('Failed to create campaign');
+    }
+
+    const walletHeaders = {
+      authorization: 'Bearer dev-token',
+      'x-dev-user-id': walletUser.id,
+      'x-dev-user-role': 'consumer',
+    };
+
+    const discover = await api.v1.campaigns.discover.get({
+      headers: walletHeaders,
+    });
+
+    if (discover.error) {
+      throw discover.error.value;
+    }
+    if (!discover.data) {
+      throw new Error('Campaign discover response missing');
+    }
+
+    expect(discover.status).toBe(200);
+    expect(discover.data.data.some((item: { id: string }) => item.id === campaign.id)).toBe(true);
+
+    const subscribe = await api.v1.campaigns({ campaignId: campaign.id }).subscribe.post(undefined, {
+      headers: walletHeaders,
+    });
+
+    if (subscribe.error) {
+      throw subscribe.error.value;
+    }
+    if (!subscribe.data) {
+      throw new Error('Campaign subscribe response missing');
+    }
+
+    expect(subscribe.status).toBe(200);
+    expect(subscribe.data.data.status).toBe('subscribed');
+
+    const mine = await api.v1.campaigns.subscriptions.me.get({
+      headers: walletHeaders,
+    });
+
+    if (mine.error) {
+      throw mine.error.value;
+    }
+    if (!mine.data) {
+      throw new Error('Campaign subscriptions response missing');
+    }
+
+    expect(mine.status).toBe(200);
+    expect(mine.data.data.some((item: { campaignId: string; status: string }) => item.campaignId === campaign.id && item.status === 'subscribed')).toBe(
+      true,
+    );
+
+    await db.delete(campaignSubscriptions).where(eq(campaignSubscriptions.userId, walletUser.id));
+    await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
+    await db.delete(users).where(eq(users.id, walletUser.id));
   });
 });

@@ -769,6 +769,10 @@ paths:
           in: query
           schema:
             type: string
+        - name: enrollmentMode
+          in: query
+          schema:
+            $ref: '#/components/schemas/CampaignEnrollmentMode'
         - $ref: '#/components/parameters/limitParam'
         - $ref: '#/components/parameters/cursorParam'
       responses:
@@ -799,6 +803,53 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CampaignResponse'
+
+  /campaigns/discover:
+    get:
+      tags: [Campaigns]
+      summary: Descubrir campañas para wallet
+      operationId: discoverCampaigns
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de campañas disponibles para suscripción
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignListResponse'
+
+  /campaigns/subscriptions/me:
+    get:
+      tags: [Campaigns]
+      summary: Listar suscripciones de campañas del usuario
+      operationId: listMyCampaignSubscriptions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de suscripciones del usuario autenticado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignSubscriptionListResponse'
+
+  /campaigns/{campaignId}/subscribe:
+    post:
+      tags: [Campaigns]
+      summary: Suscribirse a campaña
+      operationId: subscribeCampaign
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      responses:
+        '200':
+          description: Suscripción registrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignSubscribeResponse'
 
   /campaigns/{campaignId}:
     get:
@@ -1231,7 +1282,7 @@ paths:
     post:
       tags: [Transactions]
       summary: Registrar transacción
-      description: Registra una compra y evalúa campañas aplicables. Para usuarios consumer/customer solo permite registrar compras para su propio userId.
+      description: Registra una compra y evalúa campañas aplicables. Para usuarios consumer/customer solo permite registrar compras para su propio userId y acumula en campaña universal + campañas suscritas/abiertas aplicables.
       operationId: createTransaction
       security:
         - bearerAuth: []
@@ -2359,11 +2410,18 @@ components:
           format: date-time
           nullable: true
 
+    CampaignEnrollmentMode:
+      type: string
+      enum: [open, opt_in, system_universal]
+
     Campaign:
       type: object
       properties:
         id:
           type: string
+        key:
+          type: string
+          nullable: true
         cpgId:
           type: string
         name:
@@ -2415,6 +2473,8 @@ components:
         status:
           type: string
           enum: [draft, ready_for_review, in_review, rejected, confirmed, active, paused, ended]
+        enrollmentMode:
+          $ref: '#/components/schemas/CampaignEnrollmentMode'
         validityType:
           type: string
           enum: [indefinite, date_range]
@@ -2446,6 +2506,9 @@ components:
       type: object
       required: [cpgId, name, accumulationType, captureMode, startsAt]
       properties:
+        key:
+          type: string
+          maxLength: 80
         cpgId:
           type: string
         name:
@@ -2492,6 +2555,8 @@ components:
           type: string
           enum: [indefinite, date_range]
           default: indefinite
+        enrollmentMode:
+          $ref: '#/components/schemas/CampaignEnrollmentMode'
         startsAt:
           type: string
           format: date-time
@@ -2549,6 +2614,45 @@ components:
           format: date-time
         readyForReview:
           type: boolean
+        enrollmentMode:
+          $ref: '#/components/schemas/CampaignEnrollmentMode'
+
+    CampaignSubscription:
+      type: object
+      properties:
+        campaignId:
+          type: string
+        campaignName:
+          type: string
+        enrollmentMode:
+          $ref: '#/components/schemas/CampaignEnrollmentMode'
+        status:
+          type: string
+        subscribedAt:
+          type: string
+          format: date-time
+
+    CampaignSubscriptionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignSubscription'
+
+    CampaignSubscribeResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            campaignId:
+              type: string
+            status:
+              type: string
+            subscribedAt:
+              type: string
+              format: date-time
 
     CampaignPolicyCreate:
       type: object

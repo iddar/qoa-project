@@ -12,12 +12,20 @@ export const campaignStatusSchema = t.Union([
   t.Literal('ended'),
 ]);
 
+export const campaignEnrollmentModeSchema = t.Union([
+  t.Literal('open'),
+  t.Literal('opt_in'),
+  t.Literal('system_universal'),
+]);
+
 export const campaignSchema = t.Object({
   id: t.String(),
   name: t.String(),
   description: t.Optional(t.String()),
+  key: t.Optional(t.String()),
   cpgId: t.Optional(t.String()),
   status: campaignStatusSchema,
+  enrollmentMode: campaignEnrollmentModeSchema,
   startsAt: t.Optional(t.String()),
   endsAt: t.Optional(t.String()),
   version: t.Number(),
@@ -71,7 +79,9 @@ export const campaignPolicySchema = t.Object({
 export const campaignCreateRequest = t.Object({
   name: t.String({ minLength: 3, maxLength: 160 }),
   description: t.Optional(t.String()),
+  key: t.Optional(t.String({ minLength: 3, maxLength: 80 })),
   cpgId: t.Optional(t.String({ format: 'uuid' })),
+  enrollmentMode: t.Optional(campaignEnrollmentModeSchema),
   startsAt: t.Optional(t.String()),
   endsAt: t.Optional(t.String()),
 });
@@ -79,6 +89,7 @@ export const campaignCreateRequest = t.Object({
 export const campaignUpdateRequest = t.Object({
   name: t.Optional(t.String({ minLength: 3, maxLength: 160 })),
   description: t.Optional(t.String()),
+  enrollmentMode: t.Optional(campaignEnrollmentModeSchema),
   startsAt: t.Optional(t.String()),
   endsAt: t.Optional(t.String()),
   status: t.Optional(campaignStatusSchema),
@@ -87,8 +98,29 @@ export const campaignUpdateRequest = t.Object({
 export const campaignListQuery = t.Object({
   status: t.Optional(campaignStatusSchema),
   cpgId: t.Optional(t.String({ format: 'uuid' })),
+  enrollmentMode: t.Optional(campaignEnrollmentModeSchema),
   limit: t.Optional(t.String()),
   cursor: t.Optional(t.String()),
+});
+
+export const campaignSubscribeResponse = t.Object({
+  data: t.Object({
+    campaignId: t.String(),
+    status: t.String(),
+    subscribedAt: t.String(),
+  }),
+});
+
+export const campaignSubscriptionSchema = t.Object({
+  campaignId: t.String(),
+  campaignName: t.String(),
+  enrollmentMode: campaignEnrollmentModeSchema,
+  status: t.String(),
+  subscribedAt: t.Optional(t.String()),
+});
+
+export const campaignSubscriptionListResponse = t.Object({
+  data: t.Array(campaignSubscriptionSchema),
 });
 
 export const campaignAuditQuery = t.Object({
