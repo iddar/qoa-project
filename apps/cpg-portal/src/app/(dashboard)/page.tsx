@@ -20,9 +20,23 @@ type StatCardProps = {
 };
 
 type DailyPerformancePoint = {
-  date: string;
+  date: string | Date;
   transactions: number;
   redemptions?: number;
+};
+
+const formatDayLabel = (value: string | Date) => {
+  if (typeof value === "string") {
+    if (!value) return "--";
+    if (value.length >= 10) return value.slice(5, 10);
+    return value;
+  }
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(5, 10);
+  }
+
+  return "--";
 };
 
 const colorMap = {
@@ -346,9 +360,9 @@ export default function HomePage() {
             })}
           </div>
           <div className="mt-3 flex justify-between px-1">
-            {(dailyPerformance.length ? dailyPerformance : [{ date: "" }]).map((point: { date: string }, index: number) => (
-              <span key={`${point.date}-${index}`} className="text-[9px] text-zinc-300 dark:text-zinc-700">
-                {point.date ? point.date.slice(5) : "--"}
+            {(dailyPerformance.length ? dailyPerformance : [{ date: "" }]).map((point: { date: string | Date }, index: number) => (
+              <span key={`${String(point.date)}-${index}`} className="text-[9px] text-zinc-300 dark:text-zinc-700">
+                {formatDayLabel(point.date)}
               </span>
             ))}
           </div>
