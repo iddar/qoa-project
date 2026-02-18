@@ -23,11 +23,6 @@ const emptyForm: StoreFormState = {
 export default function StoresPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<StoreFormState>(emptyForm);
-  const [qrPayload, setQrPayload] = useState<{
-    storeId: string;
-    code: string;
-    payload: unknown;
-  } | null>(null);
   const [qrModal, setQrModal] = useState<{
     storeName: string;
     code: string;
@@ -76,9 +71,6 @@ export default function StoresPage() {
       });
       if (error) throw error;
       return { storeId, payload: data.data };
-    },
-    onSuccess: ({ storeId, payload }) => {
-      setQrPayload({ storeId, code: payload.code, payload: payload.payload });
     },
   });
 
@@ -140,20 +132,9 @@ export default function StoresPage() {
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => fetchQr.mutate(store.id)}
-                      className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                    >
-                      Ver payload QR
-                    </button>
-                    <button
-                      type="button"
                       onClick={async () => {
-                        if (qrPayload?.storeId === store.id) {
-                          setQrModal({ storeName: store.name, code: qrPayload.code, payload: qrPayload.payload });
-                        } else {
-                          const result = await fetchQr.mutateAsync(store.id);
-                          setQrModal({ storeName: store.name, code: result.payload.code, payload: result.payload.payload });
-                        }
+                        const result = await fetchQr.mutateAsync(store.id);
+                        setQrModal({ storeName: store.name, code: result.payload.code, payload: result.payload.payload });
                       }}
                       className="rounded-md border border-zinc-200 bg-zinc-900 px-3 py-1.5 text-xs text-white transition hover:bg-zinc-700 dark:border-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
                     >
@@ -161,28 +142,6 @@ export default function StoresPage() {
                     </button>
                   </div>
                 </div>
-                {qrPayload?.storeId === store.id && (() => {
-                  const activeQrPayload = qrPayload;
-                  if (!activeQrPayload) {
-                    return null;
-                  }
-
-                  return (
-                  <div className="mt-3 rounded-md bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300">
-                    <p className="font-semibold">Payload actual</p>
-                    <pre className="mt-2 overflow-auto whitespace-pre-wrap">
-                      {JSON.stringify(
-                        {
-                          code: activeQrPayload.code,
-                          payload: activeQrPayload.payload,
-                        },
-                        null,
-                        2,
-                      )}
-                    </pre>
-                  </div>
-                  );
-                })()}
               </li>
             ))}
           </ul>
@@ -267,16 +226,6 @@ export default function StoresPage() {
             </form>
           </div>
 
-          {fetchQr.isPending && (
-            <p className="text-xs text-zinc-400 dark:text-zinc-400">
-              Cargando payload QR...
-            </p>
-          )}
-          {fetchQr.isError && (
-            <p className="text-xs text-red-500">
-              No se pudo obtener el payload QR.
-            </p>
-          )}
         </div>
       </section>
 
