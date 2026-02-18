@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ReactQRCode } from "@lglab/react-qr-code";
 import { api } from "@/lib/api";
@@ -165,6 +166,19 @@ export default function WalletHomePage() {
             ))}
           </ul>
         )}
+      </section>
+
+      <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-900/10">
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">¿Quieres probar una compra ahora?</p>
+        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+          Usa el flujo manual con payload para registrar una compra sin escanear QR.
+        </p>
+        <Link
+          href="/purchase"
+          className="mt-3 inline-flex rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+        >
+          Ir a registrar compra
+        </Link>
       </section>
     </div>
   );
