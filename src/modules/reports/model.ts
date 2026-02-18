@@ -72,3 +72,13 @@ export const campaignReportSummaryResponse = t.Object({
     daily: t.Array(reportDailyPoint),
   }),
 });
+
+export const storeReportSummaryResponse = t.Object({
+  data: t.Object({
+    storeId: t.String(),
+    from: t.String(),
+    to: t.String(),
+    kpis: reportKpis,
+    daily: t.Array(reportDailyPoint),
+  }),
+});

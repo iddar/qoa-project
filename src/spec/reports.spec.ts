@@ -129,6 +129,29 @@ describe('Reports module', () => {
     expect(campaignSummary.status).toBe(200);
     expect(campaignSummary.data.data.campaignId).toBe(campaign.id);
 
+    const storeHeaders = {
+      authorization: 'Bearer dev-token',
+      'x-dev-user-id': 'dev-store-admin-reports',
+      'x-dev-user-role': 'store_admin',
+      'x-dev-tenant-id': store.id,
+      'x-dev-tenant-type': 'store',
+    };
+
+    const storeSummary = await api.v1.reports.stores({ storeId: store.id }).summary.get({
+      headers: storeHeaders,
+    });
+
+    if (storeSummary.error) {
+      throw storeSummary.error.value;
+    }
+    if (!storeSummary.data) {
+      throw new Error('Store summary missing');
+    }
+
+    expect(storeSummary.status).toBe(200);
+    expect(storeSummary.data.data.storeId).toBe(store.id);
+    expect(storeSummary.data.data.kpis.transactions).toBeGreaterThanOrEqual(1);
+
     const forbidden = await api.v1.reports.cpgs({ cpgId: cpg.id }).summary.get({
       headers: {
         authorization: 'Bearer dev-token',
@@ -144,6 +167,22 @@ describe('Reports module', () => {
     }
 
     expect(forbidden.status).toBe(403);
+
+    const storeForbidden = await api.v1.reports.stores({ storeId: store.id }).summary.get({
+      headers: {
+        authorization: 'Bearer dev-token',
+        'x-dev-user-id': 'dev-store-admin-foreign',
+        'x-dev-user-role': 'store_admin',
+        'x-dev-tenant-id': crypto.randomUUID(),
+        'x-dev-tenant-type': 'store',
+      },
+    });
+
+    if (!storeForbidden.error) {
+      throw new Error('Expected forbidden for foreign store');
+    }
+
+    expect(storeForbidden.status).toBe(403);
 
     await db.delete(transactions).where(eq(transactions.cardId, card.id));
     await db.delete(cards).where(eq(cards.id, card.id));

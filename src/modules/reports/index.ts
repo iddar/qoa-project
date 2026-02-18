@@ -24,6 +24,7 @@ import {
   cpgReportSummaryResponse,
   platformOverviewResponse,
   reportSummaryQuery,
+  storeReportSummaryResponse,
 } from './model';
 
 type OverviewContext = {
@@ -46,6 +47,13 @@ type CpgSummaryContext = {
 type CampaignSummaryContext = {
   auth: AuthContext | null;
   params: { campaignId: string };
+  query: SummaryQuery;
+  status: StatusHandler;
+};
+
+type StoreSummaryContext = {
+  auth: AuthContext | null;
+  params: { storeId: string };
   query: SummaryQuery;
   status: StatusHandler;
 };
@@ -102,6 +110,22 @@ const canAccessCpg = (auth: AuthContext, cpgId: string) => {
   }
 
   return auth.tenantType === 'cpg' && auth.tenantId === cpgId;
+};
+
+const canAccessStore = (auth: AuthContext, storeId: string) => {
+  if (auth.type === 'jwt' || auth.type === 'dev') {
+    if (auth.role === 'qoa_admin' || auth.role === 'qoa_support') {
+      return true;
+    }
+
+    return (
+      (auth.role === 'store_admin' || auth.role === 'store_staff') &&
+      auth.tenantType === 'store' &&
+      auth.tenantId === storeId
+    );
+  }
+
+  return auth.tenantType === 'store' && auth.tenantId === storeId;
 };
 
 const resolveRange = (query: SummaryQuery, status: StatusHandler) => {
@@ -277,6 +301,145 @@ export const reportsModule = new Elysia({
       },
       detail: {
         summary: 'Resumen de plataforma para backoffice',
+      },
+    },
+  )
+  .get(
+    '/stores/:storeId/summary',
+    async ({ auth, params, query, status }: StoreSummaryContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes acceso a esta tienda',
+          },
+        });
+      }
+
+      const [store] = (await db
+        .select({ id: stores.id })
+        .from(stores)
+        .where(eq(stores.id, params.storeId))) as Array<{ id: string }>;
+
+      if (!store) {
+        return status(404, {
+          error: {
+            code: 'STORE_NOT_FOUND',
+            message: 'Tienda no encontrada',
+          },
+        });
+      }
+
+      const range = resolveRange(query, status);
+      if (range.error) {
+        return range.error;
+      }
+
+      const { from, to, fromDayIso, toDayIso, fromIso, toIso } = range.value;
+
+      const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows] = await Promise.all([
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(t.total_amount), 0)::int as amount,
+            count(distinct t.card_id)::int as cards
+          from transactions t
+          where t.store_id = ${store.id}
+            and t.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiTransactionsRow[]>,
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(a.amount), 0)::int as points
+          from accumulations a
+          inner join transaction_items ti on ti.id = a.transaction_item_id
+          inner join transactions t on t.id = ti.transaction_id
+          where t.store_id = ${store.id}
+            and a.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiAccumulationsRow[]>,
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(r.cost), 0)::int as cost
+          from redemptions r
+          inner join cards ca on ca.id = r.card_id
+          where ca.store_id = ${store.id}
+            and r.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiRedemptionsRow[]>,
+        db.execute(sql`
+          with days as (
+            select generate_series(${fromDayIso}::date, ${toDayIso}::date, interval '1 day')::date as day
+          ),
+          tx as (
+            select date_trunc('day', t.created_at)::date as day,
+                   count(*)::int as transactions,
+                   coalesce(sum(t.total_amount), 0)::int as sales_amount
+            from transactions t
+            where t.store_id = ${store.id}
+              and t.created_at between ${fromIso} and ${toIso}
+            group by 1
+          ),
+          acc as (
+            select date_trunc('day', a.created_at)::date as day,
+                   count(*)::int as accumulations
+            from accumulations a
+            inner join transaction_items ti on ti.id = a.transaction_item_id
+            inner join transactions t on t.id = ti.transaction_id
+            where t.store_id = ${store.id}
+              and a.created_at between ${fromIso} and ${toIso}
+            group by 1
+          ),
+          red as (
+            select date_trunc('day', r.created_at)::date as day,
+                   count(*)::int as redemptions
+            from redemptions r
+            inner join cards ca on ca.id = r.card_id
+            where ca.store_id = ${store.id}
+              and r.created_at between ${fromIso} and ${toIso}
+            group by 1
+          )
+          select
+            to_char(days.day, 'YYYY-MM-DD') as date,
+            coalesce(tx.transactions, 0)::int as transactions,
+            coalesce(tx.sales_amount, 0)::int as "salesAmount",
+            coalesce(acc.accumulations, 0)::int as accumulations,
+            coalesce(red.redemptions, 0)::int as redemptions
+          from days
+          left join tx on tx.day = days.day
+          left join acc on acc.day = days.day
+          left join red on red.day = days.day
+          order by days.day asc
+        `) as Promise<DailyRow[]>,
+      ]);
+
+      return {
+        data: {
+          storeId: store.id,
+          from: from.toISOString(),
+          to: to.toISOString(),
+          kpis: buildKpis(transactionsRows[0], accumulationsRows[0], redemptionsRows[0]),
+          daily: dailyRows,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['store_staff', 'store_admin', 'qoa_support', 'qoa_admin'], allowApiKey: true }),
+      headers: authorizationHeader,
+      query: reportSummaryQuery,
+      response: {
+        200: storeReportSummaryResponse,
+      },
+      detail: {
+        summary: 'Resumen de performance por tienda',
       },
     },
   )

@@ -1658,7 +1658,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReportSummaryResponse'
+                $ref: '#/components/schemas/StoreReportSummaryResponse'
 
   /reports/cpgs/{cpgId}/summary:
     get:
@@ -3550,6 +3550,27 @@ components:
           type: object
           properties:
             campaignId:
+              type: string
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+            kpis:
+              $ref: '#/components/schemas/ReportKpis'
+            daily:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReportDailyPoint'
+
+    StoreReportSummaryResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            storeId:
               type: string
             from:
               type: string
