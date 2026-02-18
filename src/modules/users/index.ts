@@ -1,6 +1,8 @@
 import { and, desc, eq, lt, ne, or, sql } from 'drizzle-orm';
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { allUserRoles, backofficeRoles } from '../../app/plugins/roles';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { cards, users } from '../../db/schema';
@@ -18,25 +20,9 @@ import {
   userMeUpdateRequest,
 } from './model';
 
-const allowedRoles = [
-  'consumer',
-  'customer',
-  'store_staff',
-  'store_admin',
-  'cpg_admin',
-  'qoa_support',
-  'qoa_admin',
-] as const;
+const allowedRoles = allUserRoles;
 const backofficeAdminRoles = ['qoa_admin'] as const;
-const backofficeRoles = ['qoa_support', 'qoa_admin'] as const;
 const temporaryPasswordLength = 14;
-const authHeader = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
 
 type UserListQuery = {
   limit?: string;
@@ -205,7 +191,7 @@ export const usersModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...backofficeRoles] }),
-      headers: authHeader,
+      headers: authorizationHeader,
       query: userListQuery,
       response: {
         200: userListResponse,
@@ -333,7 +319,7 @@ export const usersModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...backofficeAdminRoles] }),
-      headers: authHeader,
+      headers: authorizationHeader,
       body: adminCreateUserRequest,
       response: {
         200: adminCreateUserResponse,
@@ -407,7 +393,7 @@ export const usersModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...backofficeRoles] }),
-      headers: authHeader,
+      headers: authorizationHeader,
       body: blockUserRequest,
       response: {
         200: blockUserResponse,
@@ -462,7 +448,7 @@ export const usersModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...backofficeRoles] }),
-      headers: authHeader,
+      headers: authorizationHeader,
       response: {
         200: blockUserResponse,
       },
@@ -583,7 +569,7 @@ export const usersModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles] }),
-      headers: authHeader,
+      headers: authorizationHeader,
       response: {
         200: userMeResponse,
       },
@@ -692,7 +678,7 @@ export const usersModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles] }),
-      headers: authHeader,
+      headers: authorizationHeader,
       body: userMeUpdateRequest,
       response: {
         200: userMeResponse,

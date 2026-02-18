@@ -1,6 +1,7 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { brands, campaignAuditLogs, campaignPolicies, campaigns, products } from '../../db/schema';
@@ -22,13 +23,6 @@ import {
 } from './model';
 
 const allowedRoles = ['cpg_admin', 'qoa_support', 'qoa_admin'] as const;
-const headerSchema = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
 
 type CampaignRow = {
   id: string;
@@ -488,7 +482,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       query: campaignListQuery,
       response: {
         200: campaignListResponse,
@@ -573,7 +567,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       body: campaignCreateRequest,
       response: {
         201: campaignResponse,
@@ -620,7 +614,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       response: {
         200: campaignResponse,
       },
@@ -723,7 +717,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       body: campaignUpdateRequest,
       response: {
         200: campaignResponse,
@@ -776,7 +770,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       response: {
         200: campaignPolicyListResponse,
       },
@@ -871,7 +865,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       body: campaignPolicyCreateRequest,
       response: {
         201: campaignPolicyResponse,
@@ -992,7 +986,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       body: campaignPolicyUpdateRequest,
       response: {
         200: campaignPolicyResponse,
@@ -1065,7 +1059,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       body: campaignNoteRequest,
       response: {
         200: campaignResponse,
@@ -1142,7 +1136,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       body: campaignReviewRequest,
       response: {
         200: campaignResponse,
@@ -1215,7 +1209,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       body: campaignNoteRequest,
       response: {
         200: campaignResponse,
@@ -1288,7 +1282,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       response: {
         200: campaignResponse,
       },
@@ -1365,7 +1359,7 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: headerSchema,
+      headers: authorizationHeader,
       query: campaignAuditQuery,
       response: {
         200: campaignAuditListResponse,

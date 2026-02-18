@@ -1,21 +1,13 @@
 import { and, desc, eq, gt, lt, or } from 'drizzle-orm';
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { backofficeRoles } from '../../app/plugins/roles';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { balances, campaigns, cards, reminderJobs } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import { reminderListQuery, reminderListResponse, reminderRunRequest, reminderRunResponse } from './model';
-
-const adminRoles = ['qoa_support', 'qoa_admin'] as const;
-
-const authHeader = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
 
 type ReminderJobRow = {
   id: string;
@@ -171,8 +163,8 @@ export const jobsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: [...adminRoles] }),
-      headers: authHeader,
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authorizationHeader,
       body: reminderRunRequest,
       response: {
         200: reminderRunResponse,
@@ -235,8 +227,8 @@ export const jobsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: [...adminRoles] }),
-      headers: authHeader,
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authorizationHeader,
       query: reminderListQuery,
       response: {
         200: reminderListResponse,

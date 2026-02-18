@@ -1,22 +1,16 @@
 import { Elysia } from 'elysia';
 import { and, eq, isNull } from 'drizzle-orm';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { allUserRoles } from '../../app/plugins/roles';
 import { db } from '../../db/client';
+import { generateCode } from '../../app/utils/generateCode';
 import { cards, stores, users } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import { cardCreateRequest, cardDetailResponse, cardResponse, qrResponse } from './model';
 
-const allowedRoles = [
-  'consumer',
-  'customer',
-  'store_staff',
-  'store_admin',
-  'cpg_admin',
-  'qoa_support',
-  'qoa_admin',
-] as const;
+const allowedRoles = allUserRoles;
 
-const generateCardCode = () => `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 18)}`;
+const generateCardCode = () => generateCode('card', 18);
 
 type CardRow = {
   id: string;

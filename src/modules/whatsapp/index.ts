@@ -2,6 +2,8 @@ import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { backofficeRoles } from '../../app/plugins/roles';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { whatsappMessages } from '../../db/schema';
@@ -13,16 +15,6 @@ import {
   whatsappWebhookRequest,
   whatsappWebhookResponse,
 } from './model';
-
-const adminRoles = ['qoa_support', 'qoa_admin'] as const;
-
-const authHeader = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
 
 const webhookHeader = t.Object({
   'x-whatsapp-signature': t.Optional(t.String()),
@@ -235,8 +227,8 @@ export const whatsappModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: [...adminRoles] }),
-      headers: authHeader,
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authorizationHeader,
       query: whatsappMessageListQuery,
       response: {
         200: whatsappMessageListResponse,
@@ -284,8 +276,8 @@ export const whatsappModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: [...adminRoles] }),
-      headers: authHeader,
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authorizationHeader,
       response: {
         200: whatsappMetricsResponse,
       },

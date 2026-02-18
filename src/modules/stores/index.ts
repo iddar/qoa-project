@@ -3,12 +3,13 @@ import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm/sql';
 import { authGuard, authPlugin } from '../../app/plugins/auth';
 import { parseLimit, parseCursor } from '../../app/utils/pagination';
+import { generateCode } from '../../app/utils/generateCode';
 import { db } from '../../db/client';
 import { stores } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import { qrResponse, storeCreateRequest, storeListQuery, storeListResponse, storeResponse } from './model';
 
-const generateStoreCode = () => `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`;
+const generateStoreCode = () => generateCode('sto', 20);
 
 type StoreRow = {
   id: string;
