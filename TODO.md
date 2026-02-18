@@ -53,8 +53,8 @@
 ### Sprint 1
 - [x] Setup proyecto (tsconfig, oxlint, oxfmt)
 - [x] Configuración base de datos y migraciones
-- [ ] Middleware logging con trace_id end-to-end
-- [ ] Middleware manejo de errores global
+- [x] Middleware logging con trace_id end-to-end
+- [x] Middleware manejo de errores global
 - [x] Health check endpoint
 - [x] Docker Compose para desarrollo
 
@@ -65,8 +65,8 @@
 - [ ] Integración WhatsApp básica
 
 ### Sprint 3
-- [ ] Módulo Campaigns
-- [ ] Módulo Transactions
+- [x] Módulo Campaigns
+- [x] Módulo Transactions
 - [ ] Motor de reglas (puntos/estampas)
 - [ ] Balance tracking
 
@@ -120,6 +120,7 @@
 | 2026-01-29 | Fase 4 completada: Modelo ER, diccionario de datos, índices, eventos de dominio |
 | 2026-02-17 | Sprint 2 actualizado: módulos Users, Stores y Cards implementados y cubiertos por tests |
 | 2026-02-17 | Normalización de auth con `beforeHandle: authGuard(...)` en Users/Stores/Cards |
+| 2026-02-18 | Sprint 3 parcial: Campaigns + Transactions implementados, incluyendo webhook idempotente con receipts y métricas |
 
 ---
 

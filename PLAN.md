@@ -4,7 +4,7 @@
 
 **Qoa** es un sistema centralizado de administración de programas de lealtad. El MVP "Conectados" se enfoca en loyalty para tenderos vía WhatsApp/QR.
 
-**Estado Actual:** Backend operativo en `src` con módulos `auth`, `users`, `stores`, `cards`; backoffice base en `apps/backoffice`; pruebas `spec` en verde con entorno de test y migraciones aplicadas.
+**Estado Actual:** Backend operativo en `src` con módulos `auth`, `users`, `stores`, `cards`, `campaigns`, `transactions` (incluyendo webhook idempotente con firma opcional y métricas); backoffice operativo con flujos de usuarios/campañas/transacciones; pruebas `spec` en verde con entorno de test y migraciones aplicadas.
 
 ---
 
@@ -114,10 +114,11 @@
 | 3 | 9-10 | Módulos Campaigns, Transactions, motor de reglas |
 | 4 | 11-12 | Módulos Rewards, Reports, Jobs recordatorios |
 
-**Avance real actual (2026-02-17):**
-- Sprint 1: mayormente completo, pendiente middleware de errores global y traza `trace_id` end-to-end.
+**Avance real actual (2026-02-18):**
+- Sprint 1: completo (middleware global de errores + `trace_id` en respuestas de error).
 - Sprint 2: `users`, `stores` y `cards` implementados y validados por tests de integración.
-- Próxima fase recomendada: Sprint 3 (`campaigns`, `transactions`, motor de reglas).
+- Sprint 3: `campaigns` y `transactions` implementados con tests; pendiente motor de reglas + balance tracking.
+- Webhooks de transacciones: firma HMAC opcional por fuente, desduplicación por hash y endpoints de observabilidad (`webhook-receipts`, `webhook-metrics`).
 
 **Estructura del proyecto:**
 ```
@@ -233,6 +234,7 @@ Para validar el plan:
 ## Próximos Pasos Inmediatos
 
 1. **Cerrar deuda de plataforma** - Implementar middleware de errores global y `trace_id` consistente en logs/respuestas.
-2. **Iniciar Sprint 3** - Implementar módulo `campaigns` (modelo, migraciones, endpoints y tests).
-3. **Continuar con transactions** - Alta de `transactions` e idempotencia de ingestión/webhooks.
-4. **Mantener contrato actualizado** - Sincronizar `docs/03-apis/openapi.yaml` en cada endpoint nuevo/modificado.
+2. **Completar Sprint 3** - Implementar motor de reglas (puntos/estampas) y balance tracking sobre campañas/transacciones.
+3. **Iniciar Sprint 4** - Implementar `rewards`, `reports` y jobs de recordatorio.
+4. **Fortalecer integración externa** - Webhook WhatsApp + flujos de ingestión/errores end-to-end.
+5. **Mantener contrato actualizado** - Sincronizar `docs/03-apis/openapi.yaml` en cada endpoint nuevo/modificado.
