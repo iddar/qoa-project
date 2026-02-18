@@ -5,6 +5,7 @@ import { Logestic } from 'logestic';
 
 import { authModule } from '../modules/auth';
 import { campaignsModule } from '../modules/campaigns';
+import { catalogModule } from '../modules/catalog';
 import { cardsModule } from '../modules/cards';
 import { healthModule } from '../modules/health';
 import { storesModule } from '../modules/stores';
@@ -23,6 +24,7 @@ export const createApp = () =>
     .use(openApiPlugin)
     .use(healthModule)
     .use(authModule)
+    .use(catalogModule)
     .use(campaignsModule)
     .use(usersModule)
     .use(storesModule)

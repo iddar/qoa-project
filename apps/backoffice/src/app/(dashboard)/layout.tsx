@@ -12,6 +12,7 @@ const navItems = [
   { href: "/", label: "Inicio" },
   { href: "/users", label: "Usuarios" },
   { href: "/stores", label: "Tiendas" },
+  { href: "/catalog", label: "Catálogo" },
   { href: "/cards", label: "Tarjetas" },
   { href: "/campaigns", label: "Campañas" },
   { href: "/transactions", label: "Transacciones" },

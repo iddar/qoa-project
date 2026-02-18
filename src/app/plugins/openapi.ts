@@ -34,6 +34,18 @@ export const openApiPlugin = openapi({
         description: 'Store catalog and registration endpoints.',
       },
       {
+        name: 'CPGs',
+        description: 'Consumer packaged goods parent entities.',
+      },
+      {
+        name: 'Brands',
+        description: 'Brand catalog linked to CPGs.',
+      },
+      {
+        name: 'Products',
+        description: 'Product catalog linked to brands.',
+      },
+      {
         name: 'Cards',
         description: 'Consumer card issuance endpoints.',
       },

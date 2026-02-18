@@ -529,6 +529,69 @@ paths:
                 $ref: '#/components/schemas/QrResponse'
 
   # ==================== BRANDS ====================
+  /cpgs:
+    get:
+      tags: [CPGs]
+      summary: Listar CPGs
+      operationId: listCpgs
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de CPGs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CpgListResponse'
+
+    post:
+      tags: [CPGs]
+      summary: Crear CPG
+      operationId: createCpg
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CpgCreate'
+      responses:
+        '201':
+          description: CPG creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CpgResponse'
+
+  /cpgs/{id}:
+    get:
+      tags: [CPGs]
+      summary: Obtener CPG
+      operationId: getCpg
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Detalle de CPG
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CpgResponse'
+
   /brands:
     get:
       tags: [Brands]
@@ -552,6 +615,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BrandListResponse'
+
+    post:
+      tags: [Brands]
+      summary: Crear marca
+      operationId: createBrand
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BrandCreate'
+      responses:
+        '201':
+          description: Marca creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandResponse'
+
+  /brands/{id}:
+    get:
+      tags: [Brands]
+      summary: Obtener marca
+      operationId: getBrand
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Detalle de marca
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BrandResponse'
 
   # ==================== PRODUCTS ====================
   /products:
@@ -587,6 +689,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductListResponse'
+
+    post:
+      tags: [Products]
+      summary: Crear producto
+      operationId: createProduct
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductCreate'
+      responses:
+        '201':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+
+  /products/{id}:
+    get:
+      tags: [Products]
+      summary: Obtener producto
+      operationId: getProduct
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/idParam'
+      responses:
+        '200':
+          description: Detalle de producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
 
   # ==================== CAMPAIGNS ====================
   /campaigns:
@@ -1694,6 +1835,49 @@ components:
         meta:
           $ref: '#/components/schemas/Meta'
 
+    # ===== CPG =====
+    Cpg:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    CpgCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+
+    CpgResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Cpg'
+
+    CpgListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Cpg'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
     # ===== Brand =====
     Brand:
       type: object
@@ -1707,6 +1891,33 @@ components:
         logoUrl:
           type: string
           nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    BrandCreate:
+      type: object
+      required: [cpgId, name]
+      properties:
+        cpgId:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+
+    BrandResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Brand'
 
     BrandListResponse:
       type: object
@@ -1735,6 +1946,29 @@ components:
         status:
           type: string
           enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    ProductCreate:
+      type: object
+      required: [brandId, sku, name]
+      properties:
+        brandId:
+          type: string
+        sku:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+
+    ProductResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/Product'
 
     ProductListResponse:
       type: object
