@@ -24,7 +24,9 @@ export default function CatalogPage() {
   const [productSku, setProductSku] = useState("");
   const [productBrandId, setProductBrandId] = useState("");
   const [brandFilterCpgId, setBrandFilterCpgId] = useState("");
+  const [brandSearch, setBrandSearch] = useState("");
   const [productFilterBrandId, setProductFilterBrandId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
 
   const token = getAccessToken();
 
@@ -44,8 +46,9 @@ export default function CatalogPage() {
     () => ({
       limit: "50",
       cpgId: brandFilterCpgId || undefined,
+      q: brandSearch || undefined,
     }),
-    [brandFilterCpgId],
+    [brandFilterCpgId, brandSearch],
   );
 
   const { data: brandData } = useQuery({
@@ -64,8 +67,9 @@ export default function CatalogPage() {
     () => ({
       limit: "50",
       brandId: productFilterBrandId || undefined,
+      q: productSearch || undefined,
     }),
-    [productFilterBrandId],
+    [productFilterBrandId, productSearch],
   );
 
   const { data: productData } = useQuery({
@@ -201,32 +205,52 @@ export default function CatalogPage() {
             }}
           >
             <input
-              placeholder="CPG ID"
-              value={brandCpgId}
-              onChange={(event) => setBrandCpgId(event.target.value)}
-              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <input
               placeholder="Nombre de la brand"
               value={brandName}
               onChange={(event) => setBrandName(event.target.value)}
               className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
+            <select
+              value={brandCpgId}
+              onChange={(event) => setBrandCpgId(event.target.value)}
+              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">Selecciona CPG</option>
+              {cpgs.map((cpg) => (
+                <option key={cpg.id} value={cpg.id}>
+                  {cpg.name}
+                </option>
+              ))}
+            </select>
             <button
               type="submit"
               className="w-full rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-              disabled={createBrand.isPending}
+              disabled={createBrand.isPending || !brandCpgId}
             >
               Crear brand
             </button>
           </form>
 
-          <input
-            placeholder="Filtrar por CPG ID"
-            value={brandFilterCpgId}
-            onChange={(event) => setBrandFilterCpgId(event.target.value)}
-            className="mt-3 w-full rounded-md border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <div className="mt-3 grid gap-2">
+            <select
+              value={brandFilterCpgId}
+              onChange={(event) => setBrandFilterCpgId(event.target.value)}
+              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">Filtrar por CPG (todos)</option>
+              {cpgs.map((cpg) => (
+                <option key={cpg.id} value={cpg.id}>
+                  {cpg.name}
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder="Buscar brand por nombre"
+              value={brandSearch}
+              onChange={(event) => setBrandSearch(event.target.value)}
+              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </div>
 
           <ul className="mt-4 divide-y divide-zinc-200 dark:divide-zinc-800">
             {brands.map((brand) => (
@@ -251,12 +275,6 @@ export default function CatalogPage() {
             }}
           >
             <input
-              placeholder="Brand ID"
-              value={productBrandId}
-              onChange={(event) => setProductBrandId(event.target.value)}
-              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            />
-            <input
               placeholder="SKU"
               value={productSku}
               onChange={(event) => setProductSku(event.target.value)}
@@ -268,21 +286,47 @@ export default function CatalogPage() {
               onChange={(event) => setProductName(event.target.value)}
               className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
+            <select
+              value={productBrandId}
+              onChange={(event) => setProductBrandId(event.target.value)}
+              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">Selecciona brand</option>
+              {brands.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
+                </option>
+              ))}
+            </select>
             <button
               type="submit"
               className="w-full rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-              disabled={createProduct.isPending}
+              disabled={createProduct.isPending || !productBrandId}
             >
               Crear producto
             </button>
           </form>
 
-          <input
-            placeholder="Filtrar por Brand ID"
-            value={productFilterBrandId}
-            onChange={(event) => setProductFilterBrandId(event.target.value)}
-            className="mt-3 w-full rounded-md border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-          />
+          <div className="mt-3 grid gap-2">
+            <select
+              value={productFilterBrandId}
+              onChange={(event) => setProductFilterBrandId(event.target.value)}
+              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <option value="">Filtrar por brand (todas)</option>
+              {brands.map((brand) => (
+                <option key={brand.id} value={brand.id}>
+                  {brand.name}
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder="Buscar producto por nombre o SKU"
+              value={productSearch}
+              onChange={(event) => setProductSearch(event.target.value)}
+              className="w-full rounded-md border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+            />
+          </div>
 
           <ul className="mt-4 divide-y divide-zinc-200 dark:divide-zinc-800">
             {products.map((product) => (
