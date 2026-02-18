@@ -2,6 +2,7 @@ import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { authGuard, authPlugin } from '../../app/plugins/auth';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import {
@@ -32,13 +33,6 @@ import {
 } from './model';
 
 const allowedRoles = ['store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
-const authHeader = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
 
 const webhookHeaderSchema = t.Object({
   authorization: t.Optional(
@@ -796,7 +790,7 @@ export const transactionsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: authorizationHeader,
       body: transactionCreateRequest,
       response: {
         200: transactionResponse,
@@ -1020,7 +1014,7 @@ export const transactionsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: authorizationHeader,
       query: webhookReceiptListQuery,
       response: {
         200: webhookReceiptListResponse,
@@ -1086,7 +1080,7 @@ export const transactionsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: authorizationHeader,
       query: webhookMetricsQuery,
       response: {
         200: webhookMetricsResponse,
@@ -1186,7 +1180,7 @@ export const transactionsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: authorizationHeader,
       query: transactionListQuery,
       response: {
         200: transactionListResponse,
@@ -1231,7 +1225,7 @@ export const transactionsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: authorizationHeader,
       response: {
         200: transactionDetailResponse,
       },

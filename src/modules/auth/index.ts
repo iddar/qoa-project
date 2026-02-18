@@ -1,4 +1,4 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { eq, or } from 'drizzle-orm';
 import { db } from '../../db/client';
 import { refreshTokens, users } from '../../db/schema';
@@ -10,16 +10,9 @@ import {
   persistRefreshToken,
   rotateRefreshToken,
 } from '../../app/plugins/auth';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import type { AuthHelpers, JwtSigner, StatusHandler } from '../../types/handlers';
 import { authResponse, loginRequest, refreshRequest, signupRequest } from './model';
-
-const authHeader = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
 
 const invalidCredentialsError = {
   error: {
@@ -312,7 +305,7 @@ export const authModule = new Elysia({
       beforeHandle: authGuard({
         roles: ['consumer', 'customer', 'store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'],
       }),
-      headers: authHeader,
+      headers: authorizationHeader,
       detail: {
         summary: 'Revocar refresh token',
         security: [{ bearerAuth: [] }],

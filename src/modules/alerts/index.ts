@@ -1,19 +1,11 @@
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { backofficeRoles } from '../../app/plugins/roles';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import { collectPlatformAlerts } from '../../services/alerts';
 import { sendEmailMock } from '../../services/notifications';
 import type { StatusHandler } from '../../types/handlers';
 import { alertListResponse, alertNotifyRequest, alertNotifyResponse } from './model';
-
-const adminRoles = ['qoa_support', 'qoa_admin'] as const;
-
-const authHeader = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
 
 type AlertListContext = {
   auth: AuthContext | null;
@@ -55,8 +47,8 @@ export const alertsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: [...adminRoles] }),
-      headers: authHeader,
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authorizationHeader,
       response: {
         200: alertListResponse,
       },
@@ -109,8 +101,8 @@ export const alertsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: [...adminRoles] }),
-      headers: authHeader,
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authorizationHeader,
       body: alertNotifyRequest,
       response: {
         200: alertNotifyResponse,

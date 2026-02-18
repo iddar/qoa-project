@@ -1,6 +1,8 @@
 import { and, desc, eq, gt, lt, or } from 'drizzle-orm';
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { allUserRoles } from '../../app/plugins/roles';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { balances, campaigns, cards, redemptions, rewards } from '../../db/schema';
@@ -14,24 +16,8 @@ import {
   rewardResponse,
 } from './model';
 
-const allowedRoles = [
-  'consumer',
-  'customer',
-  'store_staff',
-  'store_admin',
-  'cpg_admin',
-  'qoa_support',
-  'qoa_admin',
-] as const;
+const allowedRoles = allUserRoles;
 const adminRoles = ['store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
-
-const authHeader = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
 
 type RewardRow = {
   id: string;
@@ -187,7 +173,7 @@ export const rewardsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: authorizationHeader,
       query: rewardListQuery,
       response: {
         200: rewardListResponse,
@@ -248,7 +234,7 @@ export const rewardsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...adminRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: authorizationHeader,
       body: rewardCreateRequest,
       response: {
         201: rewardResponse,
@@ -286,7 +272,7 @@ export const rewardsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
-      headers: authHeader,
+      headers: authorizationHeader,
       response: {
         200: rewardResponse,
       },
@@ -430,7 +416,7 @@ export const rewardsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles] }),
-      headers: authHeader,
+      headers: authorizationHeader,
       body: rewardRedeemRequest,
       response: {
         200: redemptionResponse,

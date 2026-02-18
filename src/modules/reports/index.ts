@@ -1,6 +1,8 @@
 import { eq, sql } from 'drizzle-orm';
-import { Elysia, t } from 'elysia';
+import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { backofficeRoles } from '../../app/plugins/roles';
+import { authorizationHeader } from '../../app/plugins/schemas';
 import { db } from '../../db/client';
 import {
   brands,
@@ -19,20 +21,12 @@ import {
 import type { StatusHandler } from '../../types/handlers';
 import { platformOverviewResponse } from './model';
 
-const headerSchema = t.Object({
-  authorization: t.Optional(
-    t.String({
-      description: 'Bearer <accessToken>',
-    }),
-  ),
-});
-
 type OverviewContext = {
   auth: AuthContext | null;
   status: StatusHandler;
 };
 
-const countTable = async (table: { id: unknown }, condition?: unknown) => {
+const countTable = async (table: Record<string, unknown>, condition?: unknown) => {
   const query = db.select({ count: sql<number>`count(*)::int` }).from(table as never);
   const rows = condition ? await query.where(condition as never) : await query;
   return (rows as Array<{ count: number }>)[0]?.count ?? 0;
@@ -125,8 +119,8 @@ export const reportsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ['qoa_support', 'qoa_admin'], allowApiKey: false }),
-      headers: headerSchema,
+      beforeHandle: authGuard({ roles: [...backofficeRoles], allowApiKey: false }),
+      headers: authorizationHeader,
       response: {
         200: platformOverviewResponse,
       },
