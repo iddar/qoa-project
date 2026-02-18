@@ -1,0 +1,4 @@
+interface:
+  display_name: "React QR Code"
+  short_description: "Implement and customize @lglab/react-qr-code from official llms docs."
+  default_prompt: "Implement a React QR code with @lglab/react-qr-code, including correct props, styles, and export behavior."
