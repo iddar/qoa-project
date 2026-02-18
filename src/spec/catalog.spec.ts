@@ -123,6 +123,7 @@ describe('Catalog module', () => {
         cpgId,
         brandId,
         status: 'active',
+        q: sku,
         limit: '10',
       },
       headers: adminHeaders,

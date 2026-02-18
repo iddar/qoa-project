@@ -70,6 +70,7 @@ export const transactionListQuery = t.Object({
   userId: t.Optional(t.String({ format: 'uuid' })),
   storeId: t.Optional(t.String({ format: 'uuid' })),
   cardId: t.Optional(t.String({ format: 'uuid' })),
+  q: t.Optional(t.String()),
   from: t.Optional(t.String()),
   to: t.Optional(t.String()),
   limit: t.Optional(t.String()),

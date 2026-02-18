@@ -543,6 +543,11 @@ paths:
           schema:
             type: string
             enum: [active, inactive]
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Búsqueda por nombre de CPG
         - $ref: '#/components/parameters/limitParam'
         - $ref: '#/components/parameters/cursorParam'
       responses:
@@ -606,6 +611,11 @@ paths:
           schema:
             type: string
           description: Filtrar por CPG
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Búsqueda por nombre de marca
         - $ref: '#/components/parameters/limitParam'
         - $ref: '#/components/parameters/cursorParam'
       responses:
@@ -680,6 +690,11 @@ paths:
           schema:
             type: string
             enum: [active, inactive]
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Búsqueda por nombre o SKU
         - $ref: '#/components/parameters/limitParam'
         - $ref: '#/components/parameters/cursorParam'
       responses:
@@ -1116,6 +1131,11 @@ paths:
           in: query
           schema:
             type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Búsqueda rápida por id/user/store/card
         - name: from
           in: query
           schema:

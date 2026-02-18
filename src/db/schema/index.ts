@@ -7,3 +7,4 @@ export * from './cards';
 export * from './campaigns';
 export * from './transactions';
 export * from './catalog';
+export * from './loyalty';

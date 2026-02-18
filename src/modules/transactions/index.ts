@@ -4,7 +4,17 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { authGuard, authPlugin } from '../../app/plugins/auth';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { cards, stores, transactionItems, transactions, users, webhookReceipts } from '../../db/schema';
+import {
+  accumulations,
+  balances,
+  cards,
+  products,
+  stores,
+  transactionItems,
+  transactions,
+  users,
+  webhookReceipts,
+} from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import {
   transactionCreateRequest,
@@ -53,11 +63,23 @@ type TransactionRow = {
 };
 
 type TransactionItemRow = {
+  id: string;
   transactionId: string;
   productId: string;
   quantity: number;
   amount: number;
   metadata: string | null;
+};
+
+type AccumulationRow = {
+  id: string;
+  transactionItemId: string | null;
+  cardId: string;
+  campaignId: string;
+  amount: number;
+  balanceAfter: number;
+  sourceType: 'transaction_item' | 'code_capture';
+  codeCaptureId: string | null;
 };
 
 type CreateContext = {
@@ -82,6 +104,7 @@ type ListContext = {
     userId?: string;
     storeId?: string;
     cardId?: string;
+    q?: string;
     from?: string;
     to?: string;
     limit?: string;
@@ -174,9 +197,17 @@ const toListPayload = (tx: TransactionRow, items: TransactionItemRow[]) => ({
   })),
 });
 
-const toDetailPayload = (tx: TransactionRow, items: TransactionItemRow[]) => ({
+const toDetailPayload = (tx: TransactionRow, items: TransactionItemRow[], txAccumulations: AccumulationRow[] = []) => ({
   ...toListPayload(tx, items),
-  accumulations: [],
+  accumulations: txAccumulations.map((entry) => ({
+    cardId: entry.cardId,
+    campaignId: entry.campaignId,
+    accumulated: entry.amount,
+    newBalance: entry.balanceAfter,
+    sourceType: entry.sourceType,
+    codeCaptureId: entry.codeCaptureId ?? undefined,
+    codeValue: undefined,
+  })),
 });
 
 const normalizeItems = (items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>) =>
@@ -192,7 +223,12 @@ const normalizeItems = (items: Array<{ productId: string; quantity?: number; amo
   });
 
 const ensureTransactionEntities = async (
-  payload: { userId: string; storeId: string; cardId?: string },
+  payload: {
+    userId: string;
+    storeId: string;
+    cardId?: string;
+    items?: Array<{ productId: string }>;
+  },
   status: StatusHandler,
 ) => {
   const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.id, payload.userId))) as Array<{
@@ -233,6 +269,26 @@ const ensureTransactionEntities = async (
     }
   }
 
+  if (payload.items && payload.items.length > 0) {
+    const productRefs = [...new Set(payload.items.map((item) => item.productId))];
+    for (const productRef of productRefs) {
+      const [product] = (await db
+        .select({ id: products.id })
+        .from(products)
+        .where(or(eq(products.id, productRef), eq(products.sku, productRef)))
+        .limit(1)) as Array<{ id: string }>;
+
+      if (!product) {
+        return status(404, {
+          error: {
+            code: 'PRODUCT_NOT_FOUND',
+            message: 'Uno o más productos no existen',
+          },
+        });
+      }
+    }
+  }
+
   return null;
 };
 
@@ -256,10 +312,20 @@ const createOrReplayTransaction = async (payload: {
         .from(transactionItems)
         .where(eq(transactionItems.transactionId, existing.id))) as TransactionItemRow[];
 
+      const itemIds = existingItems.map((item) => item.id);
+      const existingAccumulations =
+        itemIds.length > 0
+          ? ((await db
+              .select()
+              .from(accumulations)
+              .where(or(...itemIds.map((id) => eq(accumulations.transactionItemId, id))))) as AccumulationRow[])
+          : [];
+
       return {
         statusCode: 200,
         transaction: existing,
         items: existingItems,
+        accumulations: existingAccumulations,
       };
     }
   }
@@ -298,10 +364,78 @@ const createOrReplayTransaction = async (payload: {
     .from(transactionItems)
     .where(eq(transactionItems.transactionId, created.id))) as TransactionItemRow[];
 
+  let createdAccumulations: AccumulationRow[] = [];
+  if (payload.cardId) {
+    const [card] = (await db
+      .select({
+        id: cards.id,
+        campaignId: cards.campaignId,
+      })
+      .from(cards)
+      .where(eq(cards.id, payload.cardId))) as Array<{
+      id: string;
+      campaignId: string;
+    }>;
+
+    if (card) {
+      const [existingBalance] = (await db.select().from(balances).where(eq(balances.cardId, card.id))) as Array<{
+        id: string;
+        current: number;
+        lifetime: number;
+      }>;
+
+      let currentBalance = existingBalance?.current ?? 0;
+      let lifetimeBalance = existingBalance?.lifetime ?? 0;
+
+      const accumulationRows = createdItems.map((item) => {
+        const amount = item.quantity;
+        currentBalance += amount;
+        lifetimeBalance += amount;
+        return {
+          transactionItemId: item.id,
+          cardId: card.id,
+          campaignId: card.campaignId,
+          amount,
+          balanceAfter: currentBalance,
+          sourceType: 'transaction_item' as const,
+          codeCaptureId: null,
+        };
+      });
+
+      if (existingBalance) {
+        await db
+          .update(balances)
+          .set({
+            current: currentBalance,
+            lifetime: lifetimeBalance,
+            updatedAt: new Date(),
+          })
+          .where(eq(balances.id, existingBalance.id));
+      } else {
+        await db.insert(balances).values({
+          cardId: card.id,
+          current: currentBalance,
+          lifetime: lifetimeBalance,
+          updatedAt: new Date(),
+        });
+      }
+
+      if (accumulationRows.length > 0) {
+        await db.insert(accumulations).values(accumulationRows);
+        const itemIds = accumulationRows.map((row) => row.transactionItemId);
+        createdAccumulations = (await db
+          .select()
+          .from(accumulations)
+          .where(or(...itemIds.map((id) => eq(accumulations.transactionItemId, id))))) as AccumulationRow[];
+      }
+    }
+  }
+
   return {
     statusCode: 201,
     transaction: created,
     items: createdItems,
+    accumulations: createdAccumulations,
   };
 };
 
@@ -402,7 +536,7 @@ export const transactionsModule = new Elysia({
       }
 
       return status(outcome.statusCode, {
-        data: toDetailPayload(outcome.transaction, outcome.items),
+        data: toDetailPayload(outcome.transaction, outcome.items, outcome.accumulations),
       });
     },
     {
@@ -482,8 +616,19 @@ export const transactionsModule = new Elysia({
             .from(transactionItems)
             .where(eq(transactionItems.transactionId, existingTx.id))) as TransactionItemRow[];
 
+          const existingItemIds = existingItems.map((item) => item.id);
+          const existingAccumulations =
+            existingItemIds.length > 0
+              ? ((await db
+                  .select()
+                  .from(accumulations)
+                  .where(
+                    or(...existingItemIds.map((id) => eq(accumulations.transactionItemId, id))),
+                  )) as AccumulationRow[])
+              : [];
+
           return status(200, {
-            data: toDetailPayload(existingTx, existingItems),
+            data: toDetailPayload(existingTx, existingItems, existingAccumulations),
             meta: {
               replayed: true,
               hash: existingReceipt.hash,
@@ -550,7 +695,7 @@ export const transactionsModule = new Elysia({
       });
 
       return status(outcome.statusCode, {
-        data: toDetailPayload(outcome.transaction, outcome.items),
+        data: toDetailPayload(outcome.transaction, outcome.items, outcome.accumulations),
         meta: {
           replayed: false,
           hash,
@@ -729,6 +874,17 @@ export const transactionsModule = new Elysia({
       if (query.cardId) {
         conditions.push(eq(transactions.cardId, query.cardId));
       }
+      if (query.q) {
+        const qPattern = `%${query.q}%`;
+        conditions.push(
+          or(
+            sql`cast(${transactions.id} as text) ilike ${qPattern}`,
+            sql`cast(${transactions.userId} as text) ilike ${qPattern}`,
+            sql`cast(${transactions.storeId} as text) ilike ${qPattern}`,
+            sql`cast(${transactions.cardId} as text) ilike ${qPattern}`,
+          ),
+        );
+      }
       if (fromDate) {
         conditions.push(gt(transactions.createdAt, fromDate));
       }
@@ -805,8 +961,16 @@ export const transactionsModule = new Elysia({
         .from(transactionItems)
         .where(eq(transactionItems.transactionId, tx.id))) as TransactionItemRow[];
 
+      const txAccumulations =
+        items.length > 0
+          ? ((await db
+              .select()
+              .from(accumulations)
+              .where(or(...items.map((item) => eq(accumulations.transactionItemId, item.id))))) as AccumulationRow[])
+          : [];
+
       return {
-        data: toDetailPayload(tx, items),
+        data: toDetailPayload(tx, items, txAccumulations),
       };
     },
     {

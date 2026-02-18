@@ -17,6 +17,7 @@ export const cpgCreateRequest = t.Object({
 
 export const cpgListQuery = t.Object({
   status: t.Optional(entityStatus),
+  q: t.Optional(t.String()),
   limit: t.Optional(t.String()),
   cursor: t.Optional(t.String()),
 });
@@ -49,6 +50,7 @@ export const brandCreateRequest = t.Object({
 export const brandListQuery = t.Object({
   cpgId: t.Optional(t.String({ format: 'uuid' })),
   status: t.Optional(entityStatus),
+  q: t.Optional(t.String()),
   limit: t.Optional(t.String()),
   cursor: t.Optional(t.String()),
 });
@@ -82,6 +84,7 @@ export const productListQuery = t.Object({
   cpgId: t.Optional(t.String({ format: 'uuid' })),
   brandId: t.Optional(t.String({ format: 'uuid' })),
   status: t.Optional(entityStatus),
+  q: t.Optional(t.String()),
   limit: t.Optional(t.String()),
   cursor: t.Optional(t.String()),
 });

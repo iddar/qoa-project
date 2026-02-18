@@ -77,17 +77,17 @@ type PaginationQuery = {
 };
 
 type CpgListContext = {
-  query: PaginationQuery & { status?: string };
+  query: PaginationQuery & { status?: string; q?: string };
   status: StatusHandler;
 };
 
 type BrandListContext = {
-  query: PaginationQuery & { cpgId?: string; status?: string };
+  query: PaginationQuery & { cpgId?: string; status?: string; q?: string };
   status: StatusHandler;
 };
 
 type ProductListContext = {
-  query: PaginationQuery & { cpgId?: string; brandId?: string; status?: string };
+  query: PaginationQuery & { cpgId?: string; brandId?: string; status?: string; q?: string };
   status: StatusHandler;
 };
 
@@ -162,6 +162,9 @@ export const catalogModule = new Elysia({
       const filters = [sql`1 = 1`];
       if (query.status) {
         filters.push(sql`"status" = ${query.status}`);
+      }
+      if (query.q) {
+        filters.push(sql`"name" ilike ${`%${query.q}%`}`);
       }
       if (cursorDate) {
         filters.push(sql`"created_at" < ${cursorDate}`);
@@ -291,6 +294,9 @@ export const catalogModule = new Elysia({
       }
       if (query.status) {
         filters.push(sql`"status" = ${query.status}`);
+      }
+      if (query.q) {
+        filters.push(sql`"name" ilike ${`%${query.q}%`}`);
       }
       if (cursorDate) {
         filters.push(sql`"created_at" < ${cursorDate}`);
@@ -436,6 +442,9 @@ export const catalogModule = new Elysia({
       }
       if (query.status) {
         filters.push(sql`"products"."status" = ${query.status}`);
+      }
+      if (query.q) {
+        filters.push(sql`("products"."name" ilike ${`%${query.q}%`} or "products"."sku" ilike ${`%${query.q}%`})`);
       }
       if (query.cpgId) {
         filters.push(sql`"brands"."cpg_id" = ${query.cpgId}`);

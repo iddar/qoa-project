@@ -4,7 +4,19 @@ import { eq } from 'drizzle-orm';
 import { createHmac } from 'node:crypto';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { stores, transactions, users, webhookReceipts } from '../db/schema';
+import {
+  accumulations,
+  balances,
+  brands,
+  cards,
+  campaigns,
+  cpgs,
+  products,
+  stores,
+  transactions,
+  users,
+  webhookReceipts,
+} from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -63,10 +75,81 @@ const createStore = async () => {
   return created;
 };
 
+const createProduct = async () => {
+  const [cpg] = (await db
+    .insert(cpgs)
+    .values({
+      name: `CPG TX ${crypto.randomUUID().slice(0, 6)}`,
+    })
+    .returning({ id: cpgs.id })) as Array<{ id: string }>;
+
+  if (!cpg) {
+    throw new Error('Failed to create test cpg');
+  }
+
+  const [brand] = (await db
+    .insert(brands)
+    .values({
+      cpgId: cpg.id,
+      name: `Brand TX ${crypto.randomUUID().slice(0, 6)}`,
+    })
+    .returning({ id: brands.id })) as Array<{ id: string }>;
+
+  if (!brand) {
+    throw new Error('Failed to create test brand');
+  }
+
+  const [product] = (await db
+    .insert(products)
+    .values({
+      brandId: brand.id,
+      sku: `SKU-TX-${crypto.randomUUID().slice(0, 8)}`,
+      name: `Product TX ${crypto.randomUUID().slice(0, 6)}`,
+    })
+    .returning({ id: products.id })) as Array<{ id: string }>;
+
+  if (!product) {
+    throw new Error('Failed to create test product');
+  }
+
+  return {
+    cpgId: cpg.id,
+    brandId: brand.id,
+    productId: product.id,
+  };
+};
+
 describe('Transactions module', () => {
   it('creates and retrieves transaction details', async () => {
     const user = await createUser();
     const store = await createStore();
+    const catalog = await createProduct();
+    const [campaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign TX ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    if (!campaign) {
+      throw new Error('Failed to create test campaign');
+    }
+    const [card] = (await db
+      .insert(cards)
+      .values({
+        userId: user.id,
+        campaignId: campaign.id,
+        storeId: store.id,
+        code: `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+      })
+      .returning({ id: cards.id, campaignId: cards.campaignId })) as Array<{
+      id: string;
+      campaignId: string;
+    }>;
+
+    if (!card) {
+      throw new Error('Failed to create test card');
+    }
 
     const idempotencyKey = `tx-key-${crypto.randomUUID()}`;
 
@@ -78,10 +161,11 @@ describe('Transactions module', () => {
       {
         userId: user.id,
         storeId: store.id,
+        cardId: card.id,
         idempotencyKey,
         items: [
           {
-            productId: 'sku-001',
+            productId: catalog.productId,
             quantity: 2,
             amount: 15,
           },
@@ -101,6 +185,11 @@ describe('Transactions module', () => {
 
     expect(createStatus).toBe(201);
     expect(created.data.totalAmount).toBe(30);
+    expect(created.data.accumulations.length).toBe(1);
+    expect(created.data.accumulations[0]?.cardId).toBe(card.id);
+    expect(created.data.accumulations[0]?.campaignId).toBe(card.campaignId);
+    expect(created.data.accumulations[0]?.accumulated).toBe(2);
+    expect(created.data.accumulations[0]?.newBalance).toBe(2);
 
     const txId = created.data.id;
 
@@ -112,10 +201,11 @@ describe('Transactions module', () => {
       {
         userId: user.id,
         storeId: store.id,
+        cardId: card.id,
         idempotencyKey,
         items: [
           {
-            productId: 'sku-001',
+            productId: catalog.productId,
             quantity: 2,
             amount: 15,
           },
@@ -135,6 +225,8 @@ describe('Transactions module', () => {
 
     expect(replayStatus).toBe(200);
     expect(replayed.data.id).toBe(txId);
+    expect(replayed.data.accumulations.length).toBe(1);
+    expect(replayed.data.accumulations[0]?.newBalance).toBe(2);
 
     const {
       data: listed,
@@ -159,6 +251,28 @@ describe('Transactions module', () => {
     expect(listed.data.some((tx: { id: string }) => tx.id === txId)).toBe(true);
 
     const {
+      data: filtered,
+      error: filteredError,
+      status: filteredStatus,
+    } = await api.v1.transactions.get({
+      query: {
+        q: txId,
+        limit: '10',
+      },
+      headers: adminHeaders,
+    });
+
+    if (filteredError) {
+      throw filteredError.value;
+    }
+    if (!filtered) {
+      throw new Error('Transaction filtered response missing');
+    }
+
+    expect(filteredStatus).toBe(200);
+    expect(filtered.data.some((tx: { id: string }) => tx.id === txId)).toBe(true);
+
+    const {
       data: detail,
       error: detailError,
       status: detailStatus,
@@ -177,8 +291,29 @@ describe('Transactions module', () => {
 
     expect(detailStatus).toBe(200);
     expect(detail.data.items.length).toBe(1);
+    expect(detail.data.accumulations.length).toBe(1);
 
+    const [balance] = (await db
+      .select({
+        current: balances.current,
+        lifetime: balances.lifetime,
+      })
+      .from(balances)
+      .where(eq(balances.cardId, card.id))) as Array<{
+      current: number;
+      lifetime: number;
+    }>;
+    expect(balance?.current).toBe(2);
+    expect(balance?.lifetime).toBe(2);
+
+    await db.delete(accumulations).where(eq(accumulations.cardId, card.id));
+    await db.delete(balances).where(eq(balances.cardId, card.id));
+    await db.delete(cards).where(eq(cards.id, card.id));
+    await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
     await db.delete(transactions).where(eq(transactions.id, txId));
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
   });
@@ -186,6 +321,7 @@ describe('Transactions module', () => {
   it('deduplicates webhook retries using payload hash', async () => {
     const user = await createUser();
     const store = await createStore();
+    const catalog = await createProduct();
 
     const payload = {
       source: 'tconecta',
@@ -194,7 +330,7 @@ describe('Transactions module', () => {
       storeId: store.id,
       items: [
         {
-          productId: 'sku-webhook-01',
+          productId: catalog.productId,
           quantity: 1,
           amount: 25,
         },
@@ -251,6 +387,9 @@ describe('Transactions module', () => {
 
     await db.delete(webhookReceipts).where(eq(webhookReceipts.hash, first.meta.hash));
     await db.delete(transactions).where(eq(transactions.id, first.data.id));
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
   });
@@ -258,6 +397,7 @@ describe('Transactions module', () => {
   it('rejects webhook with invalid signature', async () => {
     const user = await createUser();
     const store = await createStore();
+    const catalog = await createProduct();
 
     const payload = {
       source: 'tconecta',
@@ -266,7 +406,7 @@ describe('Transactions module', () => {
       storeId: store.id,
       items: [
         {
-          productId: 'sku-signature-01',
+          productId: catalog.productId,
           quantity: 1,
           amount: 10,
         },
@@ -287,6 +427,9 @@ describe('Transactions module', () => {
     expect(status).toBe(401);
     expect(error.value.error.code).toBe('INVALID_WEBHOOK_SIGNATURE');
 
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
   });

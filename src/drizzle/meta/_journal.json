@@ -71,6 +71,13 @@
       "when": 1771373742147,
       "tag": "0009_lyrical_baron_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771374513182,
+      "tag": "0010_red_vivisector",
+      "breakpoints": true
     }
   ]
 }
