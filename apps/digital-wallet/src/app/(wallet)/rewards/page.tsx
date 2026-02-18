@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
-type CardItem = {
-  id: string;
-  code: string;
+type WalletCampaign = {
   campaignId: string;
+  campaignName: string;
+  enrollmentMode: "open" | "opt_in" | "system_universal";
+  current: number;
+  lifetime: number;
 };
 
 type RewardItem = {
@@ -22,14 +25,13 @@ type RewardItem = {
 
 export default function WalletRewardsPage() {
   const token = getAccessToken();
-  const [selectedCardId, setSelectedCardId] = useState("");
+  const [selectedCampaignId, setSelectedCampaignId] = useState("");
 
-  const cardsQuery = useQuery({
-    queryKey: ["wallet-cards-rewards"],
+  const walletQuery = useQuery({
+    queryKey: ["wallet-summary-rewards"],
     enabled: Boolean(token),
     queryFn: async () => {
-      const { data, error } = await api.v1.users.me.cards.get({
-        query: { limit: "100" },
+      const { data, error } = await api.v1.users.me.wallet.get({
         headers: { authorization: `Bearer ${token}` },
       });
       if (error) throw error;
@@ -37,35 +39,26 @@ export default function WalletRewardsPage() {
     },
   });
 
-  const cards = (cardsQuery.data?.data as CardItem[] | undefined) ?? [];
-  const activeCardId = selectedCardId || cards[0]?.id || "";
-  const activeCard = cards.find((card) => card.id === activeCardId);
+  const walletCampaigns = ((walletQuery.data?.data.campaigns as WalletCampaign[] | undefined) ?? []).filter(
+    (campaign) => campaign.enrollmentMode !== "system_universal",
+  );
+
+  const selectedCampaign = walletCampaigns.find((campaign) => campaign.campaignId === selectedCampaignId);
+  const activeCampaign = selectedCampaign ?? walletCampaigns[0];
+  const activeCampaignId = activeCampaign?.campaignId ?? "";
 
   const rewardsQuery = useQuery({
-    queryKey: ["wallet-rewards", activeCard?.campaignId],
-    enabled: Boolean(activeCard?.campaignId) && Boolean(token),
+    queryKey: ["wallet-rewards", activeCampaignId],
+    enabled: Boolean(activeCampaignId) && Boolean(token),
     queryFn: async () => {
       const { data, error } = await api.v1.rewards.get({
         query: {
-          campaignId: activeCard?.campaignId,
+          campaignId: activeCampaignId,
           available: "true",
           limit: "100",
         },
         headers: { authorization: `Bearer ${token}` },
       });
-      if (error) throw error;
-      return data;
-    },
-  });
-
-  const summaryQuery = useQuery({
-    queryKey: ["wallet-campaign-summary", activeCard?.campaignId],
-    enabled: Boolean(activeCard?.campaignId) && Boolean(token),
-    queryFn: async () => {
-      const { data, error } = await api.v1.reports.campaigns({ campaignId: activeCard?.campaignId ?? "" }).summary.get({
-        headers: { authorization: `Bearer ${token}` },
-      });
-
       if (error) throw error;
       return data;
     },
@@ -80,23 +73,24 @@ export default function WalletRewardsPage() {
   );
 
   const lowStockCount = rewards.filter((reward) => typeof reward.stock === "number" && reward.stock <= 3).length;
-  const redemptionRate = ((summaryQuery.data?.data.kpis.redemptionRate ?? 0) * 100).toFixed(1);
+  const totalWalletPoints = walletQuery.data?.data.totals.current ?? 0;
+  const selectedCampaignPoints = activeCampaign?.current ?? 0;
 
   return (
     <div className="space-y-4">
       <header className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
         <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Catálogo de recompensas</h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Recompensas activas para tu tarjeta y campaña actual.</p>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Tus recompensas se separan por campaña según tus suscripciones activas.</p>
 
-        {cards.length > 1 && (
+        {walletCampaigns.length > 1 && (
           <select
-            value={activeCardId}
-            onChange={(event) => setSelectedCardId(event.target.value)}
+            value={activeCampaignId}
+            onChange={(event) => setSelectedCampaignId(event.target.value)}
             className="mt-3 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           >
-            {cards.map((card) => (
-              <option key={card.id} value={card.id}>
-                {card.code}
+            {walletCampaigns.map((campaign) => (
+              <option key={campaign.campaignId} value={campaign.campaignId}>
+                {campaign.campaignName}
               </option>
             ))}
           </select>
@@ -109,21 +103,38 @@ export default function WalletRewardsPage() {
           <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{rewards.length}</p>
         </article>
         <article className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/70">
-          <p className="text-[11px] text-zinc-500">Stock bajo</p>
-          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{lowStockCount}</p>
+          <p className="text-[11px] text-zinc-500">Pts campaña</p>
+          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{selectedCampaignPoints}</p>
         </article>
         <article className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/70">
-          <p className="text-[11px] text-zinc-500">Tasa canje</p>
-          <p className="mt-1 text-sm font-bold text-zinc-900 dark:text-zinc-100">{redemptionRate}%</p>
+          <p className="text-[11px] text-zinc-500">Pts totales</p>
+          <p className="mt-1 text-sm font-bold text-zinc-900 dark:text-zinc-100">{totalWalletPoints}</p>
         </article>
       </section>
 
+      {walletCampaigns.length === 0 && !walletQuery.isLoading && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-zinc-700 dark:border-amber-900/40 dark:bg-amber-900/10 dark:text-zinc-200">
+          Aún no tienes campañas tipo reto suscritas.
+          <Link href="/campaigns" className="ml-1 font-semibold underline decoration-amber-500 underline-offset-2">
+            Explorar retos
+          </Link>
+        </section>
+      )}
+
       <section className="space-y-3">
+        {walletQuery.isLoading && <p className="text-sm text-zinc-500">Cargando tu wallet...</p>}
         {rewardsQuery.isLoading && <p className="text-sm text-zinc-500">Cargando recompensas...</p>}
 
-        {!rewardsQuery.isLoading && rewards.length === 0 && (
+        {!walletQuery.isLoading && activeCampaign && !rewardsQuery.isLoading && rewards.length === 0 && (
           <p className="rounded-xl border border-zinc-200 bg-white px-4 py-4 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/70">
-            No hay recompensas activas para esta tarjeta.
+            No hay recompensas activas para esta campaña.
+          </p>
+        )}
+
+        {activeCampaign && (
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Campaña activa: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{activeCampaign.campaignName}</span>
+            {" · "}stock bajo: {lowStockCount}
           </p>
         )}
 

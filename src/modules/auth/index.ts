@@ -200,6 +200,9 @@ export const authModule = new Elysia({
 
       const refreshToken = authHelpers.generateRefreshToken();
       await persistRefreshToken(user.id, refreshToken);
+      if (user.role === 'consumer' || user.role === 'customer') {
+        await ensureUserUniversalWalletCard(user.id);
+      }
 
       return {
         data: {

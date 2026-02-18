@@ -16,6 +16,32 @@ export const userMeResponse = t.Object({
   }),
 });
 
+export const userWalletResponse = t.Object({
+  data: t.Object({
+    card: t.Object({
+      id: t.String(),
+      campaignId: t.String(),
+      code: t.String(),
+      status: t.String(),
+      createdAt: t.String(),
+    }),
+    totals: t.Object({
+      current: t.Number(),
+      lifetime: t.Number(),
+    }),
+    campaigns: t.Array(
+      t.Object({
+        campaignId: t.String(),
+        campaignName: t.String(),
+        enrollmentMode: t.Union([t.Literal('open'), t.Literal('opt_in'), t.Literal('system_universal')]),
+        subscriptionStatus: t.Optional(t.String()),
+        current: t.Number(),
+        lifetime: t.Number(),
+      }),
+    ),
+  }),
+});
+
 export const userMeUpdateRequest = t.Object({
   name: t.Optional(t.String()),
   email: t.Optional(t.String({ format: 'email' })),

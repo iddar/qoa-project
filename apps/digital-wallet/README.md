@@ -24,6 +24,7 @@ Wallet mobile-first para clientes finales con tarjeta digital, historial y recom
 - Catálogo de recompensas disponibles por campaña
 - Catálogo de campañas tipo reto con suscripción desde la wallet
 - Provisionado automático de tarjeta universal al crear cuenta
+- Relación Wallet x Rewards por campaña suscrita con saldos por campaña
 
 ## Payload de compra (manual)
 

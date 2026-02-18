@@ -112,7 +112,7 @@ export default function WalletHomePage() {
 
           {!activeCard && !cardsQuery.isLoading && (
             <div className="mt-4 rounded-xl border border-amber-200/80 bg-white/80 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300">
-              Aún no tienes una tarjeta asignada. Realiza una compra en tienda para activarla.
+              Estamos preparando tu tarjeta universal. Cierra y vuelve a abrir sesión si no aparece en unos segundos.
             </div>
           )}
 

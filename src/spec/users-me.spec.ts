@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { users } from '../db/schema';
+import { cards, users } from '../db/schema';
 
 const app = createApp();
 const api = treaty<App>(app);
@@ -132,6 +132,38 @@ describe('Users me endpoint', () => {
     expect(data.data.id).toBe(user.id);
     expect(data.data.name).toBe('Perfil Actualizado');
     expect(data.data.email?.startsWith('updated_')).toBe(true);
+
+    await deleteUser(user.id);
+  });
+
+  it('returns wallet summary and auto-provisions universal card', async () => {
+    process.env.AUTH_DEV_MODE = 'true';
+    const user = await createConsumer();
+
+    const { data, error, status } = await api.v1.users.me.wallet.get({
+      headers: {
+        'x-dev-user-id': user.id,
+        'x-dev-user-role': 'consumer',
+      },
+    });
+
+    if (error) {
+      throw error.value;
+    }
+
+    if (!data) {
+      throw new Error('GET /users/me/wallet data missing');
+    }
+
+    expect(status).toBe(200);
+    expect(data.data.card.id).toBeTruthy();
+    expect(data.data.card.code).toContain('card_');
+
+    const [card] = (await db
+      .select({ id: cards.id })
+      .from(cards)
+      .where(eq(cards.id, data.data.card.id))) as Array<{ id: string }>;
+    expect(card?.id).toBe(data.data.card.id);
 
     await deleteUser(user.id);
   });

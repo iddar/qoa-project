@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
 import { cpgs, users } from '../schema';
+import { ensureUserUniversalWalletCard } from '../../services/wallet-onboarding';
 
 type SeedUser = {
   email: string;
@@ -89,6 +90,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'test') => {
       .where(eq(users.email, seedUser.email))
       .limit(1)) as Array<{ id: string }>;
 
+    let userId = existing?.id ?? null;
+
     if (existing) {
       await db
         .update(users)
@@ -106,19 +109,28 @@ export const seedUsers = async (scope: 'development' | 'local' | 'test') => {
           updatedAt: new Date(),
         })
         .where(eq(users.id, existing.id));
-      continue;
+      userId = existing.id;
+    } else {
+      const [inserted] = (await db
+        .insert(users)
+        .values({
+          email: seedUser.email,
+          phone: seedUser.phone,
+          name: seedUser.name,
+          role: seedUser.role,
+          passwordHash,
+          status: 'active',
+          tenantId: seedUser.tenantId,
+          tenantType: seedUser.tenantType,
+        })
+        .returning({ id: users.id })) as Array<{ id: string }>;
+
+      userId = inserted?.id ?? null;
     }
 
-    await db.insert(users).values({
-      email: seedUser.email,
-      phone: seedUser.phone,
-      name: seedUser.name,
-      role: seedUser.role,
-      passwordHash,
-      status: 'active',
-      tenantId: seedUser.tenantId,
-      tenantType: seedUser.tenantType,
-    });
+    if (userId && (seedUser.role === 'consumer' || seedUser.role === 'customer')) {
+      await ensureUserUniversalWalletCard(userId);
+    }
   }
 
   console.log(`[seed:${scope}] CPG seed: ${cpgId} (Acme CPG)`);

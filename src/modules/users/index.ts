@@ -5,7 +5,8 @@ import { allUserRoles, backofficeRoles } from '../../app/plugins/roles';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { cards, users } from '../../db/schema';
+import { balances, campaignBalances, campaignSubscriptions, campaigns, cards, users } from '../../db/schema';
+import { ensureUserUniversalWalletCard } from '../../services/wallet-onboarding';
 import type { StatusHandler } from '../../types/handlers';
 import { serializeCard } from '../cards';
 import { cardListQuery, cardListResponse } from '../cards/model';
@@ -17,6 +18,7 @@ import {
   userListQuery,
   userListResponse,
   userMeResponse,
+  userWalletResponse,
   userMeUpdateRequest,
 } from './model';
 
@@ -100,6 +102,11 @@ type UserCardsContext = {
 };
 
 type UserMeContext = {
+  auth: AuthContext | null;
+  status: StatusHandler;
+};
+
+type UserMeWalletContext = {
   auth: AuthContext | null;
   status: StatusHandler;
 };
@@ -518,6 +525,110 @@ export const usersModule = new Elysia({
       },
       detail: {
         summary: 'Listar mis tarjetas',
+      },
+    },
+  )
+  .get(
+    '/me/wallet',
+    async ({ auth, status }: UserMeWalletContext) => {
+      if (!auth || !isUserAuth(auth)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Token de usuario requerido',
+          },
+        });
+      }
+
+      const { cardId } = await ensureUserUniversalWalletCard(auth.userId);
+
+      const [card] = (await db
+        .select({
+          id: cards.id,
+          campaignId: cards.campaignId,
+          code: cards.code,
+          status: cards.status,
+          createdAt: cards.createdAt,
+        })
+        .from(cards)
+        .where(eq(cards.id, cardId))) as Array<{
+        id: string;
+        campaignId: string;
+        code: string;
+        status: string;
+        createdAt: Date;
+      }>;
+
+      if (!card) {
+        return status(404, {
+          error: {
+            code: 'CARD_NOT_FOUND',
+            message: 'Tarjeta no encontrada',
+          },
+        });
+      }
+
+      const [totalBalance] = (await db
+        .select({ current: balances.current, lifetime: balances.lifetime })
+        .from(balances)
+        .where(eq(balances.cardId, card.id))) as Array<{ current: number; lifetime: number }>;
+
+      const campaignRows = (await db.execute(sql`
+        select
+          c.id as "campaignId",
+          c.name as "campaignName",
+          c.enrollment_mode as "enrollmentMode",
+          cs.status as "subscriptionStatus",
+          cb.current,
+          cb.lifetime
+        from campaign_subscriptions cs
+        inner join campaigns c on c.id = cs.campaign_id
+        left join campaign_balances cb on cb.campaign_id = cs.campaign_id and cb.card_id = ${card.id}
+        where cs.user_id = ${auth.userId}
+          and cs.status = 'subscribed'
+        order by cb.current desc nulls last, c.created_at desc, c.id desc
+      `)) as Array<{
+        campaignId: string;
+        campaignName: string;
+        enrollmentMode: 'open' | 'opt_in' | 'system_universal';
+        subscriptionStatus: string | null;
+        current: number | null;
+        lifetime: number | null;
+      }>;
+
+      return {
+        data: {
+          card: {
+            id: card.id,
+            campaignId: card.campaignId,
+            code: card.code,
+            status: card.status,
+            createdAt: card.createdAt.toISOString(),
+          },
+          totals: {
+            current: totalBalance?.current ?? 0,
+            lifetime: totalBalance?.lifetime ?? 0,
+          },
+          campaigns: campaignRows.map((row) => ({
+            campaignId: row.campaignId,
+            campaignName: row.campaignName,
+            enrollmentMode: row.enrollmentMode,
+            subscriptionStatus: row.subscriptionStatus ?? undefined,
+            current: row.current ?? 0,
+            lifetime: row.lifetime ?? 0,
+          })),
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles] }),
+      headers: authorizationHeader,
+      response: {
+        200: userWalletResponse,
+      },
+      detail: {
+        summary: 'Obtener wallet actual del usuario autenticado',
+        security: [{ bearerAuth: [] }],
       },
     },
   )
