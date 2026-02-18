@@ -117,8 +117,12 @@
 **Avance real actual (2026-02-18):**
 - Sprint 1: completo (middleware global de errores + `trace_id` en respuestas de error).
 - Sprint 2: `users`, `stores` y `cards` implementados y validados por tests de integración.
-- Sprint 3: catálogo (`cpgs`, `brands`, `products`), `campaigns` y `transactions` implementados con tests; pendiente motor de reglas + balance tracking.
+- Sprint 3: catálogo (`cpgs`, `brands`, `products`), `campaigns` y `transactions` implementados con tests; motor de reglas de acumulación y balance tracking ya activos.
 - Webhooks de transacciones: firma HMAC opcional por fuente, desduplicación por hash y endpoints de observabilidad (`webhook-receipts`, `webhook-metrics`).
+- Sprint 4 en ejecución: `rewards` y `reports/overview` implementados con cobertura de tests y consumo en backoffice (KPIs en Inicio).
+- Sprint 4 completado: `rewards`, `reports/overview`, jobs de reminders y webhook de WhatsApp (ingestión + firma + métricas).
+- Operaciones de plataforma: `alerts` endpoint + panel backoffice y notificación mock por email con persistencia de eventos.
+- Multi-tenant CPG: catálogo reforzado con scope por `tenantId`/`tenantType` y validación de sesión CPG owner en `apps/cpg-portal`.
 
 **Estructura del proyecto:**
 ```
@@ -233,8 +237,8 @@ Para validar el plan:
 
 ## Próximos Pasos Inmediatos
 
-1. **Cerrar deuda de plataforma** - Implementar middleware de errores global y `trace_id` consistente en logs/respuestas.
-2. **Completar Sprint 3** - Implementar motor de reglas (puntos/estampas) y balance tracking sobre campañas/transacciones.
-3. **Iniciar Sprint 4** - Implementar `rewards`, `reports` y jobs de recordatorio.
-4. **Fortalecer integración externa** - Webhook WhatsApp + flujos de ingestión/errores end-to-end.
+1. **Iniciar Fase 6 frontends operativos** - Consolidar flujos en backoffice y comenzar Dashboard Tienda/Tarjeta Digital.
+2. **E2E operativos** - Cobertura de journeys críticos (campaign lifecycle, reminders, webhook WhatsApp, redeem, alerting).
+3. **Operaciones** - Avanzar docs de infraestructura, SLOs y runbooks.
+4. **Integración proveedor notificaciones** - Reemplazar `sendEmailMock` por proveedor real y políticas de escalamiento.
 5. **Mantener contrato actualizado** - Sincronizar `docs/03-apis/openapi.yaml` en cada endpoint nuevo/modificado.

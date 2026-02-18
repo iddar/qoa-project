@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../client';
-import { users } from '../schema';
+import { cpgs, users } from '../schema';
 
 type SeedUser = {
   email: string;
@@ -8,11 +8,36 @@ type SeedUser = {
   name: string;
   role: 'consumer' | 'customer' | 'store_staff' | 'store_admin' | 'cpg_admin' | 'qoa_support' | 'qoa_admin';
   password: string;
+  tenantId?: string;
+  tenantType?: 'cpg' | 'store';
 };
 
 const DEFAULT_PASSWORD = 'Password123!';
 
-const baseUsers = (scope: string): SeedUser[] => [
+/**
+ * Upsert a seed CPG and return its id.
+ * Uses the CPG name as the stable identity key.
+ */
+const upsertSeedCpg = async (scope: string): Promise<string> => {
+  const name = `Acme CPG (${scope})`;
+
+  const [existing] = (await db.select({ id: cpgs.id }).from(cpgs).where(eq(cpgs.name, name)).limit(1)) as Array<{
+    id: string;
+  }>;
+
+  if (existing) {
+    await db.update(cpgs).set({ status: 'active', updatedAt: new Date() }).where(eq(cpgs.id, existing.id));
+    return existing.id;
+  }
+
+  const [inserted] = (await db.insert(cpgs).values({ name, status: 'active' }).returning({ id: cpgs.id })) as Array<{
+    id: string;
+  }>;
+
+  return inserted!.id;
+};
+
+const baseUsers = (scope: string, cpgId: string): SeedUser[] => [
   {
     email: `admin.${scope}@qoa.local`,
     phone: `+52155100000${scope === 'test' ? '01' : scope === 'local' ? '02' : '03'}`,
@@ -41,10 +66,20 @@ const baseUsers = (scope: string): SeedUser[] => [
     role: 'consumer',
     password: DEFAULT_PASSWORD,
   },
+  {
+    email: `cpg.${scope}@qoa.local`,
+    phone: `+52155100000${scope === 'test' ? '41' : scope === 'local' ? '42' : '43'}`,
+    name: `CPG Admin (${scope})`,
+    role: 'cpg_admin',
+    password: DEFAULT_PASSWORD,
+    tenantId: cpgId,
+    tenantType: 'cpg',
+  },
 ];
 
 export const seedUsers = async (scope: 'development' | 'local' | 'test') => {
-  const definitions = baseUsers(scope);
+  const cpgId = await upsertSeedCpg(scope);
+  const definitions = baseUsers(scope, cpgId);
 
   for (const seedUser of definitions) {
     const passwordHash = await Bun.password.hash(seedUser.password);
@@ -66,6 +101,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'test') => {
           blockedAt: null,
           blockedUntil: null,
           blockedReason: null,
+          tenantId: seedUser.tenantId ?? null,
+          tenantType: seedUser.tenantType ?? null,
           updatedAt: new Date(),
         })
         .where(eq(users.id, existing.id));
@@ -79,11 +116,15 @@ export const seedUsers = async (scope: 'development' | 'local' | 'test') => {
       role: seedUser.role,
       passwordHash,
       status: 'active',
+      tenantId: seedUser.tenantId,
+      tenantType: seedUser.tenantType,
     });
   }
 
+  console.log(`[seed:${scope}] CPG seed: ${cpgId} (Acme CPG)`);
   console.log(`[seed:${scope}] usuarios listos:`);
   for (const seedUser of definitions) {
-    console.log(`- ${seedUser.role} -> ${seedUser.email} / ${seedUser.password}`);
+    const tenant = seedUser.tenantId ? ` [tenant: ${seedUser.tenantId}]` : '';
+    console.log(`- ${seedUser.role} -> ${seedUser.email} / ${seedUser.password}${tenant}`);
   }
 };

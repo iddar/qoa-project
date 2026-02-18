@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm/sql';
-import { authGuard, authPlugin } from '../../app/plugins/auth';
+import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { brands, cpgs, products } from '../../db/schema';
@@ -77,36 +77,43 @@ type PaginationQuery = {
 };
 
 type CpgListContext = {
+  auth: AuthContext | null;
   query: PaginationQuery & { status?: string; q?: string };
   status: StatusHandler;
 };
 
 type BrandListContext = {
+  auth: AuthContext | null;
   query: PaginationQuery & { cpgId?: string; status?: string; q?: string };
   status: StatusHandler;
 };
 
 type ProductListContext = {
+  auth: AuthContext | null;
   query: PaginationQuery & { cpgId?: string; brandId?: string; status?: string; q?: string };
   status: StatusHandler;
 };
 
 type CpgCreateContext = {
+  auth: AuthContext | null;
   body: { name: string; status?: 'active' | 'inactive' };
   status: StatusHandler;
 };
 
 type BrandCreateContext = {
+  auth: AuthContext | null;
   body: { cpgId: string; name: string; logoUrl?: string; status?: 'active' | 'inactive' };
   status: StatusHandler;
 };
 
 type ProductCreateContext = {
+  auth: AuthContext | null;
   body: { brandId: string; sku: string; name: string; status?: 'active' | 'inactive' };
   status: StatusHandler;
 };
 
 type IdParamsContext = {
+  auth: AuthContext | null;
   params: { id: string };
   status: StatusHandler;
 };
@@ -138,6 +145,49 @@ const serializeProduct = (row: ProductRow) => ({
   createdAt: row.createdAt.toISOString(),
 });
 
+const isCpgScopedAuth = (auth: AuthContext) => {
+  if ('apiKeyId' in auth) {
+    return auth.tenantType === 'cpg' && Boolean(auth.tenantId);
+  }
+
+  return auth.role === 'cpg_admin' && auth.tenantType === 'cpg' && Boolean(auth.tenantId);
+};
+
+const resolveCpgScope = (
+  auth: AuthContext,
+  requestedCpgId: string | undefined,
+  status: StatusHandler,
+): { cpgId?: string; error?: ReturnType<StatusHandler> } => {
+  if (!isCpgScopedAuth(auth)) {
+    return { cpgId: requestedCpgId };
+  }
+
+  const tenantCpgId = auth.tenantId;
+  if (!tenantCpgId) {
+    return {
+      error: status(403, {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Usuario CPG sin tenant asociado',
+        },
+      }),
+    };
+  }
+
+  if (requestedCpgId && requestedCpgId !== tenantCpgId) {
+    return {
+      error: status(403, {
+        error: {
+          code: 'FORBIDDEN',
+          message: 'No puedes consultar datos de otro CPG',
+        },
+      }),
+    };
+  }
+
+  return { cpgId: tenantCpgId };
+};
+
 export const catalogModule = new Elysia({
   detail: {
     tags: ['Catalog'],
@@ -146,7 +196,16 @@ export const catalogModule = new Elysia({
   .use(authPlugin)
   .get(
     '/cpgs',
-    async ({ query, status }: CpgListContext) => {
+    async ({ auth, query, status }: CpgListContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const cursorDate = parseCursor(query.cursor);
       if (query.cursor && !cursorDate) {
         return status(400, {
@@ -160,6 +219,16 @@ export const catalogModule = new Elysia({
       const limit = parseLimit(query.limit);
       const safeLimit = Math.trunc(limit) + 1;
       const filters = [sql`1 = 1`];
+
+      const scope = resolveCpgScope(auth, undefined, status);
+      if (scope.error) {
+        return scope.error;
+      }
+
+      if (scope.cpgId) {
+        filters.push(sql`"id" = ${scope.cpgId}`);
+      }
+
       if (query.status) {
         filters.push(sql`"status" = ${query.status}`);
       }
@@ -211,7 +280,16 @@ export const catalogModule = new Elysia({
   )
   .post(
     '/cpgs',
-    async ({ body, status }: CpgCreateContext) => {
+    async ({ auth, body, status }: CpgCreateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const [created] = (await db
         .insert(cpgs)
         .values({
@@ -234,7 +312,7 @@ export const catalogModule = new Elysia({
       });
     },
     {
-      beforeHandle: authGuard({ allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['qoa_support', 'qoa_admin'] }),
       body: cpgCreateRequest,
       response: {
         201: cpgResponse,
@@ -247,7 +325,21 @@ export const catalogModule = new Elysia({
   )
   .get(
     '/cpgs/:id',
-    async ({ params, status }: IdParamsContext) => {
+    async ({ auth, params, status }: IdParamsContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const scope = resolveCpgScope(auth, params.id, status);
+      if (scope.error) {
+        return scope.error;
+      }
+
       const [record] = (await db.select().from(cpgs).where(eq(cpgs.id, params.id))) as CpgRow[];
       if (!record) {
         return status(404, {
@@ -275,7 +367,16 @@ export const catalogModule = new Elysia({
   )
   .get(
     '/brands',
-    async ({ query, status }: BrandListContext) => {
+    async ({ auth, query, status }: BrandListContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const cursorDate = parseCursor(query.cursor);
       if (query.cursor && !cursorDate) {
         return status(400, {
@@ -289,8 +390,14 @@ export const catalogModule = new Elysia({
       const limit = parseLimit(query.limit);
       const safeLimit = Math.trunc(limit) + 1;
       const filters = [sql`1 = 1`];
-      if (query.cpgId) {
-        filters.push(sql`"cpg_id" = ${query.cpgId}`);
+
+      const scope = resolveCpgScope(auth, query.cpgId, status);
+      if (scope.error) {
+        return scope.error;
+      }
+
+      if (scope.cpgId) {
+        filters.push(sql`"cpg_id" = ${scope.cpgId}`);
       }
       if (query.status) {
         filters.push(sql`"status" = ${query.status}`);
@@ -345,8 +452,24 @@ export const catalogModule = new Elysia({
   )
   .post(
     '/brands',
-    async ({ body, status }: BrandCreateContext) => {
-      const [cpg] = (await db.select({ id: cpgs.id }).from(cpgs).where(eq(cpgs.id, body.cpgId))) as Array<{
+    async ({ auth, body, status }: BrandCreateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const scope = resolveCpgScope(auth, body.cpgId, status);
+      if (scope.error) {
+        return scope.error;
+      }
+
+      const cpgId = scope.cpgId ?? body.cpgId;
+
+      const [cpg] = (await db.select({ id: cpgs.id }).from(cpgs).where(eq(cpgs.id, cpgId))) as Array<{
         id: string;
       }>;
       if (!cpg) {
@@ -361,7 +484,7 @@ export const catalogModule = new Elysia({
       const [created] = (await db
         .insert(brands)
         .values({
-          cpgId: body.cpgId,
+          cpgId,
           name: body.name,
           logoUrl: body.logoUrl ?? null,
           status: body.status ?? 'active',
@@ -395,7 +518,16 @@ export const catalogModule = new Elysia({
   )
   .get(
     '/brands/:id',
-    async ({ params, status }: IdParamsContext) => {
+    async ({ auth, params, status }: IdParamsContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const [record] = (await db.select().from(brands).where(eq(brands.id, params.id))) as BrandRow[];
       if (!record) {
         return status(404, {
@@ -404,6 +536,11 @@ export const catalogModule = new Elysia({
             message: 'Marca no encontrada',
           },
         });
+      }
+
+      const scope = resolveCpgScope(auth, record.cpgId, status);
+      if (scope.error) {
+        return scope.error;
       }
 
       return {
@@ -423,7 +560,16 @@ export const catalogModule = new Elysia({
   )
   .get(
     '/products',
-    async ({ query, status }: ProductListContext) => {
+    async ({ auth, query, status }: ProductListContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const cursorDate = parseCursor(query.cursor);
       if (query.cursor && !cursorDate) {
         return status(400, {
@@ -437,6 +583,12 @@ export const catalogModule = new Elysia({
       const limit = parseLimit(query.limit);
       const safeLimit = Math.trunc(limit) + 1;
       const filters = [sql`1 = 1`];
+
+      const scope = resolveCpgScope(auth, query.cpgId, status);
+      if (scope.error) {
+        return scope.error;
+      }
+
       if (query.brandId) {
         filters.push(sql`"products"."brand_id" = ${query.brandId}`);
       }
@@ -446,8 +598,8 @@ export const catalogModule = new Elysia({
       if (query.q) {
         filters.push(sql`("products"."name" ilike ${`%${query.q}%`} or "products"."sku" ilike ${`%${query.q}%`})`);
       }
-      if (query.cpgId) {
-        filters.push(sql`"brands"."cpg_id" = ${query.cpgId}`);
+      if (scope.cpgId) {
+        filters.push(sql`"brands"."cpg_id" = ${scope.cpgId}`);
       }
       if (cursorDate) {
         filters.push(sql`"products"."created_at" < ${cursorDate}`);
@@ -497,9 +649,22 @@ export const catalogModule = new Elysia({
   )
   .post(
     '/products',
-    async ({ body, status }: ProductCreateContext) => {
-      const [brand] = (await db.select({ id: brands.id }).from(brands).where(eq(brands.id, body.brandId))) as Array<{
+    async ({ auth, body, status }: ProductCreateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const [brand] = (await db
+        .select({ id: brands.id, cpgId: brands.cpgId })
+        .from(brands)
+        .where(eq(brands.id, body.brandId))) as Array<{
         id: string;
+        cpgId: string;
       }>;
       if (!brand) {
         return status(404, {
@@ -508,6 +673,11 @@ export const catalogModule = new Elysia({
             message: 'Marca no encontrada',
           },
         });
+      }
+
+      const scope = resolveCpgScope(auth, brand.cpgId, status);
+      if (scope.error) {
+        return scope.error;
       }
 
       const [created] = (await db
@@ -547,7 +717,16 @@ export const catalogModule = new Elysia({
   )
   .get(
     '/products/:id',
-    async ({ params, status }: IdParamsContext) => {
+    async ({ auth, params, status }: IdParamsContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const [record] = (await db.select().from(products).where(eq(products.id, params.id))) as ProductRow[];
       if (!record) {
         return status(404, {
@@ -556,6 +735,18 @@ export const catalogModule = new Elysia({
             message: 'Producto no encontrado',
           },
         });
+      }
+
+      const [brand] = (await db
+        .select({ cpgId: brands.cpgId })
+        .from(brands)
+        .where(eq(brands.id, record.brandId))) as Array<{ cpgId: string }>;
+
+      if (brand) {
+        const scope = resolveCpgScope(auth, brand.cpgId, status);
+        if (scope.error) {
+          return scope.error;
+        }
       }
 
       return {

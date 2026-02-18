@@ -62,20 +62,22 @@
 - [x] Módulo Users
 - [x] Módulo Stores
 - [x] Módulo Cards
-- [ ] Integración WhatsApp básica
+- [x] Integración WhatsApp básica
 
 ### Sprint 3
 - [x] Catálogo base (CPGs, Brands, Products)
 - [x] Módulo Campaigns
 - [x] Módulo Transactions
-- [ ] Motor de reglas (puntos/estampas)
-- [ ] Balance tracking
+- [x] Motor de reglas (puntos/estampas)
+- [x] Balance tracking
 
 ### Sprint 4
-- [ ] Módulo Rewards
-- [ ] Módulo Reports
-- [ ] Jobs de recordatorios
-- [ ] Webhook WhatsApp
+- [x] Módulo Rewards
+- [x] Módulo Reports (overview de plataforma)
+- [x] Jobs de recordatorios
+- [x] Webhook WhatsApp
+- [x] Panel de errores y alertas (mock email)
+- [x] Scope multi-tenant CPG en catálogo + validación de sesión CPG owner en portal
 
 ---
 
@@ -123,6 +125,11 @@
 | 2026-02-17 | Normalización de auth con `beforeHandle: authGuard(...)` en Users/Stores/Cards |
 | 2026-02-18 | Sprint 3 parcial: Campaigns + Transactions implementados, incluyendo webhook idempotente con receipts y métricas |
 | 2026-02-18 | Catálogo CPG/Brands/Products implementado en backend + backoffice |
+| 2026-02-18 | Políticas de campaña implementadas (API + backoffice) y aplicación de reglas de acumulación en transacciones |
+| 2026-02-18 | Sprint 4 iniciado: módulo Rewards + redemptions, módulo Reports con métricas globales y dashboard de inicio enriquecido |
+| 2026-02-18 | Sprint 4 completado: jobs de reminders + webhook WhatsApp con métricas y pruebas de idempotencia/firma |
+| 2026-02-18 | Panel de errores/alertas implementado en backoffice y notificación mock email con persistencia |
+| 2026-02-18 | Portal CPG validado con sesión de cpg_owner y backend de catálogo reforzado con scope por tenant |
 
 ---
 

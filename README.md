@@ -171,15 +171,30 @@ bun run db:seed:local
 bun run db:seed:test
 ```
 
-Credenciales de prueba (password compartido):
+Cada seed también crea un CPG de prueba llamado `Acme CPG (<entorno>)` y lo vincula al usuario `cpg_admin`.
 
-- Password: `Password123!`
-- `qoa_admin`: `admin.<entorno>@qoa.local`
-- `qoa_support`: `support.<entorno>@qoa.local`
-- `store_admin`: `store.<entorno>@qoa.local`
-- `consumer`: `consumer.<entorno>@qoa.local`
+Credenciales de prueba (password compartido: `Password123!`):
+
+| Rol | Email | Acceso |
+|---|---|---|
+| `qoa_admin` | `admin.<entorno>@qoa.local` | Backoffice (superadmin) |
+| `qoa_support` | `support.<entorno>@qoa.local` | Backoffice (solo lectura) |
+| `store_admin` | `store.<entorno>@qoa.local` | — |
+| `consumer` | `consumer.<entorno>@qoa.local` | App cliente |
+| `cpg_admin` | `cpg.<entorno>@qoa.local` | CPG Portal |
 
 Donde `<entorno>` puede ser `development`, `local` o `test`.
+
+### Apps del monorepo
+
+El monorepo incluye las siguientes aplicaciones bajo `apps/`:
+
+| App | Puerto | Descripción | Comando |
+|---|---|---|---|
+| `backoffice` | `3001` | Panel interno para operadores Qoa (`qoa_admin`, `qoa_support`) | `bun run dev` desde `apps/backoffice` |
+| `cpg-portal` | `3002` | Portal para fabricantes CPG (`cpg_admin`) — gestión de marcas, productos y métricas de campañas | `bun run dev` desde `apps/cpg-portal` |
+
+Ambas apps comparten el mismo backend (`@qoa/core` en el puerto `3000`) y usan tokens JWT independientes almacenados en `localStorage` con claves distintas para evitar colisiones de sesión.
 
 ### Migraciones con Drizzle ORM
 

@@ -143,4 +143,74 @@ describe('Catalog module', () => {
     await db.delete(brands).where(eq(brands.id, brandId));
     await db.delete(cpgs).where(eq(cpgs.id, cpgId));
   });
+
+  it('enforces cpg_admin tenant scope in catalog queries', async () => {
+    const [cpgOwned] = (await db
+      .insert(cpgs)
+      .values({
+        name: `CPG Own ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: cpgs.id })) as Array<{ id: string }>;
+
+    const [cpgOther] = (await db
+      .insert(cpgs)
+      .values({
+        name: `CPG Other ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: cpgs.id })) as Array<{ id: string }>;
+
+    if (!cpgOwned || !cpgOther) {
+      throw new Error('Failed to create cpg records');
+    }
+
+    const [otherBrand] = (await db
+      .insert(brands)
+      .values({
+        cpgId: cpgOther.id,
+        name: `Brand Other ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: brands.id })) as Array<{ id: string }>;
+
+    const cpgAdminHeaders = {
+      authorization: 'Bearer dev-token',
+      'x-dev-user-id': 'dev-cpg-admin',
+      'x-dev-user-role': 'cpg_admin',
+      'x-dev-tenant-id': cpgOwned.id,
+      'x-dev-tenant-type': 'cpg',
+    };
+
+    const forbiddenList = await api.v1.brands.get({
+      query: {
+        cpgId: cpgOther.id,
+      },
+      headers: cpgAdminHeaders,
+    });
+
+    if (!forbiddenList.error) {
+      throw new Error('Expected forbidden error when querying another cpg');
+    }
+
+    expect(forbiddenList.status).toBe(403);
+    expect(forbiddenList.error.value.error.code).toBe('FORBIDDEN');
+
+    const ownList = await api.v1.brands.get({
+      headers: cpgAdminHeaders,
+    });
+
+    if (ownList.error) {
+      throw ownList.error.value;
+    }
+    if (!ownList.data) {
+      throw new Error('Own cpg list response missing');
+    }
+
+    expect(ownList.status).toBe(200);
+    expect(ownList.data.data.every((row: { cpgId: string }) => row.cpgId === cpgOwned.id)).toBe(true);
+
+    if (otherBrand) {
+      await db.delete(brands).where(eq(brands.id, otherBrand.id));
+    }
+    await db.delete(cpgs).where(eq(cpgs.id, cpgOther.id));
+    await db.delete(cpgs).where(eq(cpgs.id, cpgOwned.id));
+  });
 });
