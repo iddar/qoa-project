@@ -5,6 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
+type CpgOption = { id: string; name: string };
+type StoreOption = { id: string; name: string; code: string };
+
 type UserCreateForm = {
   email: string;
   phone: string;
@@ -65,6 +68,40 @@ export default function UsersPage() {
   const [search, setSearch] = useState("");
   const [filterRole, setFilterRole] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+
+  const requiresTenantRole = rolesWithTenant.has(form.role);
+  const needsCpg = form.role === "cpg_admin";
+  const needsStore = form.role === "store_staff" || form.role === "store_admin";
+
+  const { data: cpgData, isLoading: cpgsLoading } = useQuery({
+    queryKey: ["tenant-cpgs"],
+    queryFn: async () => {
+      const token = getAccessToken();
+      const { data, error } = await api.v1.cpgs.get({
+        query: { limit: "100" },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: requiresTenantRole && needsCpg,
+  });
+
+  const { data: storesData, isLoading: storesLoading } = useQuery({
+    queryKey: ["tenant-stores"],
+    queryFn: async () => {
+      const token = getAccessToken();
+      const { data, error } = await api.v1.stores.get({
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+    enabled: requiresTenantRole && needsStore,
+  });
+
+  const cpgOptions = (cpgData?.data ?? []) as CpgOption[];
+  const storeOptions = (storesData?.data ?? []) as StoreOption[];
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["users"],
@@ -396,6 +433,9 @@ export default function UsersPage() {
                   setForm((prev) => ({
                     ...prev,
                     role: event.target.value as UserCreateForm["role"],
+                    // Reset tenant when switching roles to avoid stale IDs
+                    tenantId: "",
+                    tenantType: event.target.value === "cpg_admin" ? "cpg" : "store",
                   }))
                 }
                 className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
@@ -410,40 +450,75 @@ export default function UsersPage() {
               </select>
             </div>
 
-            {rolesWithTenant.has(form.role) && (
-              <>
-                <div>
-                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
-                    Tenant ID
-                  </label>
-                  <input
-                    required
-                    value={form.tenantId}
-                    onChange={(event) =>
-                      setForm((prev) => ({ ...prev, tenantId: event.target.value }))
-                    }
-                    className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
-                    Tenant Type
-                  </label>
-                  <select
-                    value={form.tenantType}
-                    onChange={(event) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        tenantType: event.target.value as UserCreateForm["tenantType"],
-                      }))
-                    }
-                    className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  >
-                    <option value="store">store</option>
-                    <option value="cpg">cpg</option>
-                  </select>
-                </div>
-              </>
+            {requiresTenantRole && (
+              <div>
+                {needsCpg && (
+                  <>
+                    <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                      CPG (marca)
+                    </label>
+                    {cpgsLoading ? (
+                      <p className="mt-1 text-xs text-zinc-400">Cargando CPGs…</p>
+                    ) : cpgOptions.length === 0 ? (
+                      <p className="mt-1 text-xs text-amber-600">No hay CPGs disponibles. Crea uno en Catálogo primero.</p>
+                    ) : (
+                      <select
+                        required
+                        value={form.tenantId}
+                        onChange={(event) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            tenantId: event.target.value,
+                            tenantType: "cpg",
+                          }))
+                        }
+                        className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      >
+                        <option value="">Selecciona un CPG…</option>
+                        {cpgOptions.map((cpg) => (
+                          <option key={cpg.id} value={cpg.id}>
+                            {cpg.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                )}
+
+                {needsStore && (
+                  <>
+                    <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                      Tienda
+                    </label>
+                    {storesLoading ? (
+                      <p className="mt-1 text-xs text-zinc-400">Cargando tiendas…</p>
+                    ) : storeOptions.length === 0 ? (
+                      <p className="mt-1 text-xs text-amber-600">No hay tiendas disponibles. Crea una en Tiendas primero.</p>
+                    ) : (
+                      <select
+                        required
+                        value={form.tenantId}
+                        onChange={(event) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            tenantId: event.target.value,
+                            tenantType: "store",
+                          }))
+                        }
+                        className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      >
+                        <option value="">Selecciona una tienda…</option>
+                        {storeOptions.map((store) => (
+                          <option key={store.id} value={store.id}>
+                            {store.name}
+                            {store.code ? ` · ${store.code}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </>
+                )}
+              </div>
             )}
 
             <button
