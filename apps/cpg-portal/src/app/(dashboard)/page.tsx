@@ -120,7 +120,7 @@ function CampaignPlaceholder() {
 export default function HomePage() {
   const token = getAccessToken();
 
-  const { data: meData, isLoading: meLoading } = useQuery({
+  const { data: meData } = useQuery({
     queryKey: ["me"],
     queryFn: async () => {
       const { data, error } = await api.v1.users.me.get({
