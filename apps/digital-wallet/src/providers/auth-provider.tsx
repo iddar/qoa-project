@@ -43,6 +43,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("not_wallet_user");
     }
 
+    const wallet = await api.v1.users.me.wallet.get({
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+
+    if (wallet.error || !wallet.data?.data?.card?.id) {
+      throw new Error("wallet_provision_failed");
+    }
+
     setRole(data.data.role ?? null);
   }, []);
 
