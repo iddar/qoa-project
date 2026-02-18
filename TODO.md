@@ -85,7 +85,8 @@
 
 - [ ] App Tarjeta Digital (PWA)
 - [ ] Dashboard Tienda
-- [ ] Admin Panel (parcial: backoffice base en `apps/backoffice`)
+- [x] Admin Panel (parcial: backoffice base en `apps/backoffice`)
+- [x] CPG Portal v2 (campañas + performance en `apps/cpg-portal`)
 - [ ] Tests E2E
 
 ---
@@ -130,6 +131,7 @@
 | 2026-02-18 | Sprint 4 completado: jobs de reminders + webhook WhatsApp con métricas y pruebas de idempotencia/firma |
 | 2026-02-18 | Panel de errores/alertas implementado en backoffice y notificación mock email con persistencia |
 | 2026-02-18 | Portal CPG validado con sesión de cpg_owner y backend de catálogo reforzado con scope por tenant |
+| 2026-02-18 | CPG Portal sube de nivel: gestión de campañas, reglas de acumulación y performance por campaña/CPG |
 
 ---
 

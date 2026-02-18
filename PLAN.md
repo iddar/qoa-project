@@ -123,6 +123,7 @@
 - Sprint 4 completado: `rewards`, `reports/overview`, jobs de reminders y webhook de WhatsApp (ingestión + firma + métricas).
 - Operaciones de plataforma: `alerts` endpoint + panel backoffice y notificación mock por email con persistencia de eventos.
 - Multi-tenant CPG: catálogo reforzado con scope por `tenantId`/`tenantType` y validación de sesión CPG owner en `apps/cpg-portal`.
+- CPG Portal v2: gestión de campañas (lifecycle + políticas) y visualización de performance por CPG/campaña.
 
 **Estructura del proyecto:**
 ```
