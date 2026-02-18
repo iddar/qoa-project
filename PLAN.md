@@ -124,6 +124,7 @@
 - Operaciones de plataforma: `alerts` endpoint + panel backoffice y notificación mock por email con persistencia de eventos.
 - Multi-tenant CPG: catálogo reforzado con scope por `tenantId`/`tenantType` y validación de sesión CPG owner en `apps/cpg-portal`.
 - CPG Portal v2: gestión de campañas (lifecycle + políticas) y visualización de performance por CPG/campaña.
+- E2E backend: journeys críticos cubiertos para lifecycle de campaña, acumulación/canje, reminders, webhook WhatsApp y alerting.
 
 **Estructura del proyecto:**
 ```

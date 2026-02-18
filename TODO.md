@@ -87,7 +87,7 @@
 - [ ] Dashboard Tienda
 - [x] Admin Panel (parcial: backoffice base en `apps/backoffice`)
 - [x] CPG Portal v2 (campañas + performance en `apps/cpg-portal`)
-- [ ] Tests E2E
+- [x] Tests E2E (journeys críticos backend)
 
 ---
 
@@ -132,6 +132,7 @@
 | 2026-02-18 | Panel de errores/alertas implementado en backoffice y notificación mock email con persistencia |
 | 2026-02-18 | Portal CPG validado con sesión de cpg_owner y backend de catálogo reforzado con scope por tenant |
 | 2026-02-18 | CPG Portal sube de nivel: gestión de campañas, reglas de acumulación y performance por campaña/CPG |
+| 2026-02-18 | Cobertura E2E backend agregada para journeys críticos (campaign lifecycle, redeem, reminders, webhook WhatsApp y alertas) |
 
 ---
 
