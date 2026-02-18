@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { useAuth } from "@/providers/auth-provider";
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,12 @@ type StatCardProps = {
   comingSoon?: boolean;
   icon: React.ReactNode;
   color: "zinc" | "blue" | "green" | "amber" | "rose";
+};
+
+type DailyPerformancePoint = {
+  date: string;
+  transactions: number;
+  redemptions?: number;
 };
 
 const colorMap = {
@@ -119,6 +126,7 @@ function CampaignPlaceholder() {
 
 export default function HomePage() {
   const token = getAccessToken();
+  const { tenantId } = useAuth();
 
   const { data: meData } = useQuery({
     queryKey: ["me"],
@@ -153,13 +161,46 @@ export default function HomePage() {
     },
   });
 
+  const { data: campaignsData, isLoading: campaignsLoading } = useQuery({
+    queryKey: ["campaigns", tenantId],
+    enabled: Boolean(tenantId),
+    queryFn: async () => {
+      const { data, error } = await api.v1.campaigns.get({
+        query: {
+          cpgId: tenantId ?? undefined,
+          limit: "100",
+        },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: cpgSummaryData, isLoading: summaryLoading } = useQuery({
+    queryKey: ["cpg-summary", tenantId],
+    enabled: Boolean(tenantId),
+    queryFn: async () => {
+      if (!tenantId) return null;
+      const { data, error } = await api.v1.reports.cpgs({ cpgId: tenantId }).summary.get({
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const name = meData?.data?.name;
   const firstName = name?.split(" ")[0] ?? "de vuelta";
 
   const brands = brandsData?.data ?? [];
   const products = productsData?.data ?? [];
+  const campaigns = campaignsData?.data ?? [];
+  const activeCampaigns = campaigns.filter((campaign: { status: string }) => campaign.status === "active").length;
   const activeBrands = brands.filter((b: { status: string }) => b.status === "active").length;
   const activeProducts = products.filter((p: { status: string }) => p.status === "active").length;
+  const deliveredPoints = cpgSummaryData?.data.kpis.accumulatedPoints ?? 0;
+  const dailyPerformance = ((cpgSummaryData?.data.daily ?? []) as DailyPerformancePoint[]).slice(-12);
 
   const today = new Date().toLocaleDateString("es-MX", {
     weekday: "long",
@@ -215,8 +256,9 @@ export default function HomePage() {
         />
         <StatCard
           label="Campañas activas"
-          value="—"
-          comingSoon
+          value={activeCampaigns}
+          sublabel={`${campaigns.length} en total`}
+          loading={campaignsLoading}
           color="amber"
           icon={
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -226,8 +268,9 @@ export default function HomePage() {
         />
         <StatCard
           label="Puntos entregados"
-          value="—"
-          comingSoon
+          value={deliveredPoints}
+          sublabel="Acumulaciones del periodo"
+          loading={summaryLoading}
           color="rose"
           icon={
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -248,24 +291,30 @@ export default function HomePage() {
               <p className="text-xs text-zinc-400 mt-0.5">Evolución mensual de participación</p>
             </div>
             <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-              Próximamente
+              Últimos 12 días
             </span>
           </div>
 
-          {/* Chart placeholder */}
           <div className="flex h-36 items-end gap-1.5 px-1">
-            {[40, 65, 45, 80, 55, 70, 50, 90, 60, 75, 85, 95].map((h, i) => (
+            {(dailyPerformance.length ? dailyPerformance : [{ date: "", transactions: 0 }]).map((point: DailyPerformancePoint, i: number) => {
+              const maxTransactions = Math.max(...(dailyPerformance.map((entry: DailyPerformancePoint) => entry.transactions) || [1]));
+              const normalized = maxTransactions > 0 ? Math.max(8, Math.round((point.transactions / maxTransactions) * 100)) : 8;
+
+              return (
               <div key={i} className="flex-1 flex flex-col justify-end">
                 <div
-                  className="rounded-sm bg-zinc-100 dark:bg-zinc-800"
-                  style={{ height: `${h}%` }}
+                  className="rounded-sm bg-blue-100 dark:bg-blue-900/50"
+                  style={{ height: `${normalized}%` }}
                 />
               </div>
-            ))}
+              );
+            })}
           </div>
           <div className="mt-3 flex justify-between px-1">
-            {["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"].map((m) => (
-              <span key={m} className="text-[9px] text-zinc-300 dark:text-zinc-700">{m}</span>
+            {(dailyPerformance.length ? dailyPerformance : [{ date: "" }]).map((point: { date: string }, index: number) => (
+              <span key={`${point.date}-${index}`} className="text-[9px] text-zinc-300 dark:text-zinc-700">
+                {point.date ? point.date.slice(5) : "--"}
+              </span>
             ))}
           </div>
         </div>
@@ -300,18 +349,68 @@ export default function HomePage() {
               </svg>
             }
           />
+          <QuickAction
+            href="/campaigns"
+            label="Gestionar campañas"
+            description="Configura reglas y lifecycle de tus programas"
+            icon={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12h4l3 8 4-16 3 8h4" />
+              </svg>
+            }
+          />
         </div>
       </div>
 
-      {/* Active campaigns */}
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/50">
         <div className="mb-5 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Campañas activas</h2>
             <p className="text-xs text-zinc-400 mt-0.5">Estado actual de tus campañas de fidelización</p>
           </div>
+          <Link
+            href="/campaigns"
+            className="text-xs font-medium text-zinc-500 transition hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            Ver campañas
+          </Link>
         </div>
-        <CampaignPlaceholder />
+
+        {campaignsLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((entry) => (
+              <div key={entry} className="h-14 animate-pulse rounded-md bg-zinc-100 dark:bg-zinc-800" />
+            ))}
+          </div>
+        ) : activeCampaigns === 0 ? (
+          <CampaignPlaceholder />
+        ) : (
+          <ul className="space-y-2">
+            {campaigns
+              .filter((campaign: { status: string }) => campaign.status === "active")
+              .slice(0, 5)
+              .map((campaign: { id: string; name: string; startsAt?: string; endsAt?: string }) => (
+                <li
+                  key={campaign.id}
+                  className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-zinc-800 dark:text-zinc-200">{campaign.name}</p>
+                    <Link
+                      href={`/campaigns/${campaign.id}`}
+                      className="rounded-md border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                    >
+                      Abrir
+                    </Link>
+                  </div>
+                  <p className="mt-1 text-zinc-500 dark:text-zinc-400">
+                    {campaign.startsAt ? `Inicio: ${new Date(campaign.startsAt).toLocaleDateString("es-MX")}` : "Sin inicio"}
+                    {campaign.endsAt ? ` · Fin: ${new Date(campaign.endsAt).toLocaleDateString("es-MX")}` : ""}
+                  </p>
+                </li>
+              ))}
+          </ul>
+        )}
       </div>
 
       {/* Catalog summary */}

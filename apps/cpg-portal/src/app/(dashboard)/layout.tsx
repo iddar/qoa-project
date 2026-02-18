@@ -41,6 +41,15 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    href: "/campaigns",
+    label: "Campañas",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 12h4l3 8 4-16 3 8h4" />
+      </svg>
+    ),
+  },
 ];
 
 function UserMenu() {
