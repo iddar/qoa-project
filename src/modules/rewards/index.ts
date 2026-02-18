@@ -5,7 +5,7 @@ import { allUserRoles } from '../../app/plugins/roles';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { balances, campaigns, cards, redemptions, rewards } from '../../db/schema';
+import { balances, campaignBalances, campaigns, cards, redemptions, rewards } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import {
   redemptionResponse,
@@ -474,22 +474,41 @@ export const rewardsModule = new Elysia({
         lifetime: number;
       }>;
 
-      const currentBalance = balance?.current ?? 0;
+      const [campaignBalance] = (await db
+        .select()
+        .from(campaignBalances)
+        .where(and(eq(campaignBalances.cardId, card.cardId), eq(campaignBalances.campaignId, reward.campaignId)))) as Array<{
+        id: string;
+        current: number;
+        lifetime: number;
+      }>;
+
+      const currentBalance = campaignBalance?.current ?? 0;
       if (currentBalance < reward.cost) {
         return status(422, {
           error: {
             code: 'INSUFFICIENT_BALANCE',
-            message: 'Saldo insuficiente para canjear recompensa',
+            message: 'Saldo insuficiente en la campaña para canjear recompensa',
           },
         });
       }
 
       const nextCurrent = currentBalance - reward.cost;
+      if (campaignBalance) {
+        await db
+          .update(campaignBalances)
+          .set({
+            current: nextCurrent,
+            updatedAt: new Date(),
+          })
+          .where(eq(campaignBalances.id, campaignBalance.id));
+      }
+
       if (balance) {
         await db
           .update(balances)
           .set({
-            current: nextCurrent,
+            current: Math.max(0, balance.current - reward.cost),
             updatedAt: new Date(),
           })
           .where(eq(balances.id, balance.id));
@@ -526,7 +545,7 @@ export const rewardsModule = new Elysia({
           card: {
             id: card.cardId,
             currentBalance: nextCurrent,
-            lifetimeBalance: balance?.lifetime ?? 0,
+            lifetimeBalance: campaignBalance?.lifetime ?? 0,
           },
           redeemedAt: (created?.createdAt ?? new Date()).toISOString(),
         },

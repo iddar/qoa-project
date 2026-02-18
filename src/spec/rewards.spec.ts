@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { balances, campaigns, cards, cpgs, redemptions, rewards, stores, users } from '../db/schema';
+import { balances, campaignBalances, campaigns, cards, cpgs, redemptions, rewards, stores, users } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -58,6 +58,14 @@ describe('Rewards module', () => {
 
     await db.insert(balances).values({
       cardId: card!.id,
+      current: 25,
+      lifetime: 25,
+      updatedAt: new Date(),
+    });
+
+    await db.insert(campaignBalances).values({
+      cardId: card!.id,
+      campaignId: campaign!.id,
       current: 25,
       lifetime: 25,
       updatedAt: new Date(),
@@ -141,6 +149,7 @@ describe('Rewards module', () => {
     expect(updatedReward?.stock).toBe(1);
 
     await db.delete(redemptions).where(eq(redemptions.rewardId, rewardId));
+    await db.delete(campaignBalances).where(eq(campaignBalances.cardId, card!.id));
     await db.delete(balances).where(eq(balances.cardId, card!.id));
     await db.delete(cards).where(eq(cards.id, card!.id));
     await db.delete(rewards).where(eq(rewards.id, rewardId));

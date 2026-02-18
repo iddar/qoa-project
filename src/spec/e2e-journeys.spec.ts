@@ -264,7 +264,7 @@ describe('Critical journeys (E2E style)', () => {
       }
 
       expect(tx.status).toBe(201);
-      expect(tx.data.data.accumulations.length).toBe(1);
+      expect(tx.data.data.accumulations.length).toBeGreaterThanOrEqual(1);
 
       const redemption = await api.v1.rewards({ rewardId: reward.data.data.id }).redeem.post(
         {

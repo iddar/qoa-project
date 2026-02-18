@@ -8,8 +8,11 @@ import { db } from '../../db/client';
 import {
   accumulations,
   balances,
+  campaignBalances,
   campaignPolicies,
+  campaignSubscriptions,
   cards,
+  campaigns,
   products,
   stores,
   transactionItems,
@@ -17,6 +20,7 @@ import {
   users,
   webhookReceipts,
 } from '../../db/schema';
+import { UNIVERSAL_CAMPAIGN_KEY, ensureUserUniversalWalletCard } from '../../services/wallet-onboarding';
 import type { StatusHandler } from '../../types/handlers';
 import {
   transactionCreateRequest,
@@ -76,6 +80,14 @@ type AccumulationRow = {
   balanceAfter: number;
   sourceType: 'transaction_item' | 'code_capture';
   codeCaptureId: string | null;
+};
+
+type CampaignBalanceRow = {
+  id: string;
+  cardId: string;
+  campaignId: string;
+  current: number;
+  lifetime: number;
 };
 
 type CampaignPolicyRow = {
@@ -378,6 +390,62 @@ const ensureTransactionEntities = async (
   };
 };
 
+const resolveCardForTransaction = async (payload: { userId: string; cardId?: string }) => {
+  if (payload.cardId) {
+    const [card] = (await db
+      .select({ id: cards.id, campaignId: cards.campaignId, userId: cards.userId })
+      .from(cards)
+      .where(eq(cards.id, payload.cardId))) as Array<{ id: string; campaignId: string; userId: string }>;
+
+    if (!card || card.userId !== payload.userId) {
+      return null;
+    }
+
+    return {
+      cardId: card.id,
+      baseCampaignId: card.campaignId,
+    };
+  }
+
+  const ensured = await ensureUserUniversalWalletCard(payload.userId);
+  return {
+    cardId: ensured.cardId,
+    baseCampaignId: ensured.campaignId,
+  };
+};
+
+const resolveEligibleCampaignIds = async (payload: { userId: string; cardId: string; baseCampaignId: string }) => {
+  const [universal] = (await db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(eq(campaigns.key, UNIVERSAL_CAMPAIGN_KEY))) as Array<{ id: string }>;
+
+  const subscribedRows = (await db
+    .select({ campaignId: campaignSubscriptions.campaignId })
+    .from(campaignSubscriptions)
+    .where(and(eq(campaignSubscriptions.userId, payload.userId), eq(campaignSubscriptions.status, 'subscribed')))) as Array<{
+    campaignId: string;
+  }>;
+
+  const openRows = (await db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(and(eq(campaigns.status, 'active'), eq(campaigns.enrollmentMode, 'open')))) as Array<{ id: string }>;
+
+  const ids = new Set<string>([payload.baseCampaignId]);
+  if (universal?.id) {
+    ids.add(universal.id);
+  }
+  for (const row of subscribedRows) {
+    ids.add(row.campaignId);
+  }
+  for (const row of openRows) {
+    ids.add(row.id);
+  }
+
+  return [...ids];
+};
+
 const createOrReplayTransaction = async (payload: {
   userId: string;
   storeId: string;
@@ -426,13 +494,17 @@ const createOrReplayTransaction = async (payload: {
     };
   });
   const totalAmount = normalizedItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
+  const resolvedCard = await resolveCardForTransaction({
+    userId: payload.userId,
+    cardId: payload.cardId,
+  });
 
   const [created] = (await db
     .insert(transactions)
     .values({
       userId: payload.userId,
       storeId: payload.storeId,
-      cardId: payload.cardId ?? null,
+      cardId: resolvedCard?.cardId ?? null,
       totalAmount,
       metadata: payload.metadata ?? null,
       idempotencyKey: payload.idempotencyKey ?? null,
@@ -459,57 +531,68 @@ const createOrReplayTransaction = async (payload: {
     .where(eq(transactionItems.transactionId, created.id))) as TransactionItemRow[];
 
   let createdAccumulations: AccumulationRow[] = [];
-  if (payload.cardId) {
-    const [card] = (await db
-      .select({
-        id: cards.id,
-        campaignId: cards.campaignId,
-      })
-      .from(cards)
-      .where(eq(cards.id, payload.cardId))) as Array<{
+
+  if (resolvedCard) {
+    const now = new Date();
+    const [existingBalance] = (await db.select().from(balances).where(eq(balances.cardId, resolvedCard.cardId))) as Array<{
       id: string;
-      campaignId: string;
+      current: number;
+      lifetime: number;
     }>;
 
-    if (card) {
-      const now = new Date();
-      const [existingBalance] = (await db.select().from(balances).where(eq(balances.cardId, card.id))) as Array<{
-        id: string;
-        current: number;
-        lifetime: number;
-      }>;
+    const campaignIds = await resolveEligibleCampaignIds({
+      userId: payload.userId,
+      cardId: resolvedCard.cardId,
+      baseCampaignId: resolvedCard.baseCampaignId,
+    });
 
+    const campaignBalanceRows = (await db
+      .select()
+      .from(campaignBalances)
+      .where(and(eq(campaignBalances.cardId, resolvedCard.cardId)))) as CampaignBalanceRow[];
+    const campaignBalanceById = new Map(campaignBalanceRows.map((row) => [row.campaignId, row]));
+
+    const itemBrandByProduct = new Map(
+      normalizedItems
+        .map((item) => {
+          if (!item.brandId) {
+            return null;
+          }
+          return [item.productId, item.brandId] as const;
+        })
+        .filter(Boolean) as ReadonlyArray<readonly [string, string]>,
+    );
+
+    const itemTotalsByProduct = new Map<string, number>();
+    const itemTotalsByBrand = new Map<string, number>();
+    for (const item of normalizedItems) {
+      itemTotalsByProduct.set(item.productId, (itemTotalsByProduct.get(item.productId) ?? 0) + item.quantity);
+      const brandId = item.brandId;
+      if (brandId) {
+        itemTotalsByBrand.set(brandId, (itemTotalsByBrand.get(brandId) ?? 0) + item.quantity);
+      }
+    }
+
+    const accumulationRows: Array<{
+      transactionItemId: string;
+      cardId: string;
+      campaignId: string;
+      amount: number;
+      balanceAfter: number;
+      sourceType: 'transaction_item';
+      codeCaptureId: null;
+    }> = [];
+    let totalAccumulatedAcrossCampaigns = 0;
+
+    for (const campaignId of campaignIds) {
       const activePolicies = (await db
         .select()
         .from(campaignPolicies)
-        .where(
-          and(eq(campaignPolicies.campaignId, card.campaignId), eq(campaignPolicies.active, true)),
-        )) as CampaignPolicyRow[];
+        .where(and(eq(campaignPolicies.campaignId, campaignId), eq(campaignPolicies.active, true)))) as CampaignPolicyRow[];
 
-      let currentBalance = existingBalance?.current ?? 0;
-      let lifetimeBalance = existingBalance?.lifetime ?? 0;
-
-      const itemBrandByProduct = new Map(
-        normalizedItems
-          .map((item) => {
-            if (!item.brandId) {
-              return null;
-            }
-            return [item.productId, item.brandId] as const;
-          })
-          .filter(Boolean) as ReadonlyArray<readonly [string, string]>,
-      );
-
-      const itemTotalsByProduct = new Map<string, number>();
-      const itemTotalsByBrand = new Map<string, number>();
-      for (const item of normalizedItems) {
-        itemTotalsByProduct.set(item.productId, (itemTotalsByProduct.get(item.productId) ?? 0) + item.quantity);
-        const brandId = item.brandId;
-        if (brandId) {
-          itemTotalsByBrand.set(brandId, (itemTotalsByBrand.get(brandId) ?? 0) + item.quantity);
-        }
-      }
-
+      const existingCampaignBalance = campaignBalanceById.get(campaignId);
+      let currentCampaignBalance = existingCampaignBalance?.current ?? 0;
+      let lifetimeCampaignBalance = existingCampaignBalance?.lifetime ?? 0;
       const accumulatedByItem = new Map<string, number>();
 
       const canAccumulateItem = async (item: TransactionItemRow) => {
@@ -558,7 +641,13 @@ const createOrReplayTransaction = async (payload: {
             const latestRows = (await db
               .select({ createdAt: accumulations.createdAt })
               .from(accumulations)
-              .where(and(eq(accumulations.cardId, card.id), gt(accumulations.createdAt, periodStart)))
+              .where(
+                and(
+                  eq(accumulations.cardId, resolvedCard.cardId),
+                  eq(accumulations.campaignId, campaignId),
+                  gt(accumulations.createdAt, periodStart),
+                ),
+              )
               .orderBy(desc(accumulations.createdAt))
               .limit(1)) as Array<{ createdAt: Date }>;
             const latest = latestRows[0];
@@ -593,8 +682,8 @@ const createOrReplayTransaction = async (payload: {
             }
 
             const historicalFilters = [
-              eq(accumulations.cardId, card.id),
-              eq(accumulations.campaignId, card.campaignId),
+              eq(accumulations.cardId, resolvedCard.cardId),
+              eq(accumulations.campaignId, campaignId),
             ];
             const periodStart = toPeriodStart(policy.period, now);
             if (periodStart) {
@@ -649,7 +738,7 @@ const createOrReplayTransaction = async (payload: {
         return true;
       };
 
-      const accumulationRows = [];
+      let campaignAccumulated = 0;
       for (const item of createdItems) {
         const allowed = await canAccumulateItem(item);
         if (!allowed) {
@@ -657,46 +746,71 @@ const createOrReplayTransaction = async (payload: {
         }
 
         const amount = item.quantity;
-        currentBalance += amount;
-        lifetimeBalance += amount;
+        currentCampaignBalance += amount;
+        lifetimeCampaignBalance += amount;
+        campaignAccumulated += amount;
+        totalAccumulatedAcrossCampaigns += amount;
         accumulatedByItem.set(item.productId, (accumulatedByItem.get(item.productId) ?? 0) + amount);
         accumulationRows.push({
           transactionItemId: item.id,
-          cardId: card.id,
-          campaignId: card.campaignId,
+          cardId: resolvedCard.cardId,
+          campaignId,
           amount,
-          balanceAfter: currentBalance,
-          sourceType: 'transaction_item' as const,
+          balanceAfter: currentCampaignBalance,
+          sourceType: 'transaction_item',
           codeCaptureId: null,
         });
       }
 
-      if (existingBalance) {
-        await db
-          .update(balances)
-          .set({
-            current: currentBalance,
-            lifetime: lifetimeBalance,
-            updatedAt: new Date(),
-          })
-          .where(eq(balances.id, existingBalance.id));
+      if (existingCampaignBalance) {
+        if (campaignAccumulated > 0) {
+          await db
+            .update(campaignBalances)
+            .set({
+              current: currentCampaignBalance,
+              lifetime: lifetimeCampaignBalance,
+              updatedAt: new Date(),
+            })
+            .where(eq(campaignBalances.id, existingCampaignBalance.id));
+        }
       } else {
-        await db.insert(balances).values({
-          cardId: card.id,
-          current: currentBalance,
-          lifetime: lifetimeBalance,
+        await db.insert(campaignBalances).values({
+          cardId: resolvedCard.cardId,
+          campaignId,
+          current: currentCampaignBalance,
+          lifetime: lifetimeCampaignBalance,
           updatedAt: new Date(),
         });
       }
+    }
 
-      if (accumulationRows.length > 0) {
-        await db.insert(accumulations).values(accumulationRows);
-        const itemIds = accumulationRows.map((row) => row.transactionItemId);
-        createdAccumulations = (await db
-          .select()
-          .from(accumulations)
-          .where(or(...itemIds.map((id) => eq(accumulations.transactionItemId, id))))) as AccumulationRow[];
-      }
+    const currentTotalBalance = existingBalance?.current ?? 0;
+    const lifetimeTotalBalance = existingBalance?.lifetime ?? 0;
+    if (existingBalance) {
+      await db
+        .update(balances)
+        .set({
+          current: currentTotalBalance + totalAccumulatedAcrossCampaigns,
+          lifetime: lifetimeTotalBalance + totalAccumulatedAcrossCampaigns,
+          updatedAt: new Date(),
+        })
+        .where(eq(balances.id, existingBalance.id));
+    } else {
+      await db.insert(balances).values({
+        cardId: resolvedCard.cardId,
+        current: totalAccumulatedAcrossCampaigns,
+        lifetime: totalAccumulatedAcrossCampaigns,
+        updatedAt: new Date(),
+      });
+    }
+
+    if (accumulationRows.length > 0) {
+      await db.insert(accumulations).values(accumulationRows);
+      const itemIds = accumulationRows.map((row) => row.transactionItemId);
+      createdAccumulations = (await db
+        .select()
+        .from(accumulations)
+        .where(or(...itemIds.map((id) => eq(accumulations.transactionItemId, id))))) as AccumulationRow[];
     }
   }
 

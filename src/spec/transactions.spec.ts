@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { createHmac } from 'node:crypto';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
 import {
   accumulations,
   balances,
+  campaignBalances,
   brands,
   campaignPolicies,
   cards,
+  campaignSubscriptions,
   campaigns,
   cpgs,
   products,
@@ -18,6 +20,7 @@ import {
   users,
   webhookReceipts,
 } from '../db/schema';
+import { ensureUserUniversalWalletCard, UNIVERSAL_CAMPAIGN_KEY } from '../services/wallet-onboarding';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -186,11 +189,11 @@ describe('Transactions module', () => {
 
     expect(createStatus).toBe(201);
     expect(created.data.totalAmount).toBe(30);
-    expect(created.data.accumulations.length).toBe(1);
-    expect(created.data.accumulations[0]?.cardId).toBe(card.id);
-    expect(created.data.accumulations[0]?.campaignId).toBe(card.campaignId);
-    expect(created.data.accumulations[0]?.accumulated).toBe(2);
-    expect(created.data.accumulations[0]?.newBalance).toBe(2);
+    expect(created.data.accumulations.length).toBeGreaterThanOrEqual(1);
+    const campaignAccumulation = created.data.accumulations.find((entry: { campaignId: string }) => entry.campaignId === card.campaignId);
+    expect(campaignAccumulation?.cardId).toBe(card.id);
+    expect(campaignAccumulation?.accumulated).toBe(2);
+    expect(campaignAccumulation?.newBalance).toBe(2);
 
     const txId = created.data.id;
 
@@ -226,8 +229,9 @@ describe('Transactions module', () => {
 
     expect(replayStatus).toBe(200);
     expect(replayed.data.id).toBe(txId);
-    expect(replayed.data.accumulations.length).toBe(1);
-    expect(replayed.data.accumulations[0]?.newBalance).toBe(2);
+    expect(replayed.data.accumulations.length).toBeGreaterThanOrEqual(1);
+    const replayCampaignAccumulation = replayed.data.accumulations.find((entry: { campaignId: string }) => entry.campaignId === card.campaignId);
+    expect(replayCampaignAccumulation?.newBalance).toBe(2);
 
     const {
       data: listed,
@@ -292,7 +296,7 @@ describe('Transactions module', () => {
 
     expect(detailStatus).toBe(200);
     expect(detail.data.items.length).toBe(1);
-    expect(detail.data.accumulations.length).toBe(1);
+    expect(detail.data.accumulations.length).toBeGreaterThanOrEqual(1);
 
     const [balance] = (await db
       .select({
@@ -304,9 +308,21 @@ describe('Transactions module', () => {
       current: number;
       lifetime: number;
     }>;
-    expect(balance?.current).toBe(2);
-    expect(balance?.lifetime).toBe(2);
+    expect(balance?.current).toBeGreaterThanOrEqual(2);
+    expect(balance?.lifetime).toBeGreaterThanOrEqual(2);
 
+    const [campaignBalance] = (await db
+      .select({
+        current: campaignBalances.current,
+      })
+      .from(campaignBalances)
+      .where(and(eq(campaignBalances.cardId, card.id), eq(campaignBalances.campaignId, card.campaignId)))) as Array<{
+      current: number;
+    }>;
+
+    expect(campaignBalance?.current).toBe(2);
+
+    await db.delete(campaignBalances).where(eq(campaignBalances.cardId, card.id));
     await db.delete(accumulations).where(eq(accumulations.cardId, card.id));
     await db.delete(balances).where(eq(balances.cardId, card.id));
     await db.delete(cards).where(eq(cards.id, card.id));
@@ -451,6 +467,90 @@ describe('Transactions module', () => {
     await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
   });
 
+  it('accumulates into universal and subscribed campaigns with a single card', async () => {
+    const user = await createUser();
+    const store = await createStore();
+    const catalog = await createProduct();
+
+    const universal = await ensureUserUniversalWalletCard(user.id);
+
+    const [optInCampaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign Opt-In ${crypto.randomUUID().slice(0, 6)}`,
+        status: 'active',
+        enrollmentMode: 'opt_in',
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    if (!optInCampaign) {
+      throw new Error('Failed to create opt-in campaign');
+    }
+
+    await db.insert(campaignSubscriptions).values({
+      userId: user.id,
+      campaignId: optInCampaign.id,
+      status: 'subscribed',
+      subscribedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const walletHeaders = {
+      authorization: 'Bearer dev-token',
+      'x-dev-user-id': user.id,
+      'x-dev-user-role': 'consumer',
+    };
+
+    const created = await api.v1.transactions.post(
+      {
+        userId: user.id,
+        storeId: store.id,
+        items: [
+          {
+            productId: catalog.productId,
+            quantity: 1,
+            amount: 35,
+          },
+        ],
+      },
+      {
+        headers: walletHeaders,
+      },
+    );
+
+    if (created.error) {
+      throw created.error.value;
+    }
+    if (!created.data) {
+      throw new Error('Multi campaign transaction response missing');
+    }
+
+    expect(created.status).toBe(201);
+    const campaignIds = new Set(created.data.data.accumulations.map((row: { campaignId: string }) => row.campaignId));
+    expect(campaignIds.has(optInCampaign.id)).toBe(true);
+
+    const [universalCampaign] = (await db
+      .select({ id: campaigns.id })
+      .from(campaigns)
+      .where(eq(campaigns.key, UNIVERSAL_CAMPAIGN_KEY))) as Array<{ id: string }>;
+
+    expect(campaignIds.has(universalCampaign?.id ?? '')).toBe(true);
+
+    await db.delete(campaignBalances).where(eq(campaignBalances.cardId, universal.cardId));
+    await db.delete(accumulations).where(eq(accumulations.cardId, universal.cardId));
+    await db.delete(balances).where(eq(balances.cardId, universal.cardId));
+    await db.delete(cards).where(eq(cards.id, universal.cardId));
+    await db.delete(campaignSubscriptions).where(eq(campaignSubscriptions.userId, user.id));
+    await db.delete(campaigns).where(eq(campaigns.id, optInCampaign.id));
+    await db.delete(transactions).where(eq(transactions.userId, user.id));
+    await db.delete(stores).where(eq(stores.id, store.id));
+    await db.delete(users).where(eq(users.id, user.id));
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
+  });
+
   it('applies max_accumulations campaign policy', async () => {
     const user = await createUser();
     const store = await createStore();
@@ -516,7 +616,9 @@ describe('Transactions module', () => {
     }
 
     expect(firstTx.status).toBe(201);
-    expect(firstTx.data.data.accumulations.length).toBe(1);
+    expect(firstTx.data.data.accumulations.length).toBeGreaterThanOrEqual(1);
+    const firstCampaignAccRows = firstTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === campaign.id);
+    expect(firstCampaignAccRows.length).toBe(1);
 
     const secondTx = await api.v1.transactions.post(
       {
@@ -544,7 +646,8 @@ describe('Transactions module', () => {
     }
 
     expect(secondTx.status).toBe(201);
-    expect(secondTx.data.data.accumulations.length).toBe(0);
+    const secondCampaignAccRows = secondTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === campaign.id);
+    expect(secondCampaignAccRows.length).toBe(0);
 
     const [balance] = (await db
       .select({
@@ -553,7 +656,18 @@ describe('Transactions module', () => {
       .from(balances)
       .where(eq(balances.cardId, card.id))) as Array<{ current: number }>;
 
-    expect(balance?.current).toBe(1);
+    expect(balance?.current).toBeGreaterThanOrEqual(2);
+
+    const [campaignBalance] = (await db
+      .select({
+        current: campaignBalances.current,
+      })
+      .from(campaignBalances)
+      .where(and(eq(campaignBalances.cardId, card.id), eq(campaignBalances.campaignId, campaign.id)))) as Array<{
+      current: number;
+    }>;
+
+    expect(campaignBalance?.current).toBe(1);
 
     if (firstTx.data.data.id) {
       await db.delete(transactions).where(eq(transactions.id, firstTx.data.data.id));
@@ -561,6 +675,7 @@ describe('Transactions module', () => {
     if (secondTx.data.data.id) {
       await db.delete(transactions).where(eq(transactions.id, secondTx.data.data.id));
     }
+    await db.delete(campaignBalances).where(eq(campaignBalances.cardId, card.id));
     await db.delete(accumulations).where(eq(accumulations.cardId, card.id));
     await db.delete(balances).where(eq(balances.cardId, card.id));
     await db.delete(cards).where(eq(cards.id, card.id));
