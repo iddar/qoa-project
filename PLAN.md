@@ -127,6 +127,7 @@
 - E2E backend: journeys críticos cubiertos para lifecycle de campaña, acumulación/canje, reminders, webhook WhatsApp y alerting.
 - Operaciones: documentación base creada para infraestructura, SLOs y runbook de despliegue.
 - Operaciones: pipeline CI ampliado para checks de backend y lint de frontends en push/PR.
+- Operaciones: completados docs de monitoring/alertas, staging y runbooks de escalado/incidentes.
 
 **Estructura del proyecto:**
 ```

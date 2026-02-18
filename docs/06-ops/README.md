@@ -7,6 +7,12 @@ Esta carpeta contiene la documentación operativa, incluyendo runbooks, SLOs, in
 - `infraestructura.md`: base de arquitectura y ambientes.
 - `slos.md`: objetivos operativos iniciales y politica de alertamiento.
 - `runbooks/despliegue.md`: procedimiento de despliegue y rollback.
+- `monitoring-alertas.md`: senales, dashboards y umbrales de alerta.
+- `staging.md`: alcance, reglas y smoke tests del ambiente de pre-produccion.
+- `runbooks/escalado.md`: escalado tecnico/operativo por trigger y severidad.
+- `runbooks/incidentes-tipicos.md`: respuestas rapidas para incidentes recurrentes.
+- `runbooks/checklist-caido.md`: checklist ejecutable para caidas de servicio.
+- `incidentes.md`: severidades y plantilla de postmortem.
 
 ## Cómo rellenar
 
