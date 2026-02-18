@@ -15,6 +15,8 @@ const navItems = [
   { href: "/catalog", label: "Catálogo" },
   { href: "/cards", label: "Tarjetas" },
   { href: "/campaigns", label: "Campañas" },
+  { href: "/rewards", label: "Recompensas" },
+  { href: "/alerts", label: "Alertas" },
   { href: "/transactions", label: "Transacciones" },
 ];
 

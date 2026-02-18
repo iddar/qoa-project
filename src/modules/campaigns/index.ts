@@ -3,7 +3,7 @@ import { Elysia, t } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { campaignAuditLogs, campaigns } from '../../db/schema';
+import { brands, campaignAuditLogs, campaignPolicies, campaigns, products } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import {
   campaignAuditListResponse,
@@ -12,6 +12,10 @@ import {
   campaignListQuery,
   campaignListResponse,
   campaignNoteRequest,
+  campaignPolicyCreateRequest,
+  campaignPolicyListResponse,
+  campaignPolicyResponse,
+  campaignPolicyUpdateRequest,
   campaignResponse,
   campaignReviewRequest,
   campaignUpdateRequest,
@@ -49,6 +53,22 @@ type CampaignAuditRow = {
   actorUserId: string | null;
   metadata: string | null;
   createdAt: Date;
+};
+
+type CampaignPolicyRow = {
+  id: string;
+  campaignId: string;
+  policyType: 'max_accumulations' | 'min_amount' | 'min_quantity' | 'cooldown';
+  scopeType: 'campaign' | 'brand' | 'product';
+  scopeId: string | null;
+  scopeBrandId: string | null;
+  scopeProductId: string | null;
+  period: 'transaction' | 'day' | 'week' | 'month' | 'lifetime';
+  value: number;
+  config: string | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date | null;
 };
 
 type CampaignListContext = {
@@ -123,6 +143,42 @@ type CampaignAuditContext = {
   status: StatusHandler;
 };
 
+type CampaignPolicyListContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string };
+  status: StatusHandler;
+};
+
+type CampaignPolicyCreateContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string };
+  body: {
+    policyType: CampaignPolicyRow['policyType'];
+    scopeType: CampaignPolicyRow['scopeType'];
+    scopeId?: string;
+    period: CampaignPolicyRow['period'];
+    value: number;
+    config?: string;
+    active?: boolean;
+  };
+  status: StatusHandler;
+};
+
+type CampaignPolicyUpdateContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string; policyId: string };
+  body: {
+    policyType?: CampaignPolicyRow['policyType'];
+    scopeType?: CampaignPolicyRow['scopeType'];
+    scopeId?: string;
+    period?: CampaignPolicyRow['period'];
+    value?: number;
+    config?: string;
+    active?: boolean;
+  };
+  status: StatusHandler;
+};
+
 const isUserAuth = (auth: AuthContext): auth is Extract<AuthContext, { type: 'jwt' | 'dev' }> =>
   auth.type === 'jwt' || auth.type === 'dev';
 
@@ -152,6 +208,20 @@ const serializeAuditLog = (entry: CampaignAuditRow) => ({
   actorUserId: entry.actorUserId ?? undefined,
   metadata: entry.metadata ?? undefined,
   createdAt: entry.createdAt.toISOString(),
+});
+
+const serializePolicy = (entry: CampaignPolicyRow) => ({
+  id: entry.id,
+  campaignId: entry.campaignId,
+  policyType: entry.policyType,
+  scopeType: entry.scopeType,
+  scopeId: entry.scopeId ?? undefined,
+  period: entry.period,
+  value: entry.value,
+  config: entry.config ?? undefined,
+  active: entry.active,
+  createdAt: entry.createdAt.toISOString(),
+  updatedAt: entry.updatedAt ? entry.updatedAt.toISOString() : undefined,
 });
 
 const resolveActorUserId = (auth: AuthContext | null) => {
@@ -206,6 +276,104 @@ const ensureCampaign = async (campaignId: string) => {
   const [campaign] = (await db.select().from(campaigns).where(eq(campaigns.id, campaignId))) as CampaignRow[];
   return campaign ?? null;
 };
+
+const ensureScope = async (
+  campaign: CampaignRow,
+  scopeType: CampaignPolicyRow['scopeType'],
+  scopeId: string | null,
+  status: StatusHandler,
+) => {
+  if (scopeType === 'campaign') {
+    if (scopeId) {
+      return status(400, {
+        error: {
+          code: 'INVALID_ARGUMENT',
+          message: 'scopeId debe omitirse cuando scopeType es campaign',
+        },
+      });
+    }
+    return null;
+  }
+
+  if (!scopeId) {
+    return status(400, {
+      error: {
+        code: 'INVALID_ARGUMENT',
+        message: 'scopeId es obligatorio para scopeType brand/product',
+      },
+    });
+  }
+
+  if (!isUuid(scopeId)) {
+    return status(400, {
+      error: {
+        code: 'INVALID_ARGUMENT',
+        message: 'scopeId debe ser UUID válido',
+      },
+    });
+  }
+
+  if (scopeType === 'brand') {
+    const [brand] = (await db
+      .select({ id: brands.id, cpgId: brands.cpgId })
+      .from(brands)
+      .where(eq(brands.id, scopeId))) as Array<{ id: string; cpgId: string }>;
+
+    if (!brand) {
+      return status(404, {
+        error: {
+          code: 'BRAND_NOT_FOUND',
+          message: 'Brand no encontrada',
+        },
+      });
+    }
+
+    if (campaign.cpgId && campaign.cpgId !== brand.cpgId) {
+      return status(400, {
+        error: {
+          code: 'INVALID_ARGUMENT',
+          message: 'La brand no pertenece al CPG de la campaña',
+        },
+      });
+    }
+
+    return null;
+  }
+
+  const [product] = (await db
+    .select({ id: products.id, brandId: products.brandId })
+    .from(products)
+    .where(eq(products.id, scopeId))) as Array<{ id: string; brandId: string }>;
+
+  if (!product) {
+    return status(404, {
+      error: {
+        code: 'PRODUCT_NOT_FOUND',
+        message: 'Producto no encontrado',
+      },
+    });
+  }
+
+  if (campaign.cpgId) {
+    const [brand] = (await db
+      .select({ cpgId: brands.cpgId })
+      .from(brands)
+      .where(eq(brands.id, product.brandId))) as Array<{ cpgId: string }>;
+
+    if (!brand || brand.cpgId !== campaign.cpgId) {
+      return status(400, {
+        error: {
+          code: 'INVALID_ARGUMENT',
+          message: 'El producto no pertenece al CPG de la campaña',
+        },
+      });
+    }
+  }
+
+  return null;
+};
+
+const parsePolicyConfig = (config: string | undefined) => (config === undefined || config === '' ? null : config);
 
 const appendAudit = async (
   campaignId: string,
@@ -562,6 +730,275 @@ export const campaignsModule = new Elysia({
       },
       detail: {
         summary: 'Actualizar campaña',
+      },
+    },
+  )
+  .get(
+    '/:campaignId/policies',
+    async ({ auth, params, status }: CampaignPolicyListContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      const rows = (await db
+        .select()
+        .from(campaignPolicies)
+        .where(eq(campaignPolicies.campaignId, campaign.id))
+        .orderBy(desc(campaignPolicies.createdAt))) as CampaignPolicyRow[];
+
+      return {
+        data: rows.map(serializePolicy),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: headerSchema,
+      response: {
+        200: campaignPolicyListResponse,
+      },
+      detail: {
+        summary: 'Listar políticas de campaña',
+      },
+    },
+  )
+  .post(
+    '/:campaignId/policies',
+    async ({ auth, params, body, status }: CampaignPolicyCreateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return status(409, {
+          error: {
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar políticas',
+          },
+        });
+      }
+
+      const scopeId = body.scopeId ?? null;
+      const scopeError = await ensureScope(campaign, body.scopeType, scopeId, status);
+      if (scopeError) {
+        return scopeError;
+      }
+
+      const parsedConfig = parsePolicyConfig(body.config);
+
+      const [created] = (await db
+        .insert(campaignPolicies)
+        .values({
+          campaignId: campaign.id,
+          policyType: body.policyType,
+          scopeType: body.scopeType,
+          scopeId,
+          scopeBrandId: body.scopeType === 'brand' ? scopeId : null,
+          scopeProductId: body.scopeType === 'product' ? scopeId : null,
+          period: body.period,
+          value: body.value,
+          config: parsedConfig,
+          active: body.active ?? true,
+          updatedAt: new Date(),
+        })
+        .returning()) as CampaignPolicyRow[];
+
+      if (!created) {
+        return status(500, {
+          error: {
+            code: 'CAMPAIGN_POLICY_CREATE_FAILED',
+            message: 'No se pudo crear la política de campaña',
+          },
+        });
+      }
+
+      await appendAudit(created.campaignId, 'campaign.policy_created', null, auth, {
+        policyId: created.id,
+        policyType: created.policyType,
+        scopeType: created.scopeType,
+      });
+
+      return status(201, {
+        data: serializePolicy(created),
+      });
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: headerSchema,
+      body: campaignPolicyCreateRequest,
+      response: {
+        201: campaignPolicyResponse,
+      },
+      detail: {
+        summary: 'Crear política de campaña',
+      },
+    },
+  )
+  .patch(
+    '/:campaignId/policies/:policyId',
+    async ({ auth, params, body, status }: CampaignPolicyUpdateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return status(409, {
+          error: {
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar políticas',
+          },
+        });
+      }
+
+      const [existing] = (await db
+        .select()
+        .from(campaignPolicies)
+        .where(and(eq(campaignPolicies.id, params.policyId), eq(campaignPolicies.campaignId, campaign.id)))) as
+        | CampaignPolicyRow[]
+        | [];
+
+      if (!existing) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_POLICY_NOT_FOUND',
+            message: 'Política no encontrada',
+          },
+        });
+      }
+
+      const nextScopeType = body.scopeType ?? existing.scopeType;
+      const nextScopeId =
+        body.scopeType === 'campaign'
+          ? null
+          : body.scopeId !== undefined
+            ? body.scopeId
+            : existing.scopeType === 'campaign'
+              ? null
+              : existing.scopeId;
+
+      const scopeError = await ensureScope(campaign, nextScopeType, nextScopeId ?? null, status);
+      if (scopeError) {
+        return scopeError;
+      }
+
+      const parsedConfig = parsePolicyConfig(body.config);
+
+      const [updated] = (await db
+        .update(campaignPolicies)
+        .set({
+          policyType: body.policyType ?? existing.policyType,
+          scopeType: nextScopeType,
+          scopeId: nextScopeId ?? null,
+          scopeBrandId: nextScopeType === 'brand' ? (nextScopeId ?? null) : null,
+          scopeProductId: nextScopeType === 'product' ? (nextScopeId ?? null) : null,
+          period: body.period ?? existing.period,
+          value: body.value ?? existing.value,
+          config: body.config !== undefined ? parsedConfig : existing.config,
+          active: body.active ?? existing.active,
+          updatedAt: new Date(),
+        })
+        .where(eq(campaignPolicies.id, existing.id))
+        .returning()) as CampaignPolicyRow[];
+
+      if (!updated) {
+        return status(500, {
+          error: {
+            code: 'CAMPAIGN_POLICY_UPDATE_FAILED',
+            message: 'No se pudo actualizar la política de campaña',
+          },
+        });
+      }
+
+      await appendAudit(updated.campaignId, 'campaign.policy_updated', null, auth, {
+        policyId: updated.id,
+        policyType: updated.policyType,
+        scopeType: updated.scopeType,
+      });
+
+      return {
+        data: serializePolicy(updated),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: headerSchema,
+      body: campaignPolicyUpdateRequest,
+      response: {
+        200: campaignPolicyResponse,
+      },
+      detail: {
+        summary: 'Actualizar política de campaña',
       },
     },
   )

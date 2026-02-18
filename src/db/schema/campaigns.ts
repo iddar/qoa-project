@@ -1,5 +1,6 @@
-import { index, integer, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { brands, products } from './catalog';
 import { users } from './users';
 
 export const campaignStatus = pgEnum('campaign_status', [
@@ -13,6 +14,23 @@ export const campaignStatus = pgEnum('campaign_status', [
   'ended',
 ]);
 
+export const campaignPolicyType = pgEnum('campaign_policy_type', [
+  'max_accumulations',
+  'min_amount',
+  'min_quantity',
+  'cooldown',
+]);
+
+export const campaignPolicyScopeType = pgEnum('campaign_policy_scope_type', ['campaign', 'brand', 'product']);
+
+export const campaignPolicyPeriod = pgEnum('campaign_policy_period', [
+  'transaction',
+  'day',
+  'week',
+  'month',
+  'lifetime',
+]);
+
 type CampaignsTable = {
   cpgId: unknown;
   status: unknown;
@@ -21,6 +39,14 @@ type CampaignsTable = {
 
 type CampaignAuditLogsTable = {
   campaignId: unknown;
+  createdAt: unknown;
+};
+
+type CampaignPoliciesTable = {
+  campaignId: unknown;
+  policyType: unknown;
+  scopeType: unknown;
+  active: unknown;
   createdAt: unknown;
 };
 
@@ -67,5 +93,35 @@ export const campaignAuditLogs = pgTable(
   (table: CampaignAuditLogsTable) => [
     index('campaign_audit_logs_campaign_idx').on(table.campaignId),
     index('campaign_audit_logs_created_at_idx').on(table.createdAt),
+  ],
+);
+
+export const campaignPolicies = pgTable(
+  'campaign_policies',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    policyType: campaignPolicyType('policy_type').notNull(),
+    scopeType: campaignPolicyScopeType('scope_type').notNull(),
+    scopeId: uuid('scope_id'),
+    scopeBrandId: uuid('scope_brand_id').references(() => brands.id, { onDelete: 'set null' }),
+    scopeProductId: uuid('scope_product_id').references(() => products.id, { onDelete: 'set null' }),
+    period: campaignPolicyPeriod('period').notNull(),
+    value: integer('value').notNull(),
+    config: text('config'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (table: CampaignPoliciesTable) => [
+    index('campaign_policies_campaign_idx').on(table.campaignId),
+    index('campaign_policies_type_idx').on(table.policyType),
+    index('campaign_policies_scope_idx').on(table.scopeType),
+    index('campaign_policies_active_idx').on(table.active),
+    index('campaign_policies_created_at_idx').on(table.createdAt),
   ],
 );

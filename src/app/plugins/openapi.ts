@@ -26,6 +26,10 @@ export const openApiPlugin = openapi({
         description: 'Authentication and token issuance endpoints.',
       },
       {
+        name: 'Alerts',
+        description: 'Operational alerts and mocked notifications.',
+      },
+      {
         name: 'Users',
         description: 'User profile and account endpoints.',
       },
@@ -56,6 +60,22 @@ export const openApiPlugin = openapi({
       {
         name: 'Transactions',
         description: 'Transaction registration and retrieval endpoints.',
+      },
+      {
+        name: 'Rewards',
+        description: 'Rewards catalog and redemption endpoints.',
+      },
+      {
+        name: 'Reports',
+        description: 'Operational and analytics summary endpoints.',
+      },
+      {
+        name: 'WhatsApp',
+        description: 'Inbound WhatsApp webhooks and operational metrics.',
+      },
+      {
+        name: 'Jobs',
+        description: 'Manual and scheduled operational jobs.',
       },
     ],
   },

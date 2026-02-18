@@ -8,3 +8,5 @@ export * from './campaigns';
 export * from './transactions';
 export * from './catalog';
 export * from './loyalty';
+export * from './rewards';
+export * from './operations';

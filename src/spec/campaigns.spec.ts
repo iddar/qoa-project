@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { campaigns } from '../db/schema';
+import { campaignPolicies, campaigns } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -47,6 +47,51 @@ describe('Campaigns module', () => {
     expect(created.data.status).toBe('draft');
 
     const campaignId = created.data.id;
+
+    const {
+      data: policyData,
+      error: policyError,
+      status: policyStatus,
+    } = await api.v1.campaigns({ campaignId }).policies.post(
+      {
+        policyType: 'max_accumulations',
+        scopeType: 'campaign',
+        period: 'day',
+        value: 1,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (policyError) {
+      throw policyError.value;
+    }
+    if (!policyData) {
+      throw new Error('Policy create response missing');
+    }
+
+    expect(policyStatus).toBe(201);
+    expect(policyData.data.policyType).toBe('max_accumulations');
+
+    const {
+      data: listedPolicies,
+      error: listedPoliciesError,
+      status: listedPoliciesStatus,
+    } = await api.v1.campaigns({ campaignId }).policies.get({
+      headers: adminHeaders,
+    });
+
+    if (listedPoliciesError) {
+      throw listedPoliciesError.value;
+    }
+    if (!listedPolicies) {
+      throw new Error('Policy list response missing');
+    }
+
+    expect(listedPoliciesStatus).toBe(200);
+    expect(listedPolicies.data.length).toBe(1);
+    expect(listedPolicies.data[0]?.id).toBe(policyData.data.id);
 
     const {
       data: readyData,
@@ -154,6 +199,7 @@ describe('Campaigns module', () => {
     expect(auditStatus).toBe(200);
     expect(auditData.data.length >= 4).toBe(true);
 
+    await db.delete(campaignPolicies).where(eq(campaignPolicies.campaignId, campaignId));
     await db.delete(campaigns).where(eq(campaigns.id, campaignId));
   });
 

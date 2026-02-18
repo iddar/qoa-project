@@ -7,6 +7,7 @@ import { db } from '../../db/client';
 import {
   accumulations,
   balances,
+  campaignPolicies,
   cards,
   products,
   stores,
@@ -80,6 +81,24 @@ type AccumulationRow = {
   balanceAfter: number;
   sourceType: 'transaction_item' | 'code_capture';
   codeCaptureId: string | null;
+};
+
+type CampaignPolicyRow = {
+  id: string;
+  campaignId: string;
+  policyType: 'max_accumulations' | 'min_amount' | 'min_quantity' | 'cooldown';
+  scopeType: 'campaign' | 'brand' | 'product';
+  scopeId: string | null;
+  period: 'transaction' | 'day' | 'week' | 'month' | 'lifetime';
+  value: number;
+  active: boolean;
+  createdAt: Date;
+};
+
+type ResolvedCatalogItem = {
+  ref: string;
+  id: string;
+  brandId: string;
 };
 
 type CreateContext = {
@@ -222,6 +241,52 @@ const normalizeItems = (items: Array<{ productId: string; quantity?: number; amo
     };
   });
 
+const toPeriodStart = (period: CampaignPolicyRow['period'], now: Date) => {
+  if (period === 'day') {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+  }
+
+  if (period === 'week') {
+    const currentUtcDay = now.getUTCDay();
+    const diffToMonday = (currentUtcDay + 6) % 7;
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diffToMonday, 0, 0, 0, 0));
+  }
+
+  if (period === 'month') {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  }
+
+  return null;
+};
+
+const resolveCatalogItems = async (productRefs: string[]) => {
+  const resolved = new Map<string, ResolvedCatalogItem>();
+
+  for (const productRef of productRefs) {
+    const [product] = (await db
+      .select({
+        id: products.id,
+        sku: products.sku,
+        brandId: products.brandId,
+      })
+      .from(products)
+      .where(or(eq(products.id, productRef), eq(products.sku, productRef)))
+      .limit(1)) as Array<{ id: string; sku: string; brandId: string }>;
+
+    if (!product) {
+      return null;
+    }
+
+    resolved.set(productRef, {
+      ref: productRef,
+      id: product.id,
+      brandId: product.brandId,
+    });
+  }
+
+  return resolved;
+};
+
 const ensureTransactionEntities = async (
   payload: {
     userId: string;
@@ -269,27 +334,31 @@ const ensureTransactionEntities = async (
     }
   }
 
+  const catalogItems = new Map<string, ResolvedCatalogItem>();
   if (payload.items && payload.items.length > 0) {
     const productRefs = [...new Set(payload.items.map((item) => item.productId))];
-    for (const productRef of productRefs) {
-      const [product] = (await db
-        .select({ id: products.id })
-        .from(products)
-        .where(or(eq(products.id, productRef), eq(products.sku, productRef)))
-        .limit(1)) as Array<{ id: string }>;
-
-      if (!product) {
-        return status(404, {
+    const resolvedCatalogItems = await resolveCatalogItems(productRefs);
+    if (!resolvedCatalogItems) {
+      return {
+        error: status(404, {
           error: {
             code: 'PRODUCT_NOT_FOUND',
             message: 'Uno o más productos no existen',
           },
-        });
-      }
+        }),
+        catalogItems,
+      };
+    }
+
+    for (const [key, value] of resolvedCatalogItems.entries()) {
+      catalogItems.set(key, value);
     }
   }
 
-  return null;
+  return {
+    error: null,
+    catalogItems,
+  };
 };
 
 const createOrReplayTransaction = async (payload: {
@@ -299,6 +368,7 @@ const createOrReplayTransaction = async (payload: {
   metadata?: string;
   idempotencyKey?: string;
   items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>;
+  catalogItems: Map<string, ResolvedCatalogItem>;
 }) => {
   if (payload.idempotencyKey) {
     const [existing] = (await db
@@ -330,7 +400,14 @@ const createOrReplayTransaction = async (payload: {
     }
   }
 
-  const normalizedItems = normalizeItems(payload.items);
+  const normalizedItems = normalizeItems(payload.items).map((item) => {
+    const resolved = payload.catalogItems.get(item.productId);
+    return {
+      ...item,
+      productId: resolved?.id ?? item.productId,
+      brandId: resolved?.brandId,
+    };
+  });
   const totalAmount = normalizedItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
 
   const [created] = (await db
@@ -378,20 +455,195 @@ const createOrReplayTransaction = async (payload: {
     }>;
 
     if (card) {
+      const now = new Date();
       const [existingBalance] = (await db.select().from(balances).where(eq(balances.cardId, card.id))) as Array<{
         id: string;
         current: number;
         lifetime: number;
       }>;
 
+      const activePolicies = (await db
+        .select()
+        .from(campaignPolicies)
+        .where(
+          and(eq(campaignPolicies.campaignId, card.campaignId), eq(campaignPolicies.active, true)),
+        )) as CampaignPolicyRow[];
+
       let currentBalance = existingBalance?.current ?? 0;
       let lifetimeBalance = existingBalance?.lifetime ?? 0;
 
-      const accumulationRows = createdItems.map((item) => {
+      const itemBrandByProduct = new Map(
+        normalizedItems
+          .map((item) => {
+            if (!item.brandId) {
+              return null;
+            }
+            return [item.productId, item.brandId] as const;
+          })
+          .filter(Boolean) as ReadonlyArray<readonly [string, string]>,
+      );
+
+      const itemTotalsByProduct = new Map<string, number>();
+      const itemTotalsByBrand = new Map<string, number>();
+      for (const item of normalizedItems) {
+        itemTotalsByProduct.set(item.productId, (itemTotalsByProduct.get(item.productId) ?? 0) + item.quantity);
+        const brandId = item.brandId;
+        if (brandId) {
+          itemTotalsByBrand.set(brandId, (itemTotalsByBrand.get(brandId) ?? 0) + item.quantity);
+        }
+      }
+
+      const accumulatedByItem = new Map<string, number>();
+
+      const canAccumulateItem = async (item: TransactionItemRow) => {
+        const brandId = itemBrandByProduct.get(item.productId) ?? null;
+        const scopedPolicies = activePolicies.filter((policy) => {
+          if (policy.scopeType === 'campaign') {
+            return true;
+          }
+          if (policy.scopeType === 'product') {
+            return policy.scopeId === item.productId;
+          }
+
+          return Boolean(brandId && policy.scopeId === brandId);
+        });
+
+        for (const policy of scopedPolicies) {
+          if (policy.policyType === 'min_amount') {
+            if (totalAmount < policy.value) {
+              return false;
+            }
+            continue;
+          }
+
+          if (policy.policyType === 'min_quantity') {
+            if (policy.scopeType === 'product') {
+              if ((itemTotalsByProduct.get(item.productId) ?? 0) < policy.value) {
+                return false;
+              }
+            } else if (policy.scopeType === 'brand') {
+              if (!brandId || (itemTotalsByBrand.get(brandId) ?? 0) < policy.value) {
+                return false;
+              }
+            } else if (item.quantity < policy.value) {
+              return false;
+            }
+
+            continue;
+          }
+
+          if (policy.policyType === 'cooldown') {
+            const periodStart = toPeriodStart(policy.period, now);
+            if (!periodStart) {
+              continue;
+            }
+
+            const latestRows = (await db
+              .select({ createdAt: accumulations.createdAt })
+              .from(accumulations)
+              .where(and(eq(accumulations.cardId, card.id), gt(accumulations.createdAt, periodStart)))
+              .orderBy(desc(accumulations.createdAt))
+              .limit(1)) as Array<{ createdAt: Date }>;
+            const latest = latestRows[0];
+
+            if (latest) {
+              const hoursSinceLatest = (now.getTime() - latest.createdAt.getTime()) / 36_000_00;
+              if (hoursSinceLatest < policy.value) {
+                return false;
+              }
+            }
+
+            continue;
+          }
+
+          if (policy.policyType === 'max_accumulations') {
+            const accumulatedInTransaction =
+              policy.scopeType === 'campaign'
+                ? Array.from(accumulatedByItem.values()).reduce((sum, value) => sum + value, 0)
+                : policy.scopeType === 'product'
+                  ? (accumulatedByItem.get(item.productId) ?? 0)
+                  : brandId
+                    ? Array.from(accumulatedByItem.entries())
+                        .filter(([productId]) => itemBrandByProduct.get(productId) === brandId)
+                        .reduce((sum, [, value]) => sum + value, 0)
+                    : 0;
+
+            if (policy.period === 'transaction') {
+              if (accumulatedInTransaction >= policy.value) {
+                return false;
+              }
+              continue;
+            }
+
+            const historicalFilters = [
+              eq(accumulations.cardId, card.id),
+              eq(accumulations.campaignId, card.campaignId),
+            ];
+            const periodStart = toPeriodStart(policy.period, now);
+            if (periodStart) {
+              historicalFilters.push(gt(accumulations.createdAt, periodStart));
+            }
+
+            const historicalRows = (await db
+              .select({ transactionItemId: accumulations.transactionItemId })
+              .from(accumulations)
+              .where(and(...historicalFilters))) as Array<{ transactionItemId: string | null }>;
+
+            let historicalCount = historicalRows.length;
+            if (policy.scopeType !== 'campaign') {
+              const historicalItemIds = historicalRows
+                .map((entry) => entry.transactionItemId)
+                .filter((entry): entry is string => Boolean(entry));
+
+              if (historicalItemIds.length === 0) {
+                historicalCount = 0;
+              } else {
+                const historicalItems = (await db
+                  .select({ id: transactionItems.id, productId: transactionItems.productId })
+                  .from(transactionItems)
+                  .where(or(...historicalItemIds.map((id) => eq(transactionItems.id, id))))) as Array<{
+                  id: string;
+                  productId: string;
+                }>;
+
+                if (policy.scopeType === 'product') {
+                  historicalCount = historicalItems.filter((entry) => entry.productId === item.productId).length;
+                } else {
+                  if (!brandId) {
+                    return false;
+                  }
+
+                  const brandProducts = (await db
+                    .select({ id: products.id })
+                    .from(products)
+                    .where(eq(products.brandId, brandId))) as Array<{ id: string }>;
+                  const brandProductIds = new Set(brandProducts.map((entry) => entry.id));
+                  historicalCount = historicalItems.filter((entry) => brandProductIds.has(entry.productId)).length;
+                }
+              }
+            }
+
+            if (historicalCount + accumulatedInTransaction >= policy.value) {
+              return false;
+            }
+          }
+        }
+
+        return true;
+      };
+
+      const accumulationRows = [];
+      for (const item of createdItems) {
+        const allowed = await canAccumulateItem(item);
+        if (!allowed) {
+          continue;
+        }
+
         const amount = item.quantity;
         currentBalance += amount;
         lifetimeBalance += amount;
-        return {
+        accumulatedByItem.set(item.productId, (accumulatedByItem.get(item.productId) ?? 0) + amount);
+        accumulationRows.push({
           transactionItemId: item.id,
           cardId: card.id,
           campaignId: card.campaignId,
@@ -399,8 +651,8 @@ const createOrReplayTransaction = async (payload: {
           balanceAfter: currentBalance,
           sourceType: 'transaction_item' as const,
           codeCaptureId: null,
-        };
-      });
+        });
+      }
 
       if (existingBalance) {
         await db
@@ -520,12 +772,15 @@ export const transactionsModule = new Elysia({
         });
       }
 
-      const validationError = await ensureTransactionEntities(body, status);
-      if (validationError) {
-        return validationError;
+      const validation = await ensureTransactionEntities(body, status);
+      if (validation.error) {
+        return validation.error;
       }
 
-      const outcome = await createOrReplayTransaction(body);
+      const outcome = await createOrReplayTransaction({
+        ...body,
+        catalogItems: validation.catalogItems,
+      });
       if (!outcome) {
         return status(500, {
           error: {
@@ -655,8 +910,8 @@ export const transactionsModule = new Elysia({
         });
       }
 
-      const validationError = await ensureTransactionEntities(body, status);
-      if (validationError) {
+      const validation = await ensureTransactionEntities(body, status);
+      if (validation.error) {
         await db.insert(webhookReceipts).values({
           source: body.source,
           hash,
@@ -667,12 +922,13 @@ export const transactionsModule = new Elysia({
           processedAt: new Date(),
         });
 
-        return validationError;
+        return validation.error;
       }
 
       const outcome = await createOrReplayTransaction({
         ...body,
         idempotencyKey: hash,
+        catalogItems: validation.catalogItems,
       });
 
       if (!outcome) {

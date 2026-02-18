@@ -8,6 +8,7 @@ import {
   accumulations,
   balances,
   brands,
+  campaignPolicies,
   cards,
   campaigns,
   cpgs,
@@ -311,6 +312,128 @@ describe('Transactions module', () => {
     await db.delete(cards).where(eq(cards.id, card.id));
     await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
     await db.delete(transactions).where(eq(transactions.id, txId));
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
+    await db.delete(stores).where(eq(stores.id, store.id));
+    await db.delete(users).where(eq(users.id, user.id));
+  });
+
+  it('applies max_accumulations campaign policy', async () => {
+    const user = await createUser();
+    const store = await createStore();
+    const catalog = await createProduct();
+    const [campaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign Rules ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    if (!campaign) {
+      throw new Error('Failed to create test campaign');
+    }
+
+    await db.insert(campaignPolicies).values({
+      campaignId: campaign.id,
+      policyType: 'max_accumulations',
+      scopeType: 'campaign',
+      period: 'day',
+      value: 1,
+      active: true,
+      updatedAt: new Date(),
+    });
+
+    const [card] = (await db
+      .insert(cards)
+      .values({
+        userId: user.id,
+        campaignId: campaign.id,
+        storeId: store.id,
+        code: `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+      })
+      .returning({ id: cards.id })) as Array<{ id: string }>;
+
+    if (!card) {
+      throw new Error('Failed to create test card');
+    }
+
+    const firstTx = await api.v1.transactions.post(
+      {
+        userId: user.id,
+        storeId: store.id,
+        cardId: card.id,
+        items: [
+          {
+            productId: catalog.productId,
+            quantity: 1,
+            amount: 20,
+          },
+        ],
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (firstTx.error) {
+      throw firstTx.error.value;
+    }
+    if (!firstTx.data) {
+      throw new Error('First tx response missing');
+    }
+
+    expect(firstTx.status).toBe(201);
+    expect(firstTx.data.data.accumulations.length).toBe(1);
+
+    const secondTx = await api.v1.transactions.post(
+      {
+        userId: user.id,
+        storeId: store.id,
+        cardId: card.id,
+        items: [
+          {
+            productId: catalog.productId,
+            quantity: 1,
+            amount: 20,
+          },
+        ],
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (secondTx.error) {
+      throw secondTx.error.value;
+    }
+    if (!secondTx.data) {
+      throw new Error('Second tx response missing');
+    }
+
+    expect(secondTx.status).toBe(201);
+    expect(secondTx.data.data.accumulations.length).toBe(0);
+
+    const [balance] = (await db
+      .select({
+        current: balances.current,
+      })
+      .from(balances)
+      .where(eq(balances.cardId, card.id))) as Array<{ current: number }>;
+
+    expect(balance?.current).toBe(1);
+
+    if (firstTx.data.data.id) {
+      await db.delete(transactions).where(eq(transactions.id, firstTx.data.data.id));
+    }
+    if (secondTx.data.data.id) {
+      await db.delete(transactions).where(eq(transactions.id, secondTx.data.data.id));
+    }
+    await db.delete(accumulations).where(eq(accumulations.cardId, card.id));
+    await db.delete(balances).where(eq(balances.cardId, card.id));
+    await db.delete(cards).where(eq(cards.id, card.id));
+    await db.delete(campaignPolicies).where(eq(campaignPolicies.campaignId, campaign.id));
+    await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
     await db.delete(products).where(eq(products.id, catalog.productId));
     await db.delete(brands).where(eq(brands.id, catalog.brandId));
     await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));

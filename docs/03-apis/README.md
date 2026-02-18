@@ -12,6 +12,7 @@
 | [asyncapi.yaml](./asyncapi.yaml) | Especificación AsyncAPI - Eventos de dominio | Completado |
 | [autenticacion.md](./autenticacion.md) | Flujos de autenticación por tipo de usuario | Completado |
 | [errores.md](./errores.md) | Catálogo de códigos de error estándar | Completado |
+| [campaign-policies-use-case.md](./campaign-policies-use-case.md) | Caso de uso operativo para políticas de acumulación | Completado |
 
 ---
 
@@ -46,6 +47,9 @@ Basado en los ADRs y el modelo de negocio:
 | **Campaigns** | `/campaigns/*` | Programas de lealtad, códigos y auditoría |
 | **Cards** | `/cards/*` | Tarjetas de consumidores |
 | **Transactions** | `/transactions/*` | Registro de compras |
+| **WhatsApp** | `/whatsapp/*` | Ingesta de webhooks y observabilidad de mensajes |
+| **Jobs** | `/jobs/*` | Ejecuciones operativas (recordatorios) |
+| **Alerts** | `/alerts/*` | Panel de errores y notificaciones operativas |
 | **Rewards** | `/rewards/*` | Catálogo y canje de premios |
 | **Reports** | `/reports/*` | Reportes para PDV y CPG |
 | **Webhooks** | `/webhooks/*` | Configuración de webhooks |

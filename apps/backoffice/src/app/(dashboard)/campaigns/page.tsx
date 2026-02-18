@@ -25,10 +25,36 @@ type CampaignAuditItem = {
   createdAt: string;
 };
 
+type CampaignPolicyItem = {
+  id: string;
+  policyType: "max_accumulations" | "min_amount" | "min_quantity" | "cooldown";
+  scopeType: "campaign" | "brand" | "product";
+  scopeId?: string;
+  period: "transaction" | "day" | "week" | "month" | "lifetime";
+  value: number;
+  active: boolean;
+};
+
+type PolicyForm = {
+  policyType: CampaignPolicyItem["policyType"];
+  scopeType: CampaignPolicyItem["scopeType"];
+  scopeId: string;
+  period: CampaignPolicyItem["period"];
+  value: number;
+};
+
 const emptyForm: CampaignForm = {
   name: "",
   description: "",
   cpgId: "",
+};
+
+const emptyPolicyForm: PolicyForm = {
+  policyType: "max_accumulations",
+  scopeType: "campaign",
+  scopeId: "",
+  period: "day",
+  value: 1,
 };
 
 const actionLabel = (status: string) => {
@@ -43,6 +69,7 @@ export default function CampaignsPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<CampaignForm>(emptyForm);
   const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
+  const [policyForm, setPolicyForm] = useState<PolicyForm>(emptyPolicyForm);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["campaigns"],
@@ -68,6 +95,22 @@ export default function CampaignsPage() {
       const { data, error } = await api.v1.campaigns({
         campaignId: selectedCampaignId,
       })["audit-logs"].get({
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: policiesData } = useQuery({
+    queryKey: ["campaign-policies", selectedCampaignId],
+    enabled: Boolean(selectedCampaignId),
+    queryFn: async () => {
+      if (!selectedCampaignId) return null;
+      const token = getAccessToken();
+      const { data, error } = await api.v1.campaigns({
+        campaignId: selectedCampaignId,
+      }).policies.get({
         headers: { authorization: `Bearer ${token}` },
       });
       if (error) throw error;
@@ -163,8 +206,50 @@ export default function CampaignsPage() {
     },
   });
 
+  const createPolicy = useMutation({
+    mutationFn: async () => {
+      if (!selectedCampaignId) {
+        throw new Error("campaign_not_selected");
+      }
+
+      const token = getAccessToken();
+      const { data, error } = await api.v1.campaigns({
+        campaignId: selectedCampaignId,
+      }).policies.post(
+        {
+          policyType: policyForm.policyType,
+          scopeType: policyForm.scopeType,
+          scopeId:
+            policyForm.scopeType === "campaign"
+              ? undefined
+              : policyForm.scopeId || undefined,
+          period: policyForm.period,
+          value: policyForm.value,
+          active: true,
+        },
+        {
+          headers: { authorization: `Bearer ${token}` },
+        },
+      );
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      setPolicyForm(emptyPolicyForm);
+      if (selectedCampaignId) {
+        queryClient.invalidateQueries({
+          queryKey: ["campaign-policies", selectedCampaignId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["campaign-audit", selectedCampaignId],
+        });
+      }
+    },
+  });
+
   const campaigns = (data?.data ?? []) as CampaignListItem[];
   const logs = (auditData?.data ?? []) as CampaignAuditItem[];
+  const policies = (policiesData?.data ?? []) as CampaignPolicyItem[];
 
   return (
     <div className="space-y-8">
@@ -284,6 +369,150 @@ export default function CampaignsPage() {
                 </li>
               ))}
             </ul>
+          </div>
+
+          <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <h2 className="text-lg font-semibold">Políticas de acumulación</h2>
+            {!selectedCampaignId && (
+              <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-300">
+                Selecciona una campaña para gestionar sus políticas.
+              </p>
+            )}
+
+            {selectedCampaignId && (
+              <>
+                {policies.length === 0 && (
+                  <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-300">
+                    Esta campaña no tiene políticas configuradas.
+                  </p>
+                )}
+
+                <ul className="mt-3 space-y-2">
+                  {policies.map((policy) => (
+                    <li
+                      key={policy.id}
+                      className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+                    >
+                      <p className="font-medium text-zinc-700 dark:text-zinc-200">
+                        {policy.policyType} · {policy.scopeType}
+                      </p>
+                      <p className="text-zinc-500 dark:text-zinc-300">
+                        {policy.period} · valor: {policy.value}
+                        {policy.scopeId ? ` · scopeId: ${policy.scopeId}` : ""}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+
+                <form
+                  className="mt-4 grid gap-3 md:grid-cols-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    createPolicy.mutate();
+                  }}
+                >
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                    Tipo
+                    <select
+                      value={policyForm.policyType}
+                      onChange={(event) =>
+                        setPolicyForm((prev) => ({
+                          ...prev,
+                          policyType: event.target.value as PolicyForm["policyType"],
+                        }))
+                      }
+                      className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      <option value="max_accumulations">max_accumulations</option>
+                      <option value="min_amount">min_amount</option>
+                      <option value="min_quantity">min_quantity</option>
+                      <option value="cooldown">cooldown</option>
+                    </select>
+                  </label>
+
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                    Scope
+                    <select
+                      value={policyForm.scopeType}
+                      onChange={(event) =>
+                        setPolicyForm((prev) => ({
+                          ...prev,
+                          scopeType: event.target.value as PolicyForm["scopeType"],
+                          scopeId: event.target.value === "campaign" ? "" : prev.scopeId,
+                        }))
+                      }
+                      className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      <option value="campaign">campaign</option>
+                      <option value="brand">brand</option>
+                      <option value="product">product</option>
+                    </select>
+                  </label>
+
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                    Periodo
+                    <select
+                      value={policyForm.period}
+                      onChange={(event) =>
+                        setPolicyForm((prev) => ({
+                          ...prev,
+                          period: event.target.value as PolicyForm["period"],
+                        }))
+                      }
+                      className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    >
+                      <option value="transaction">transaction</option>
+                      <option value="day">day</option>
+                      <option value="week">week</option>
+                      <option value="month">month</option>
+                      <option value="lifetime">lifetime</option>
+                    </select>
+                  </label>
+
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                    Valor
+                    <input
+                      required
+                      min={1}
+                      type="number"
+                      value={policyForm.value}
+                      onChange={(event) =>
+                        setPolicyForm((prev) => ({
+                          ...prev,
+                          value: Number(event.target.value),
+                        }))
+                      }
+                      className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    />
+                  </label>
+
+                  {policyForm.scopeType !== "campaign" && (
+                    <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300 md:col-span-2">
+                      Scope ID (UUID)
+                      <input
+                        required
+                        value={policyForm.scopeId}
+                        onChange={(event) =>
+                          setPolicyForm((prev) => ({
+                            ...prev,
+                            scopeId: event.target.value,
+                          }))
+                        }
+                        className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                      />
+                    </label>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="md:col-span-2 rounded-md bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-400 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
+                    disabled={createPolicy.isPending}
+                  >
+                    {createPolicy.isPending ? "Guardando..." : "Agregar política"}
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </div>
 

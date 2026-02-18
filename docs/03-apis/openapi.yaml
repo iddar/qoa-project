@@ -46,6 +46,12 @@ tags:
     description: Catálogo y canje de recompensas
   - name: Reports
     description: Reportes para PDV y CPG
+  - name: Alerts
+    description: Alertas operativas y notificaciones
+  - name: WhatsApp
+    description: Ingestión y observabilidad de webhooks WhatsApp
+  - name: Jobs
+    description: Jobs operativos y recordatorios
   - name: Webhooks
     description: Configuración de webhooks
 
@@ -936,6 +942,71 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignAuditLogListResponse'
 
+  /campaigns/{campaignId}/policies:
+    get:
+      tags: [Campaigns]
+      summary: Listar políticas de campaña
+      operationId: listCampaignPolicies
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      responses:
+        '200':
+          description: Lista de políticas activas/inactivas de la campaña
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignPolicyListResponse'
+
+    post:
+      tags: [Campaigns]
+      summary: Crear política de campaña
+      operationId: createCampaignPolicy
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignPolicyCreate'
+      responses:
+        '201':
+          description: Política creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignPolicyResponse'
+
+  /campaigns/{campaignId}/policies/{policyId}:
+    patch:
+      tags: [Campaigns]
+      summary: Actualizar política de campaña
+      operationId: updateCampaignPolicy
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - $ref: '#/components/parameters/policyIdParam'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignPolicyUpdate'
+      responses:
+        '200':
+          description: Política actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignPolicyResponse'
+
   /campaigns/{campaignId}/code-sets:
     get:
       tags: [Campaigns]
@@ -1296,6 +1367,155 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionWebhookResponse'
 
+  # ==================== ALERTS ====================
+  /alerts:
+    get:
+      tags: [Alerts]
+      summary: Listar alertas operativas
+      operationId: listPlatformAlerts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Alertas activas de plataforma
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertListResponse'
+
+  /alerts/notify:
+    post:
+      tags: [Alerts]
+      summary: Notificar alertas por email (mock)
+      operationId: notifyPlatformAlerts
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertNotifyRequest'
+      responses:
+        '200':
+          description: Notificación mock ejecutada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertNotifyResponse'
+
+  # ==================== WHATSAPP ====================
+  /whatsapp/webhook:
+    post:
+      tags: [WhatsApp]
+      summary: Recibir webhook de WhatsApp
+      operationId: receiveWhatsappWebhook
+      parameters:
+        - name: x-whatsapp-signature
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsappWebhookRequest'
+      responses:
+        '200':
+          description: Evento recibido previamente (replay)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsappWebhookResponse'
+        '201':
+          description: Evento procesado por primera vez
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsappWebhookResponse'
+
+  /whatsapp/messages:
+    get:
+      tags: [WhatsApp]
+      summary: Listar mensajes de WhatsApp
+      operationId: listWhatsappMessages
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [received, processed, error, replayed]
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de mensajes de WhatsApp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsappMessageListResponse'
+
+  /whatsapp/metrics:
+    get:
+      tags: [WhatsApp]
+      summary: Métricas de ingestión de WhatsApp
+      operationId: getWhatsappMetrics
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Resumen de estado de mensajes de WhatsApp
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhatsappMetricsResponse'
+
+  # ==================== JOBS ====================
+  /jobs/reminders/run:
+    post:
+      tags: [Jobs]
+      summary: Ejecutar job de reminders
+      operationId: runReminderJobs
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReminderRunRequest'
+      responses:
+        '200':
+          description: Resultado de ejecución de reminders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReminderRunResponse'
+
+  /jobs/reminders:
+    get:
+      tags: [Jobs]
+      summary: Listar jobs de reminders
+      operationId: listReminderJobs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [queued, processing, completed, failed, cancelled]
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de jobs de reminders
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReminderJobListResponse'
+
   # ==================== REWARDS ====================
   /rewards:
     get:
@@ -1324,6 +1544,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RewardListResponse'
+
+    post:
+      tags: [Rewards]
+      summary: Crear recompensa
+      operationId: createReward
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RewardCreate'
+      responses:
+        '201':
+          description: Recompensa creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RewardResponse'
 
   /rewards/{rewardId}:
     get:
@@ -1374,6 +1615,21 @@ paths:
           $ref: '#/components/responses/BusinessRuleViolation'
 
   # ==================== REPORTS ====================
+  /reports/overview:
+    get:
+      tags: [Reports]
+      summary: Resumen global de plataforma
+      operationId: getPlatformOverviewReport
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Métricas base para backoffice
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlatformOverviewResponse'
+
   /reports/stores/{storeId}/summary:
     get:
       tags: [Reports]
@@ -1533,6 +1789,12 @@ components:
         type: string
     campaignIdParam:
       name: campaignId
+      in: path
+      required: true
+      schema:
+        type: string
+    policyIdParam:
+      name: policyId
       in: path
       required: true
       schema:
@@ -2036,6 +2298,8 @@ components:
       properties:
         id:
           type: string
+        campaignId:
+          type: string
         policyType:
           type: string
           enum: [max_accumulations, min_amount, min_quantity, cooldown]
@@ -2055,6 +2319,13 @@ components:
           nullable: true
         active:
           type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
 
     Campaign:
       type: object
@@ -2246,6 +2517,69 @@ components:
           format: date-time
         readyForReview:
           type: boolean
+
+    CampaignPolicyCreate:
+      type: object
+      required: [policyType, scopeType, period, value]
+      properties:
+        policyType:
+          type: string
+          enum: [max_accumulations, min_amount, min_quantity, cooldown]
+        scopeType:
+          type: string
+          enum: [campaign, brand, product]
+        scopeId:
+          type: string
+          nullable: true
+        period:
+          type: string
+          enum: [transaction, day, week, month, lifetime]
+        value:
+          type: integer
+          minimum: 1
+        config:
+          type: object
+          nullable: true
+        active:
+          type: boolean
+
+    CampaignPolicyUpdate:
+      type: object
+      properties:
+        policyType:
+          type: string
+          enum: [max_accumulations, min_amount, min_quantity, cooldown]
+        scopeType:
+          type: string
+          enum: [campaign, brand, product]
+        scopeId:
+          type: string
+          nullable: true
+        period:
+          type: string
+          enum: [transaction, day, week, month, lifetime]
+        value:
+          type: integer
+          minimum: 1
+        config:
+          type: object
+          nullable: true
+        active:
+          type: boolean
+
+    CampaignPolicyResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignPolicy'
+
+    CampaignPolicyListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignPolicy'
 
     CampaignResponse:
       type: object
@@ -2816,6 +3150,214 @@ components:
             errors:
               type: integer
 
+    # ===== Alerts =====
+    Alert:
+      type: object
+      properties:
+        code:
+          type: string
+        source:
+          type: string
+          enum: [jobs, whatsapp, transactions]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        title:
+          type: string
+        message:
+          type: string
+        count:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+
+    AlertListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+
+    AlertNotifyRequest:
+      type: object
+      properties:
+        recipient:
+          type: string
+        minSeverity:
+          type: string
+          enum: [high, critical]
+
+    AlertNotifyResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            sent:
+              type: integer
+            recipient:
+              type: string
+            severityFilter:
+              type: string
+            mocked:
+              type: boolean
+
+    # ===== WhatsApp =====
+    WhatsappWebhookRequest:
+      type: object
+      required: [messageId, from, to]
+      properties:
+        provider:
+          type: string
+        messageId:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        text:
+          type: string
+          nullable: true
+        timestamp:
+          type: string
+          nullable: true
+        metadata:
+          type: string
+          nullable: true
+
+    WhatsappWebhookResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            messageId:
+              type: string
+            status:
+              type: string
+            replayed:
+              type: boolean
+
+    WhatsappMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        provider:
+          type: string
+        messageId:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        text:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [received, processed, error, replayed]
+        replayCount:
+          type: integer
+        receivedAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    WhatsappMessageListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WhatsappMessage'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    WhatsappMetricsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            totalReceived:
+              type: integer
+            processed:
+              type: integer
+            replayed:
+              type: integer
+            errors:
+              type: integer
+
+    # ===== Jobs =====
+    ReminderRunRequest:
+      type: object
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+
+    ReminderRunResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            checked:
+              type: integer
+            queued:
+              type: integer
+            skipped:
+              type: integer
+            runAt:
+              type: string
+              format: date-time
+
+    ReminderJob:
+      type: object
+      properties:
+        id:
+          type: string
+        cardId:
+          type: string
+        campaignId:
+          type: string
+        channel:
+          type: string
+          enum: [whatsapp]
+        status:
+          type: string
+          enum: [queued, processing, completed, failed, cancelled]
+        scheduledFor:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        processedAt:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          type: string
+          nullable: true
+
+    ReminderJobListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReminderJob'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
     # ===== Reward =====
     Reward:
       type: object
@@ -2845,6 +3387,31 @@ components:
         createdAt:
           type: string
           format: date-time
+
+    RewardCreate:
+      type: object
+      required: [campaignId, name, cost]
+      properties:
+        campaignId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        cost:
+          type: integer
+          minimum: 1
+        stock:
+          type: integer
+          nullable: true
+          minimum: 0
+        status:
+          type: string
+          enum: [active, inactive]
 
     RewardResponse:
       type: object
@@ -2897,6 +3464,95 @@ components:
           $ref: '#/components/schemas/ReportSummary'
         meta:
           $ref: '#/components/schemas/Meta'
+
+    PlatformOverviewResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            cpgs:
+              type: object
+              properties:
+                total:
+                  type: integer
+                active:
+                  type: integer
+            brands:
+              type: object
+              properties:
+                total:
+                  type: integer
+                active:
+                  type: integer
+            products:
+              type: object
+              properties:
+                total:
+                  type: integer
+                active:
+                  type: integer
+            campaigns:
+              type: object
+              properties:
+                total:
+                  type: integer
+                active:
+                  type: integer
+            stores:
+              type: object
+              properties:
+                total:
+                  type: integer
+                active:
+                  type: integer
+            cards:
+              type: object
+              properties:
+                total:
+                  type: integer
+                active:
+                  type: integer
+            rewards:
+              type: object
+              properties:
+                total:
+                  type: integer
+                active:
+                  type: integer
+            users:
+              type: object
+              properties:
+                total:
+                  type: integer
+            transactions:
+              type: object
+              properties:
+                total:
+                  type: integer
+            redemptions:
+              type: object
+              properties:
+                total:
+                  type: integer
+            reminderJobs:
+              type: object
+              properties:
+                total:
+                  type: integer
+                queued:
+                  type: integer
+                failed:
+                  type: integer
+            whatsappMessages:
+              type: object
+              properties:
+                total:
+                  type: integer
+                replayed:
+                  type: integer
+                errors:
+                  type: integer
 
     # ===== Webhooks =====
     Webhook:

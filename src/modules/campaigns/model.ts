@@ -37,6 +37,37 @@ export const campaignAuditLogSchema = t.Object({
   createdAt: t.String(),
 });
 
+export const campaignPolicyTypeSchema = t.Union([
+  t.Literal('max_accumulations'),
+  t.Literal('min_amount'),
+  t.Literal('min_quantity'),
+  t.Literal('cooldown'),
+]);
+
+export const campaignPolicyScopeTypeSchema = t.Union([t.Literal('campaign'), t.Literal('brand'), t.Literal('product')]);
+
+export const campaignPolicyPeriodSchema = t.Union([
+  t.Literal('transaction'),
+  t.Literal('day'),
+  t.Literal('week'),
+  t.Literal('month'),
+  t.Literal('lifetime'),
+]);
+
+export const campaignPolicySchema = t.Object({
+  id: t.String(),
+  campaignId: t.String(),
+  policyType: campaignPolicyTypeSchema,
+  scopeType: campaignPolicyScopeTypeSchema,
+  scopeId: t.Optional(t.String()),
+  period: campaignPolicyPeriodSchema,
+  value: t.Number(),
+  config: t.Optional(t.String()),
+  active: t.Boolean(),
+  createdAt: t.String(),
+  updatedAt: t.Optional(t.String()),
+});
+
 export const campaignCreateRequest = t.Object({
   name: t.String({ minLength: 3, maxLength: 160 }),
   description: t.Optional(t.String()),
@@ -75,6 +106,26 @@ export const campaignNoteRequest = t.Object({
   reason: t.Optional(t.String()),
 });
 
+export const campaignPolicyCreateRequest = t.Object({
+  policyType: campaignPolicyTypeSchema,
+  scopeType: campaignPolicyScopeTypeSchema,
+  scopeId: t.Optional(t.String({ format: 'uuid' })),
+  period: campaignPolicyPeriodSchema,
+  value: t.Number({ minimum: 1 }),
+  config: t.Optional(t.String()),
+  active: t.Optional(t.Boolean()),
+});
+
+export const campaignPolicyUpdateRequest = t.Object({
+  policyType: t.Optional(campaignPolicyTypeSchema),
+  scopeType: t.Optional(campaignPolicyScopeTypeSchema),
+  scopeId: t.Optional(t.String({ format: 'uuid' })),
+  period: t.Optional(campaignPolicyPeriodSchema),
+  value: t.Optional(t.Number({ minimum: 1 })),
+  config: t.Optional(t.String()),
+  active: t.Optional(t.Boolean()),
+});
+
 export const campaignResponse = t.Object({
   data: campaignSchema,
 });
@@ -87,4 +138,12 @@ export const campaignListResponse = t.Object({
 export const campaignAuditListResponse = t.Object({
   data: t.Array(campaignAuditLogSchema),
   pagination: paginationSchema,
+});
+
+export const campaignPolicyResponse = t.Object({
+  data: campaignPolicySchema,
+});
+
+export const campaignPolicyListResponse = t.Object({
+  data: t.Array(campaignPolicySchema),
 });
