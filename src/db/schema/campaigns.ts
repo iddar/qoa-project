@@ -1,4 +1,4 @@
-import { boolean, index, integer, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { brands, products } from './catalog';
 import { users } from './users';
@@ -13,6 +13,8 @@ export const campaignStatus = pgEnum('campaign_status', [
   'paused',
   'ended',
 ]);
+
+export const campaignEnrollmentMode = pgEnum('campaign_enrollment_mode', ['open', 'opt_in', 'system_universal']);
 
 export const campaignPolicyType = pgEnum('campaign_policy_type', [
   'max_accumulations',
@@ -32,8 +34,10 @@ export const campaignPolicyPeriod = pgEnum('campaign_policy_period', [
 ]);
 
 type CampaignsTable = {
+  key: unknown;
   cpgId: unknown;
   status: unknown;
+  enrollmentMode: unknown;
   createdAt: unknown;
 };
 
@@ -57,9 +61,11 @@ export const campaigns = pgTable(
       .primaryKey()
       .default(sql`uuidv7()`),
     name: varchar('name', { length: 160 }).notNull(),
+    key: varchar('key', { length: 80 }),
     description: text('description'),
     cpgId: uuid('cpg_id'),
     status: campaignStatus('status').notNull().default('draft'),
+    enrollmentMode: campaignEnrollmentMode('enrollment_mode').notNull().default('opt_in'),
     startsAt: timestamp('starts_at', { withTimezone: true }),
     endsAt: timestamp('ends_at', { withTimezone: true }),
     version: integer('version').notNull().default(1),
@@ -69,8 +75,10 @@ export const campaigns = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (table: CampaignsTable) => [
+    uniqueIndex('campaigns_key_key').on(table.key).where(sql`${table.key} is not null`),
     index('campaigns_cpg_idx').on(table.cpgId),
     index('campaigns_status_idx').on(table.status),
+    index('campaigns_enrollment_mode_idx').on(table.enrollmentMode),
     index('campaigns_created_at_idx').on(table.createdAt),
   ],
 );

@@ -5,6 +5,7 @@ export * from './refresh-tokens';
 export * from './stores';
 export * from './cards';
 export * from './campaigns';
+export * from './campaign-subscriptions';
 export * from './transactions';
 export * from './catalog';
 export * from './loyalty';

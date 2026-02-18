@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { eq, or } from 'drizzle-orm';
 import { db } from '../../db/client';
 import { refreshTokens, users } from '../../db/schema';
+import { ensureUserUniversalWalletCard } from '../../services/wallet-onboarding';
 import {
   authGuard,
   authPlugin,
@@ -137,6 +138,7 @@ export const authModule = new Elysia({
 
       const refreshToken = authHelpers.generateRefreshToken();
       await persistRefreshToken(created.id, refreshToken);
+      await ensureUserUniversalWalletCard(created.id);
 
       return {
         data: {

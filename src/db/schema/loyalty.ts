@@ -10,6 +10,11 @@ type BalancesTable = {
   cardId: unknown;
 };
 
+type CampaignBalancesTable = {
+  cardId: unknown;
+  campaignId: unknown;
+};
+
 type AccumulationsTable = {
   transactionItemId: unknown;
   cardId: unknown;
@@ -32,6 +37,29 @@ export const balances = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table: BalancesTable) => [uniqueIndex('balances_card_key').on(table.cardId)],
+);
+
+export const campaignBalances = pgTable(
+  'campaign_balances',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
+    cardId: uuid('card_id')
+      .notNull()
+      .references(() => cards.id, { onDelete: 'cascade' }),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    current: integer('current').notNull().default(0),
+    lifetime: integer('lifetime').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table: CampaignBalancesTable) => [
+    uniqueIndex('campaign_balances_card_campaign_key').on(table.cardId, table.campaignId),
+    index('campaign_balances_card_idx').on(table.cardId),
+    index('campaign_balances_campaign_idx').on(table.campaignId),
+  ],
 );
 
 export const accumulations = pgTable(

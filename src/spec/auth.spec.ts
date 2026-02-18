@@ -3,7 +3,8 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { users } from '../db/schema';
+import { campaignSubscriptions, campaigns, cards, users } from '../db/schema';
+import { UNIVERSAL_CAMPAIGN_KEY } from '../services/wallet-onboarding';
 
 const app = createApp();
 const api = treaty<App>(app);
@@ -41,6 +42,28 @@ describe('Auth signup/login', () => {
     expect(data.data.accessToken).toBeTruthy();
     expect(data.data.refreshToken).toBeTruthy();
     expect(data.data.user.email).toBe(email);
+
+    const [universalCampaign] = (await db
+      .select({ id: campaigns.id })
+      .from(campaigns)
+      .where(eq(campaigns.key, UNIVERSAL_CAMPAIGN_KEY))) as Array<{ id: string }>;
+    if (!universalCampaign) {
+      throw new Error('Universal campaign missing after signup');
+    }
+
+    const [createdCard] = (await db
+      .select({ id: cards.id, campaignId: cards.campaignId })
+      .from(cards)
+      .where(eq(cards.userId, data.data.user.id))) as Array<{ id: string; campaignId: string }>;
+
+    expect(createdCard?.campaignId).toBe(universalCampaign.id);
+
+    const [subscription] = (await db
+      .select({ status: campaignSubscriptions.status })
+      .from(campaignSubscriptions)
+      .where(eq(campaignSubscriptions.userId, data.data.user.id))) as Array<{ status: string }>;
+
+    expect(subscription?.status).toBe('subscribed');
 
     await cleanupUser(email, phone);
   });
