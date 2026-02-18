@@ -17,7 +17,12 @@ import {
   whatsappMessages,
 } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
-import { platformOverviewResponse } from './model';
+import {
+  campaignReportSummaryResponse,
+  cpgReportSummaryResponse,
+  platformOverviewResponse,
+  reportSummaryQuery,
+} from './model';
 
 const headerSchema = t.Object({
   authorization: t.Optional(
@@ -32,10 +37,156 @@ type OverviewContext = {
   status: StatusHandler;
 };
 
+type SummaryQuery = {
+  from?: string;
+  to?: string;
+};
+
+type CpgSummaryContext = {
+  auth: AuthContext | null;
+  params: { cpgId: string };
+  query: SummaryQuery;
+  status: StatusHandler;
+};
+
+type CampaignSummaryContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string };
+  query: SummaryQuery;
+  status: StatusHandler;
+};
+
+type CountRow = { count: number };
+
+type KpiTransactionsRow = {
+  count: number;
+  amount: number;
+  cards: number;
+};
+
+type KpiAccumulationsRow = {
+  count: number;
+  points: number;
+};
+
+type KpiRedemptionsRow = {
+  count: number;
+  cost: number;
+};
+
+type DailyRow = {
+  date: string;
+  transactions: number;
+  salesAmount: number;
+  accumulations: number;
+  redemptions: number;
+};
+
+type CampaignAggregateRow = {
+  campaignId: string;
+  name: string;
+  status: string;
+  transactions: number;
+  salesAmount: number;
+  accumulations: number;
+  redemptions: number;
+};
+
 const countTable = async (table: { id: unknown }, condition?: unknown) => {
   const query = db.select({ count: sql<number>`count(*)::int` }).from(table as never);
   const rows = condition ? await query.where(condition as never) : await query;
   return (rows as Array<{ count: number }>)[0]?.count ?? 0;
+};
+
+const canAccessCpg = (auth: AuthContext, cpgId: string) => {
+  if (auth.type === 'jwt' || auth.type === 'dev') {
+    if (auth.role === 'qoa_admin' || auth.role === 'qoa_support') {
+      return true;
+    }
+
+    return auth.role === 'cpg_admin' && auth.tenantType === 'cpg' && auth.tenantId === cpgId;
+  }
+
+  return auth.tenantType === 'cpg' && auth.tenantId === cpgId;
+};
+
+const resolveRange = (query: SummaryQuery, status: StatusHandler) => {
+  const to = query.to ? new Date(query.to) : new Date();
+  if (Number.isNaN(to.getTime())) {
+    return {
+      error: status(400, {
+        error: {
+          code: 'INVALID_ARGUMENT',
+          message: 'Parámetro to inválido',
+        },
+      }),
+    };
+  }
+
+  const from = query.from ? new Date(query.from) : new Date(to.getTime() - 29 * 24 * 60 * 60 * 1000);
+  if (Number.isNaN(from.getTime())) {
+    return {
+      error: status(400, {
+        error: {
+          code: 'INVALID_ARGUMENT',
+          message: 'Parámetro from inválido',
+        },
+      }),
+    };
+  }
+
+  if (from.getTime() > to.getTime()) {
+    return {
+      error: status(400, {
+        error: {
+          code: 'INVALID_ARGUMENT',
+          message: 'from no puede ser mayor a to',
+        },
+      }),
+    };
+  }
+
+  const fromDay = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
+  const toDay = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate()));
+
+  return {
+    value: {
+      from,
+      to,
+      fromDay,
+      toDay,
+      fromIso: from.toISOString(),
+      toIso: to.toISOString(),
+      fromDayIso: fromDay.toISOString().slice(0, 10),
+      toDayIso: toDay.toISOString().slice(0, 10),
+    },
+  };
+};
+
+const buildKpis = (
+  transactionsRow: KpiTransactionsRow | undefined,
+  accumulationsRow: KpiAccumulationsRow | undefined,
+  redemptionsRow: KpiRedemptionsRow | undefined,
+) => {
+  const transactionCount = transactionsRow?.count ?? 0;
+  const salesAmount = transactionsRow?.amount ?? 0;
+  const cardsWithActivity = transactionsRow?.cards ?? 0;
+  const accumulationsCount = accumulationsRow?.count ?? 0;
+  const accumulatedPoints = accumulationsRow?.points ?? 0;
+  const redemptionsCount = redemptionsRow?.count ?? 0;
+  const redemptionCost = redemptionsRow?.cost ?? 0;
+
+  return {
+    transactions: transactionCount,
+    salesAmount,
+    cardsWithActivity,
+    accumulations: accumulationsCount,
+    accumulatedPoints,
+    redemptions: redemptionsCount,
+    redemptionCost,
+    avgTicket: transactionCount > 0 ? Number((salesAmount / transactionCount).toFixed(2)) : 0,
+    redemptionRate: accumulationsCount > 0 ? Number((redemptionsCount / accumulationsCount).toFixed(4)) : 0,
+  };
 };
 
 export const reportsModule = new Elysia({
@@ -132,6 +283,309 @@ export const reportsModule = new Elysia({
       },
       detail: {
         summary: 'Resumen de plataforma para backoffice',
+      },
+    },
+  )
+  .get(
+    '/cpgs/:cpgId/summary',
+    async ({ auth, params, query, status }: CpgSummaryContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      if (!canAccessCpg(auth, params.cpgId)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes acceso a este CPG',
+          },
+        });
+      }
+
+      const range = resolveRange(query, status);
+      if (range.error) {
+        return range.error;
+      }
+
+      const { from, to, fromDayIso, toDayIso, fromIso, toIso } = range.value;
+
+      const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows, campaignsRows] = await Promise.all([
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(t.total_amount), 0)::int as amount,
+            count(distinct t.card_id)::int as cards
+          from transactions t
+          inner join cards ca on ca.id = t.card_id
+          inner join campaigns cp on cp.id = ca.campaign_id
+          where cp.cpg_id = ${params.cpgId}
+            and t.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiTransactionsRow[]>,
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(a.amount), 0)::int as points
+          from accumulations a
+          inner join campaigns cp on cp.id = a.campaign_id
+          where cp.cpg_id = ${params.cpgId}
+            and a.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiAccumulationsRow[]>,
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(r.cost), 0)::int as cost
+          from redemptions r
+          inner join cards ca on ca.id = r.card_id
+          inner join campaigns cp on cp.id = ca.campaign_id
+          where cp.cpg_id = ${params.cpgId}
+            and r.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiRedemptionsRow[]>,
+        db.execute(sql`
+          with days as (
+            select generate_series(${fromDayIso}::date, ${toDayIso}::date, interval '1 day')::date as day
+          ),
+          tx as (
+            select date_trunc('day', t.created_at)::date as day,
+                   count(*)::int as transactions,
+                   coalesce(sum(t.total_amount), 0)::int as sales_amount
+            from transactions t
+            inner join cards ca on ca.id = t.card_id
+            inner join campaigns cp on cp.id = ca.campaign_id
+            where cp.cpg_id = ${params.cpgId}
+              and t.created_at between ${fromIso} and ${toIso}
+            group by 1
+          ),
+          acc as (
+            select date_trunc('day', a.created_at)::date as day,
+                   count(*)::int as accumulations
+            from accumulations a
+            inner join campaigns cp on cp.id = a.campaign_id
+            where cp.cpg_id = ${params.cpgId}
+              and a.created_at between ${fromIso} and ${toIso}
+            group by 1
+          ),
+          red as (
+            select date_trunc('day', r.created_at)::date as day,
+                   count(*)::int as redemptions
+            from redemptions r
+            inner join cards ca on ca.id = r.card_id
+            inner join campaigns cp on cp.id = ca.campaign_id
+            where cp.cpg_id = ${params.cpgId}
+              and r.created_at between ${fromIso} and ${toIso}
+            group by 1
+          )
+          select
+            to_char(days.day, 'YYYY-MM-DD') as date,
+            coalesce(tx.transactions, 0)::int as transactions,
+            coalesce(tx.sales_amount, 0)::int as "salesAmount",
+            coalesce(acc.accumulations, 0)::int as accumulations,
+            coalesce(red.redemptions, 0)::int as redemptions
+          from days
+          left join tx on tx.day = days.day
+          left join acc on acc.day = days.day
+          left join red on red.day = days.day
+          order by days.day asc
+        `) as Promise<DailyRow[]>,
+        db.execute(sql`
+          select
+            cp.id as "campaignId",
+            cp.name,
+            cp.status,
+            coalesce(tx.transactions, 0)::int as transactions,
+            coalesce(tx.sales_amount, 0)::int as "salesAmount",
+            coalesce(acc.accumulations, 0)::int as accumulations,
+            coalesce(red.redemptions, 0)::int as redemptions
+          from campaigns cp
+          left join lateral (
+            select
+              count(*)::int as transactions,
+              coalesce(sum(t.total_amount), 0)::int as sales_amount
+            from transactions t
+            inner join cards ca on ca.id = t.card_id
+            where ca.campaign_id = cp.id
+              and t.created_at between ${fromIso} and ${toIso}
+          ) tx on true
+          left join lateral (
+            select count(*)::int as accumulations
+            from accumulations a
+            where a.campaign_id = cp.id
+              and a.created_at between ${fromIso} and ${toIso}
+          ) acc on true
+          left join lateral (
+            select count(*)::int as redemptions
+            from redemptions r
+            inner join cards ca on ca.id = r.card_id
+            where ca.campaign_id = cp.id
+              and r.created_at between ${fromIso} and ${toIso}
+          ) red on true
+          where cp.cpg_id = ${params.cpgId}
+          order by tx.transactions desc, tx.sales_amount desc, cp.created_at desc
+          limit 20
+        `) as Promise<CampaignAggregateRow[]>,
+      ]);
+
+      return {
+        data: {
+          cpgId: params.cpgId,
+          from: from.toISOString(),
+          to: to.toISOString(),
+          kpis: buildKpis(transactionsRows[0], accumulationsRows[0], redemptionsRows[0]),
+          daily: dailyRows,
+          campaigns: campaignsRows,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_support', 'qoa_admin'], allowApiKey: true }),
+      headers: headerSchema,
+      query: reportSummaryQuery,
+      response: {
+        200: cpgReportSummaryResponse,
+      },
+      detail: {
+        summary: 'Resumen de performance por CPG',
+      },
+    },
+  )
+  .get(
+    '/campaigns/:campaignId/summary',
+    async ({ auth, params, query, status }: CampaignSummaryContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const [campaign] = (await db
+        .select({ id: campaigns.id, cpgId: campaigns.cpgId })
+        .from(campaigns)
+        .where(eq(campaigns.id, params.campaignId))) as Array<{ id: string; cpgId: string | null }>;
+
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!campaign.cpgId || !canAccessCpg(auth, campaign.cpgId)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes acceso a esta campaña',
+          },
+        });
+      }
+
+      const range = resolveRange(query, status);
+      if (range.error) {
+        return range.error;
+      }
+
+      const { from, to, fromDayIso, toDayIso, fromIso, toIso } = range.value;
+
+      const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows] = await Promise.all([
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(t.total_amount), 0)::int as amount,
+            count(distinct t.card_id)::int as cards
+          from transactions t
+          inner join cards ca on ca.id = t.card_id
+          where ca.campaign_id = ${campaign.id}
+            and t.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiTransactionsRow[]>,
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(a.amount), 0)::int as points
+          from accumulations a
+          where a.campaign_id = ${campaign.id}
+            and a.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiAccumulationsRow[]>,
+        db.execute(sql`
+          select
+            count(*)::int as count,
+            coalesce(sum(r.cost), 0)::int as cost
+          from redemptions r
+          inner join cards ca on ca.id = r.card_id
+          where ca.campaign_id = ${campaign.id}
+            and r.created_at between ${fromIso} and ${toIso}
+        `) as Promise<KpiRedemptionsRow[]>,
+        db.execute(sql`
+          with days as (
+            select generate_series(${fromDayIso}::date, ${toDayIso}::date, interval '1 day')::date as day
+          ),
+          tx as (
+            select date_trunc('day', t.created_at)::date as day,
+                   count(*)::int as transactions,
+                   coalesce(sum(t.total_amount), 0)::int as sales_amount
+            from transactions t
+            inner join cards ca on ca.id = t.card_id
+            where ca.campaign_id = ${campaign.id}
+              and t.created_at between ${fromIso} and ${toIso}
+            group by 1
+          ),
+          acc as (
+            select date_trunc('day', a.created_at)::date as day,
+                   count(*)::int as accumulations
+            from accumulations a
+            where a.campaign_id = ${campaign.id}
+              and a.created_at between ${fromIso} and ${toIso}
+            group by 1
+          ),
+          red as (
+            select date_trunc('day', r.created_at)::date as day,
+                   count(*)::int as redemptions
+            from redemptions r
+            inner join cards ca on ca.id = r.card_id
+            where ca.campaign_id = ${campaign.id}
+              and r.created_at between ${fromIso} and ${toIso}
+            group by 1
+          )
+          select
+            to_char(days.day, 'YYYY-MM-DD') as date,
+            coalesce(tx.transactions, 0)::int as transactions,
+            coalesce(tx.sales_amount, 0)::int as "salesAmount",
+            coalesce(acc.accumulations, 0)::int as accumulations,
+            coalesce(red.redemptions, 0)::int as redemptions
+          from days
+          left join tx on tx.day = days.day
+          left join acc on acc.day = days.day
+          left join red on red.day = days.day
+          order by days.day asc
+        `) as Promise<DailyRow[]>,
+      ]);
+
+      return {
+        data: {
+          campaignId: campaign.id,
+          from: from.toISOString(),
+          to: to.toISOString(),
+          kpis: buildKpis(transactionsRows[0], accumulationsRows[0], redemptionsRows[0]),
+          daily: dailyRows,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_support', 'qoa_admin'], allowApiKey: true }),
+      headers: headerSchema,
+      query: reportSummaryQuery,
+      response: {
+        200: campaignReportSummaryResponse,
+      },
+      detail: {
+        summary: 'Resumen de performance por campaña',
       },
     },
   );

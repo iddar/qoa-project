@@ -1682,7 +1682,34 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReportSummaryResponse'
+                $ref: '#/components/schemas/CpgReportSummaryResponse'
+
+  /reports/campaigns/{campaignId}/summary:
+    get:
+      tags: [Reports]
+      summary: Resumen por campaña
+      operationId: getCampaignSummaryReport
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Reporte resumido por campaña
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignReportSummaryResponse'
 
   # ==================== WEBHOOKS ====================
   /webhooks:
@@ -3434,36 +3461,127 @@ components:
           $ref: '#/components/schemas/Meta'
 
     # ===== Reports =====
-    ReportSummary:
+    ReportKpis:
       type: object
       properties:
-        period:
+        transactions:
+          type: integer
+        salesAmount:
+          type: integer
+        cardsWithActivity:
+          type: integer
+        accumulations:
+          type: integer
+        accumulatedPoints:
+          type: integer
+        redemptions:
+          type: integer
+        redemptionCost:
+          type: integer
+        avgTicket:
+          type: number
+        redemptionRate:
+          type: number
+
+    ReportDailyPoint:
+      type: object
+      properties:
+        date:
+          type: string
+        transactions:
+          type: integer
+        salesAmount:
+          type: integer
+        accumulations:
+          type: integer
+        redemptions:
+          type: integer
+
+    CampaignAggregate:
+      type: object
+      properties:
+        campaignId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        transactions:
+          type: integer
+        salesAmount:
+          type: integer
+        accumulations:
+          type: integer
+        redemptions:
+          type: integer
+
+    CpgReportSummaryResponse:
+      type: object
+      properties:
+        data:
           type: object
           properties:
+            cpgId:
+              type: string
             from:
               type: string
               format: date-time
             to:
               type: string
               format: date-time
-        metrics:
+            kpis:
+              $ref: '#/components/schemas/ReportKpis'
+            daily:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReportDailyPoint'
+            campaigns:
+              type: array
+              items:
+                $ref: '#/components/schemas/CampaignAggregate'
+
+    CampaignReportSummaryResponse:
+      type: object
+      properties:
+        data:
           type: object
           properties:
-            totalTransactions:
-              type: integer
-            totalAmount:
-              type: number
-              format: decimal
-            totalAccumulations:
-              type: integer
+            campaignId:
+              type: string
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+            kpis:
+              $ref: '#/components/schemas/ReportKpis'
+            daily:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReportDailyPoint'
+
+    ReportSummary:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        kpis:
+          $ref: '#/components/schemas/ReportKpis'
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportDailyPoint'
 
     ReportSummaryResponse:
       type: object
       properties:
         data:
           $ref: '#/components/schemas/ReportSummary'
-        meta:
-          $ref: '#/components/schemas/Meta'
 
     PlatformOverviewResponse:
       type: object
