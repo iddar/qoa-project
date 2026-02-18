@@ -1185,6 +1185,7 @@ paths:
     get:
       tags: [Transactions]
       summary: Listar transacciones
+      description: Para usuarios consumer/customer con bearer token, el listado queda acotado automáticamente a sus propias transacciones.
       operationId: listTransactions
       security:
         - bearerAuth: []
@@ -1230,7 +1231,7 @@ paths:
     post:
       tags: [Transactions]
       summary: Registrar transacción
-      description: Registra una compra y evalúa campañas aplicables
+      description: Registra una compra y evalúa campañas aplicables. Para usuarios consumer/customer solo permite registrar compras para su propio userId.
       operationId: createTransaction
       security:
         - bearerAuth: []
@@ -1259,6 +1260,7 @@ paths:
     get:
       tags: [Transactions]
       summary: Obtener transacción
+      description: Para usuarios consumer/customer solo permite consultar transacciones propias.
       operationId: getTransaction
       security:
         - bearerAuth: []

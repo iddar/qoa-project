@@ -319,6 +319,138 @@ describe('Transactions module', () => {
     await db.delete(users).where(eq(users.id, user.id));
   });
 
+  it('allows consumer wallet flow with user-scoped create/list/detail', async () => {
+    const user = await createUser();
+    const otherUser = await createUser();
+    const store = await createStore();
+    const catalog = await createProduct();
+    const [campaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign Wallet ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    if (!campaign) {
+      throw new Error('Failed to create campaign');
+    }
+
+    const [card] = (await db
+      .insert(cards)
+      .values({
+        userId: user.id,
+        campaignId: campaign.id,
+        storeId: store.id,
+        code: `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+      })
+      .returning({ id: cards.id })) as Array<{ id: string }>;
+
+    if (!card) {
+      throw new Error('Failed to create user card');
+    }
+
+    const walletHeaders = {
+      authorization: 'Bearer dev-token',
+      'x-dev-user-id': user.id,
+      'x-dev-user-role': 'consumer',
+    };
+
+    const createOwn = await api.v1.transactions.post(
+      {
+        userId: user.id,
+        storeId: store.id,
+        cardId: card.id,
+        items: [
+          {
+            productId: catalog.productId,
+            quantity: 1,
+            amount: 42,
+          },
+        ],
+      },
+      {
+        headers: walletHeaders,
+      },
+    );
+
+    if (createOwn.error) {
+      throw createOwn.error.value;
+    }
+    if (!createOwn.data) {
+      throw new Error('Wallet transaction response missing');
+    }
+
+    expect(createOwn.status).toBe(201);
+
+    const createOther = await api.v1.transactions.post(
+      {
+        userId: otherUser.id,
+        storeId: store.id,
+        cardId: card.id,
+        items: [
+          {
+            productId: catalog.productId,
+            quantity: 1,
+            amount: 15,
+          },
+        ],
+      },
+      {
+        headers: walletHeaders,
+      },
+    );
+
+    if (!createOther.error) {
+      throw new Error('Expected forbidden wallet create for other user');
+    }
+
+    expect(createOther.status).toBe(403);
+
+    const listed = await api.v1.transactions.get({
+      query: {
+        userId: otherUser.id,
+      },
+      headers: walletHeaders,
+    });
+
+    if (listed.error) {
+      throw listed.error.value;
+    }
+    if (!listed.data) {
+      throw new Error('Wallet list response missing');
+    }
+
+    expect(listed.status).toBe(200);
+    expect(listed.data.data.length).toBeGreaterThanOrEqual(1);
+    expect(listed.data.data.every((tx: { userId: string }) => tx.userId === user.id)).toBe(true);
+
+    const detail = await api.v1.transactions({ transactionId: createOwn.data.data.id }).get({
+      headers: walletHeaders,
+    });
+
+    if (detail.error) {
+      throw detail.error.value;
+    }
+    if (!detail.data) {
+      throw new Error('Wallet detail response missing');
+    }
+
+    expect(detail.status).toBe(200);
+    expect(detail.data.data.userId).toBe(user.id);
+
+    await db.delete(accumulations).where(eq(accumulations.cardId, card.id));
+    await db.delete(balances).where(eq(balances.cardId, card.id));
+    await db.delete(transactions).where(eq(transactions.cardId, card.id));
+    await db.delete(cards).where(eq(cards.id, card.id));
+    await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
+    await db.delete(stores).where(eq(stores.id, store.id));
+    await db.delete(users).where(eq(users.id, otherUser.id));
+    await db.delete(users).where(eq(users.id, user.id));
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
+  });
+
   it('applies max_accumulations campaign policy', async () => {
     const user = await createUser();
     const store = await createStore();

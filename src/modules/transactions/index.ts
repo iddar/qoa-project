@@ -1,7 +1,7 @@
 import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import { authGuard, authPlugin } from '../../app/plugins/auth';
+import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
@@ -33,6 +33,7 @@ import {
 } from './model';
 
 const allowedRoles = ['store_staff', 'store_admin', 'cpg_admin', 'qoa_support', 'qoa_admin'] as const;
+const walletRoles = ['consumer', 'customer'] as const;
 
 const webhookHeaderSchema = t.Object({
   authorization: t.Optional(
@@ -96,6 +97,7 @@ type ResolvedCatalogItem = {
 };
 
 type CreateContext = {
+  auth: AuthContext | null;
   body: {
     userId: string;
     storeId: string;
@@ -113,6 +115,7 @@ type CreateContext = {
 };
 
 type ListContext = {
+  auth: AuthContext | null;
   query: {
     userId?: string;
     storeId?: string;
@@ -127,11 +130,18 @@ type ListContext = {
 };
 
 type ParamsContext = {
+  auth: AuthContext | null;
   params: {
     transactionId: string;
   };
   status: StatusHandler;
 };
+
+const isUserTokenAuth = (auth: AuthContext | null): auth is Extract<AuthContext, { type: 'jwt' | 'dev' }> =>
+  Boolean(auth && (auth.type === 'jwt' || auth.type === 'dev'));
+
+const isWalletUser = (auth: AuthContext | null): auth is Extract<AuthContext, { type: 'jwt' | 'dev' }> =>
+  isUserTokenAuth(auth) && walletRoles.includes(auth.role as (typeof walletRoles)[number]);
 
 type WebhookContext = {
   body: {
@@ -315,14 +325,27 @@ const ensureTransactionEntities = async (
   }
 
   if (payload.cardId) {
-    const [card] = (await db.select({ id: cards.id }).from(cards).where(eq(cards.id, payload.cardId))) as Array<{
+    const [card] = (await db
+      .select({ id: cards.id, userId: cards.userId })
+      .from(cards)
+      .where(eq(cards.id, payload.cardId))) as Array<{
       id: string;
+      userId: string;
     }>;
     if (!card) {
       return status(404, {
         error: {
           code: 'CARD_NOT_FOUND',
           message: 'Tarjeta no encontrada',
+        },
+      });
+    }
+
+    if (card.userId !== payload.userId) {
+      return status(400, {
+        error: {
+          code: 'CARD_USER_MISMATCH',
+          message: 'La tarjeta no pertenece al usuario indicado',
         },
       });
     }
@@ -756,7 +779,25 @@ export const transactionsModule = new Elysia({
   .use(authPlugin)
   .post(
     '/',
-    async ({ body, status }: CreateContext) => {
+    async ({ auth, body, status }: CreateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      if (isWalletUser(auth) && body.userId !== auth.userId) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No puedes registrar transacciones para otro usuario',
+          },
+        });
+      }
+
       if (body.items.length === 0) {
         return status(400, {
           error: {
@@ -789,7 +830,7 @@ export const transactionsModule = new Elysia({
       });
     },
     {
-      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: [...allowedRoles, ...walletRoles], allowApiKey: true }),
       headers: authorizationHeader,
       body: transactionCreateRequest,
       response: {
@@ -1092,7 +1133,16 @@ export const transactionsModule = new Elysia({
   )
   .get(
     '/',
-    async ({ query, status }: ListContext) => {
+    async ({ auth, query, status }: ListContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const cursorDate = parseCursor(query.cursor);
       if (query.cursor && !cursorDate) {
         return status(400, {
@@ -1115,8 +1165,9 @@ export const transactionsModule = new Elysia({
       }
 
       const conditions = [];
-      if (query.userId) {
-        conditions.push(eq(transactions.userId, query.userId));
+      const enforcedUserId = isWalletUser(auth) ? auth.userId : query.userId;
+      if (enforcedUserId) {
+        conditions.push(eq(transactions.userId, enforcedUserId));
       }
       if (query.storeId) {
         conditions.push(eq(transactions.storeId, query.storeId));
@@ -1179,7 +1230,7 @@ export const transactionsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: [...allowedRoles, ...walletRoles], allowApiKey: true }),
       headers: authorizationHeader,
       query: transactionListQuery,
       response: {
@@ -1192,7 +1243,16 @@ export const transactionsModule = new Elysia({
   )
   .get(
     '/:transactionId',
-    async ({ params, status }: ParamsContext) => {
+    async ({ auth, params, status }: ParamsContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const [tx] = (await db
         .select()
         .from(transactions)
@@ -1202,6 +1262,15 @@ export const transactionsModule = new Elysia({
           error: {
             code: 'TRANSACTION_NOT_FOUND',
             message: 'Transacción no encontrada',
+          },
+        });
+      }
+
+      if (isWalletUser(auth) && tx.userId !== auth.userId) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permiso para consultar esta transacción',
           },
         });
       }
@@ -1224,7 +1293,7 @@ export const transactionsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: [...allowedRoles, ...walletRoles], allowApiKey: true }),
       headers: authorizationHeader,
       response: {
         200: transactionDetailResponse,
