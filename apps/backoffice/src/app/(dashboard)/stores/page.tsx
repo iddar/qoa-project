@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { ReactQRCode } from '@lglab/react-qr-code';
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
 type StoreFormState = {
   name: string;
@@ -24,6 +25,11 @@ export default function StoresPage() {
   const [form, setForm] = useState<StoreFormState>(emptyForm);
   const [qrPayload, setQrPayload] = useState<{
     storeId: string;
+    code: string;
+    payload: unknown;
+  } | null>(null);
+  const [qrModal, setQrModal] = useState<{
+    storeName: string;
     code: string;
     payload: unknown;
   } | null>(null);
@@ -138,6 +144,20 @@ export default function StoresPage() {
                       className="rounded-md border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
                     >
                       Ver payload QR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (qrPayload?.storeId === store.id) {
+                          setQrModal({ storeName: store.name, code: qrPayload.code, payload: qrPayload.payload });
+                        } else {
+                          const result = await fetchQr.mutateAsync(store.id);
+                          setQrModal({ storeName: store.name, code: result.payload.code, payload: result.payload.payload });
+                        }
+                      }}
+                      className="rounded-md border border-zinc-200 bg-zinc-900 px-3 py-1.5 text-xs text-white transition hover:bg-zinc-700 dark:border-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                    >
+                      Ver QR
                     </button>
                   </div>
                 </div>
@@ -259,6 +279,46 @@ export default function StoresPage() {
           )}
         </div>
       </section>
+
+      {/* QR Modal */}
+      {qrModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setQrModal(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                QR — {qrModal.storeName}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setQrModal(null)}
+                className="rounded-md p-1 text-zinc-400 transition hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex justify-center rounded-lg bg-white p-0">
+              <ReactQRCode
+                value={JSON.stringify({ code: qrModal.code, payload: qrModal.payload })}
+                size={320}
+              />
+            </div>
+
+            <div className="mt-4 rounded-md bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300">
+              <p className="mb-1 font-semibold">Payload</p>
+              <pre className="overflow-auto whitespace-pre-wrap">
+                {JSON.stringify({ code: qrModal.code, payload: qrModal.payload }, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
