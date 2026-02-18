@@ -83,8 +83,8 @@
 
 ## Fase 6: Implementación Frontend
 
-- [ ] App Tarjeta Digital (PWA)
-- [ ] Dashboard Tienda
+- [x] App Tarjeta Digital (PWA base funcional en `apps/digital-wallet`)
+- [x] Dashboard Tienda (base funcional en `apps/store-dashboard`)
 - [x] Admin Panel (parcial: backoffice base en `apps/backoffice`)
 - [x] CPG Portal v2 (campañas + performance en `apps/cpg-portal`)
 - [x] Tests E2E (journeys críticos backend)
@@ -137,6 +137,7 @@
 | 2026-02-18 | Pipeline CI ampliado para backend + lint de frontends en PR/push a main |
 | 2026-02-18 | Operaciones completadas: docs de monitoring/alertas, staging y runbooks de incidentes/escalado |
 | 2026-02-18 | CPG Portal agrega módulo de recompensas y nueva métrica de efectividad (canjes por recompensa activa) |
+| 2026-02-18 | Fase 6 acelera: creadas apps Store Dashboard y Digital Wallet con flujos funcionales iniciales |
 
 ---
 
