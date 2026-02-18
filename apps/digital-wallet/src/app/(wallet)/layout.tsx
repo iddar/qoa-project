@@ -6,9 +6,37 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 
 const navItems = [
-  { href: "/", label: "Mi tarjeta" },
-  { href: "/transactions", label: "Historial" },
-  { href: "/rewards", label: "Recompensas" },
+  {
+    href: "/",
+    label: "Mi tarjeta",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect width="20" height="14" x="2" y="5" rx="2" />
+        <path d="M2 10h20" />
+      </svg>
+    ),
+  },
+  {
+    href: "/transactions",
+    label: "Historial",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 8v4l3 3" />
+        <circle cx="12" cy="12" r="9" />
+      </svg>
+    ),
+  },
+  {
+    href: "/rewards",
+    label: "Recompensas",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 12v10H4V12" />
+        <path d="M2 7h20v5H2z" />
+        <path d="M12 22V7" />
+      </svg>
+    ),
+  },
 ];
 
 export default function WalletLayout({ children }: { children: React.ReactNode }) {
@@ -48,21 +76,22 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
         </div>
       </header>
 
-      <main className="flex-1 p-4">{children}</main>
+      <main className="flex-1 p-4 pb-20">{children}</main>
 
-      <nav className="sticky bottom-0 grid grid-cols-3 border-t border-amber-100 bg-white/90 p-2 dark:border-zinc-800 dark:bg-zinc-950/90">
+      <nav className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-md -translate-x-1/2 grid-cols-3 border-t border-amber-100 bg-white/90 p-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
         {navItems.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`rounded-lg px-2 py-2 text-center text-xs font-semibold transition ${
+              className={`flex flex-col items-center gap-1 rounded-lg px-2 py-2 text-center text-[11px] font-semibold transition ${
                 isActive
                   ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                   : "text-zinc-500 dark:text-zinc-400"
               }`}
             >
+              {item.icon}
               {item.label}
             </Link>
           );

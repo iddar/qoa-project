@@ -45,10 +45,16 @@ export default function WalletSignupPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-amber-50 px-6 py-12 dark:bg-zinc-950">
-      <div className="w-full max-w-sm rounded-2xl border border-amber-100 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="relative flex min-h-screen items-center justify-center bg-amber-50 px-6 py-12 dark:bg-zinc-950">
+      <div className="absolute -left-12 top-0 h-60 w-60 rounded-full bg-orange-200/60 blur-3xl" />
+      <div className="absolute -right-10 bottom-0 h-64 w-64 rounded-full bg-amber-200/60 blur-3xl" />
+      <div className="relative z-10 w-full max-w-sm rounded-2xl border border-amber-100 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Crear cuenta</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Activa tu tarjeta digital en minutos.</p>
+
+        <div className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300">
+          Necesitarás tu email y teléfono para recuperar tu sesión y consultar tu tarjeta en cualquier momento.
+        </div>
 
         <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">{error}</p>}
