@@ -2,6 +2,12 @@
 
 Esta carpeta contiene la documentación operativa, incluyendo runbooks, SLOs, incidentes y disaster recovery.
 
+## Estado actual
+
+- `infraestructura.md`: base de arquitectura y ambientes.
+- `slos.md`: objetivos operativos iniciales y politica de alertamiento.
+- `runbooks/despliegue.md`: procedimiento de despliegue y rollback.
+
 ## Cómo rellenar
 
 ### SLOs / SLIs
