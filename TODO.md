@@ -96,7 +96,7 @@
 - [x] `docs/06-ops/infraestructura.md`
 - [x] `docs/06-ops/slos.md`
 - [x] `docs/06-ops/runbooks/despliegue.md`
-- [ ] Pipeline CI/CD
+- [x] Pipeline CI/CD
 - [ ] Monitoring y alertas
 - [ ] Ambiente staging
 
@@ -134,6 +134,7 @@
 | 2026-02-18 | CPG Portal sube de nivel: gestión de campañas, reglas de acumulación y performance por campaña/CPG |
 | 2026-02-18 | Cobertura E2E backend agregada para journeys críticos (campaign lifecycle, redeem, reminders, webhook WhatsApp y alertas) |
 | 2026-02-18 | Documentación base de operaciones agregada: infraestructura, SLOs y runbook de despliegue |
+| 2026-02-18 | Pipeline CI ampliado para backend + lint de frontends en PR/push a main |
 
 ---
 

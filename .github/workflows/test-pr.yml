@@ -1,17 +1,23 @@
-name: Test PR
+name: CI
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
     paths:
       - 'src/**'
+      - 'apps/backoffice/**'
+      - 'apps/cpg-portal/**'
+      - 'docs/**'
       - '.github/workflows/test-pr.yml'
   workflow_dispatch:
 
 jobs:
-  test:
-    name: Run Tests
+  backend:
+    name: Backend Lint/Test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,7 +57,6 @@ jobs:
           bun-version: 1.3.8
 
       - name: Install dependencies
-        working-directory: ./src
         run: bun install
 
       - name: Run database migrations
@@ -92,3 +97,29 @@ jobs:
           REDIS_PORT: 6379
           REDIS_URL: redis://localhost:6379/0
         run: bun test spec
+
+  frontends:
+    name: Frontends Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Lint backoffice
+        working-directory: ./apps/backoffice
+        run: bun run lint
+
+      - name: Lint cpg portal
+        working-directory: ./apps/cpg-portal
+        run: bun run lint
