@@ -128,6 +128,7 @@
 - Operaciones: documentación base creada para infraestructura, SLOs y runbook de despliegue.
 - Operaciones: pipeline CI ampliado para checks de backend y lint de frontends en push/PR.
 - Operaciones: completados docs de monitoring/alertas, staging y runbooks de escalado/incidentes.
+- CPG Portal v2.1: módulo de recompensas con creación/listado por campaña y KPI de efectividad de canje.
 
 **Estructura del proyecto:**
 ```

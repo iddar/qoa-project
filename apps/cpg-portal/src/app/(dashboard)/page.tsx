@@ -190,6 +190,21 @@ export default function HomePage() {
     },
   });
 
+  const { data: rewardsData, isLoading: rewardsLoading } = useQuery({
+    queryKey: ["rewards", tenantId],
+    enabled: Boolean(tenantId),
+    queryFn: async () => {
+      const { data, error } = await api.v1.rewards.get({
+        query: {
+          limit: "200",
+        },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const name = meData?.data?.name;
   const firstName = name?.split(" ")[0] ?? "de vuelta";
 
@@ -200,6 +215,10 @@ export default function HomePage() {
   const activeBrands = brands.filter((b: { status: string }) => b.status === "active").length;
   const activeProducts = products.filter((p: { status: string }) => p.status === "active").length;
   const deliveredPoints = cpgSummaryData?.data.kpis.accumulatedPoints ?? 0;
+  const redemptions = cpgSummaryData?.data.kpis.redemptions ?? 0;
+  const rewards = rewardsData?.data ?? [];
+  const activeRewards = rewards.filter((reward: { status: string }) => reward.status === "active").length;
+  const rewardEffectiveness = activeRewards > 0 ? redemptions / activeRewards : 0;
   const dailyPerformance = ((cpgSummaryData?.data.daily ?? []) as DailyPerformancePoint[]).slice(-12);
 
   const today = new Date().toLocaleDateString("es-MX", {
@@ -225,7 +244,7 @@ export default function HomePage() {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard
           label="Marcas activas"
           value={activeBrands}
@@ -276,6 +295,22 @@ export default function HomePage() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <path d="M12 6v6l4 2" />
+            </svg>
+          }
+        />
+        <StatCard
+          label="Efectividad recompensas"
+          value={rewardEffectiveness.toFixed(2)}
+          sublabel="Canjes por recompensa activa"
+          loading={summaryLoading || rewardsLoading}
+          color="zinc"
+          icon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 12v10H4V12" />
+              <path d="M2 7h20v5H2z" />
+              <path d="M12 22V7" />
+              <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7Z" />
+              <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z" />
             </svg>
           }
         />
@@ -356,6 +391,20 @@ export default function HomePage() {
             icon={
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M3 12h4l3 8 4-16 3 8h4" />
+              </svg>
+            }
+          />
+          <QuickAction
+            href="/rewards"
+            label="Gestionar recompensas"
+            description="Define catálogo de canje y su efectividad"
+            icon={
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 12v10H4V12" />
+                <path d="M2 7h20v5H2z" />
+                <path d="M12 22V7" />
+                <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7Z" />
+                <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7Z" />
               </svg>
             }
           />

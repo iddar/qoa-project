@@ -169,6 +169,21 @@ export default function CampaignDetailPage() {
     },
   });
 
+  const rewardsQuery = useQuery({
+    queryKey: ["campaign-rewards", campaignId],
+    queryFn: async () => {
+      const { data, error } = await api.v1.rewards.get({
+        query: {
+          campaignId,
+          limit: "200",
+        },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const transitionMutation = useMutation({
     mutationFn: async (action: "ready" | "review" | "confirm" | "activate") => {
       if (action === "ready") {
@@ -243,6 +258,9 @@ export default function CampaignDetailPage() {
 
   const policies = (policiesQuery.data?.data ?? []) as CampaignPolicy[];
   const auditItems = (auditQuery.data?.data ?? []) as AuditItem[];
+  const rewards = (rewardsQuery.data?.data ?? []) as Array<{ status: string; stock?: number }>;
+  const activeRewards = rewards.filter((reward) => reward.status === "active").length;
+  const rewardEffectiveness = activeRewards > 0 ? (summaryQuery.data?.data.kpis.redemptions ?? 0) / activeRewards : 0;
 
   const scopeOptions = useMemo(() => {
     if (policyForm.scopeType === "brand") {
@@ -282,7 +300,7 @@ export default function CampaignDetailPage() {
         )}
       </header>
 
-      <section className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Transacciones</p>
           <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
@@ -312,6 +330,11 @@ export default function CampaignDetailPage() {
           <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
             {((summaryQuery.data?.data.kpis.redemptionRate ?? 0) * 100).toFixed(1)}%
           </p>
+        </article>
+        <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Efectividad rewards</p>
+          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{rewardEffectiveness.toFixed(2)}</p>
+          <p className="mt-1 text-[11px] text-zinc-400">canjes / recompensa activa</p>
         </article>
       </section>
 

@@ -1521,6 +1521,7 @@ paths:
     get:
       tags: [Rewards]
       summary: Listar recompensas
+      description: Para usuarios/API keys con tenant CPG, el listado se limita automáticamente a su propio CPG.
       operationId: listRewards
       security:
         - bearerAuth: []
@@ -1548,6 +1549,7 @@ paths:
     post:
       tags: [Rewards]
       summary: Crear recompensa
+      description: Para usuarios/API keys con tenant CPG, solo permite crear recompensas en campañas del mismo CPG.
       operationId: createReward
       security:
         - bearerAuth: []
@@ -1570,6 +1572,7 @@ paths:
     get:
       tags: [Rewards]
       summary: Obtener recompensa
+      description: Para usuarios/API keys con tenant CPG, solo permite consultar recompensas de campañas del mismo CPG.
       operationId: getReward
       security:
         - bearerAuth: []

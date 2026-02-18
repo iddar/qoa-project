@@ -136,6 +136,7 @@
 | 2026-02-18 | Documentación base de operaciones agregada: infraestructura, SLOs y runbook de despliegue |
 | 2026-02-18 | Pipeline CI ampliado para backend + lint de frontends en PR/push a main |
 | 2026-02-18 | Operaciones completadas: docs de monitoring/alertas, staging y runbooks de incidentes/escalado |
+| 2026-02-18 | CPG Portal agrega módulo de recompensas y nueva métrica de efectividad (canjes por recompensa activa) |
 
 ---
 
