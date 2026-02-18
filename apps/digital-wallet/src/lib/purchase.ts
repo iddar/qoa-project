@@ -87,7 +87,6 @@ export const normalizePurchasePayload = (rawValue: string): NormalizedPurchasePa
 
 export const purchasePayloadTemplate = `{
   "storeId": "STORE_UUID",
-  "cardId": "CARD_UUID",
   "items": [
     {
       "productId": "PRODUCT_UUID",

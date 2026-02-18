@@ -132,6 +132,7 @@
 - Fase 6 en ejecución activa: nuevas apps `apps/store-dashboard` y `apps/digital-wallet` con autenticación y flujos operativos iniciales.
 - Fase 6 UX: wallet mobile-first mejorada con navegación inferior, tarjeta QR destacada, resumen de actividad e interfaz de recompensas.
 - Fase 6 flujo completo wallet: registro manual de compra por payload y análisis de transacciones agrupadas (tienda/marca/campaña).
+- V2 Loyalty Wallet: onboarding con campaña universal, suscripción a campañas tipo reto y acumulación simultánea (universal + suscritas/abiertas).
 
 **Estructura del proyecto:**
 ```

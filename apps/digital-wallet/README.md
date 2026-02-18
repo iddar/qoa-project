@@ -22,6 +22,8 @@ Wallet mobile-first para clientes finales con tarjeta digital, historial y recom
 - Historial de transacciones por tarjeta con agrupación por tienda/marca/campaña
 - Registro de compra por payload manual (sin escaneo QR)
 - Catálogo de recompensas disponibles por campaña
+- Catálogo de campañas tipo reto con suscripción desde la wallet
+- Provisionado automático de tarjeta universal al crear cuenta
 
 ## Payload de compra (manual)
 
@@ -30,7 +32,6 @@ Ejemplo mínimo:
 ```json
 {
   "storeId": "STORE_UUID",
-  "cardId": "CARD_UUID",
   "items": [
     {
       "productId": "PRODUCT_UUID",
@@ -40,3 +41,5 @@ Ejemplo mínimo:
   ]
 }
 ```
+
+`cardId` es opcional: si no se envía, se utiliza la tarjeta universal del usuario.

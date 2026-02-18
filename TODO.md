@@ -140,6 +140,7 @@
 | 2026-02-18 | Fase 6 acelera: creadas apps Store Dashboard y Digital Wallet con flujos funcionales iniciales |
 | 2026-02-18 | UX de Digital Wallet reforzada con experiencia mobile-first para tarjeta, historial y recompensas |
 | 2026-02-18 | Wallet completa flujo manual de compra por payload y agrupación de transacciones por tienda/marca/campaña |
+| 2026-02-18 | V2 wallet loyalty implementada: tarjeta universal auto-provisionada, suscripciones a campañas y acumulación multi-campaña |
 
 ---
 

@@ -163,7 +163,7 @@ export default function WalletPurchasePage() {
         <p className="font-semibold">Tips para probar el flujo completo</p>
         <ol className="mt-2 list-decimal space-y-1 pl-4">
           <li>Usa un `storeId` y `productId` existentes.</li>
-          <li>Usa `cardId` de tus tarjetas (desde Mi tarjeta).</li>
+          <li>`cardId` es opcional: si no lo envías, se usa tu tarjeta universal.</li>
           <li>Después de registrar, revisa Historial y Home para confirmar reflejo.</li>
         </ol>
       </section>

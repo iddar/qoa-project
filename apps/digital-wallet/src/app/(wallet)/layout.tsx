@@ -38,6 +38,16 @@ const navItems = [
     ),
   },
   {
+    href: "/campaigns",
+    label: "Retos",
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m9 12 2 2 4-4" />
+        <path d="M12 3c4.97 0 9 4.03 9 9s-4.03 9-9 9-9-4.03-9-9 4.03-9 9-9Z" />
+      </svg>
+    ),
+  },
+  {
     href: "/rewards",
     label: "Recompensas",
     icon: (
@@ -89,7 +99,7 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
 
       <main className="flex-1 p-4 pb-20">{children}</main>
 
-      <nav className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-md -translate-x-1/2 grid-cols-4 border-t border-amber-100 bg-white/90 p-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
+      <nav className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-md -translate-x-1/2 grid-cols-5 border-t border-amber-100 bg-white/90 p-2 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/90">
         {navItems.map((item) => {
           const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
