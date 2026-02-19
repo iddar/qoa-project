@@ -142,6 +142,7 @@
 | 2026-02-18 | Wallet completa flujo manual de compra por payload y agrupación de transacciones por tienda/marca/campaña |
 | 2026-02-18 | V2 wallet loyalty implementada: tarjeta universal auto-provisionada, suscripciones a campañas y acumulación multi-campaña |
 | 2026-02-18 | Wallet-Rewards enlazada por campaña suscrita con endpoint `/users/me/wallet` y onboarding universal en login/seeds |
+| 2026-02-18 | Seeds de prueba fortalecidos con tenant store para `store.<entorno>` y fixtures base para flujo wallet (store/product/campaña/recompensa) |
 
 ---
 

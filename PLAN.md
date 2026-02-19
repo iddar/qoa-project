@@ -134,6 +134,7 @@
 - Fase 6 flujo completo wallet: registro manual de compra por payload y análisis de transacciones agrupadas (tienda/marca/campaña).
 - V2 Loyalty Wallet: onboarding con campaña universal, suscripción a campañas tipo reto y acumulación simultánea (universal + suscritas/abiertas).
 - Wallet-Rewards conectada por campaña: saldo wallet por campaña suscrita y catálogo de recompensas por reto activo.
+- Seeds de QA ampliados: usuario `store.<entorno>@qoa.local` con tenant store asociado y fixtures base (store/brand/product/campaña/recompensa).
 
 **Estructura del proyecto:**
 ```
