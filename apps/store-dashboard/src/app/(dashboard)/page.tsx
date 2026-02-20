@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ReactQRCode } from "@lglab/react-qr-code";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { useAuth } from "@/providers/auth-provider";
@@ -72,9 +73,27 @@ export default function StoreHomePage() {
     },
   });
 
+  const storeQrQuery = useQuery({
+    queryKey: ["store-qr", activeStoreId],
+    enabled: Boolean(activeStoreId) && Boolean(token),
+    queryFn: async () => {
+      const { data, error } = await api.v1.stores({ storeId: activeStoreId }).qr.get({
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const daily = (summaryQuery.data?.data.daily ?? []) as DailyPoint[];
   const dailyLastWeek = daily.slice(-7);
   const maxTx = Math.max(...dailyLastWeek.map((item) => item.transactions), 1);
+  const storeQrValue = storeQrQuery.data
+    ? JSON.stringify({
+        code: storeQrQuery.data.data.code,
+        payload: storeQrQuery.data.data.payload,
+      })
+    : "";
 
   const today = useMemo(
     () =>
@@ -137,6 +156,28 @@ export default function StoreHomePage() {
             {summaryQuery.data?.data.kpis.redemptions ?? 0}
           </p>
         </article>
+      </section>
+
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">QR de la tienda</h2>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Comparto este QR para registrar compras en esta sucursal.</p>
+
+        <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+          {storeQrValue && (
+            <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950">
+              <ReactQRCode value={storeQrValue} size={144} />
+            </div>
+          )}
+          <div className="text-xs text-zinc-500 dark:text-zinc-400">
+            {storeQrQuery.isLoading && <p>Cargando QR de tienda...</p>}
+            {!storeQrQuery.isLoading && !storeQrValue && <p>No se pudo cargar el QR de esta tienda.</p>}
+            {storeQrQuery.data?.data.code && (
+              <p>
+                Código tienda: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{storeQrQuery.data.data.code}</span>
+              </p>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
