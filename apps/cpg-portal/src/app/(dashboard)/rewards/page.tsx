@@ -51,6 +51,7 @@ export default function RewardsPage() {
 
   const [selectedCampaignId, setSelectedCampaignId] = useState<string>("all");
   const [form, setForm] = useState<RewardForm>(initialRewardForm);
+  const [search, setSearch] = useState("");
 
   const campaignsQuery = useQuery({
     queryKey: ["campaigns", tenantId],
@@ -140,6 +141,14 @@ export default function RewardsPage() {
   const outOfStockRewards = rewards.filter((reward) => typeof reward.stock === "number" && reward.stock <= 0);
   const redemptions = summaryQuery.data?.data.kpis.redemptions ?? 0;
   const effectiveness = activeRewards.length > 0 ? redemptions / activeRewards.length : 0;
+  const visibleRewards = rewards.filter((reward) => {
+    if (!search.trim()) {
+      return true;
+    }
+
+    const needle = search.trim().toLowerCase();
+    return reward.name.toLowerCase().includes(needle) || (reward.description ?? "").toLowerCase().includes(needle);
+  });
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -180,18 +189,32 @@ export default function RewardsPage() {
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Listado de recompensas</h2>
                 <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Filtra por campana para revisar stock y costos.</p>
               </div>
-              <select
-                value={selectedCampaignId}
-                onChange={(event) => setSelectedCampaignId(event.target.value)}
-                className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="all">Todas las campanas</option>
-                {campaigns.map((campaign) => (
-                  <option key={campaign.id} value={campaign.id}>
-                    {campaign.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex flex-wrap gap-2">
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Buscar recompensa"
+                  className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+                />
+                <select
+                  value={selectedCampaignId}
+                  onChange={(event) => setSelectedCampaignId(event.target.value)}
+                  className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="all">Todas las campanas</option>
+                  {campaigns.map((campaign) => (
+                    <option key={campaign.id} value={campaign.id}>
+                      {campaign.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-[1.35fr_0.65fr_0.4fr_0.35fr] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <span>Recompensa</span>
+              <span>Campana</span>
+              <span>Costo</span>
+              <span>Stock</span>
             </div>
           </header>
 
@@ -217,22 +240,20 @@ export default function RewardsPage() {
 
           {!rewardsQuery.isLoading && rewards.length > 0 && (
             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-              {rewards.map((reward) => (
+              {visibleRewards.map((reward) => (
                 <li key={reward.id} className="px-5 py-3">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="grid grid-cols-[1.35fr_0.65fr_0.4fr_0.35fr] items-start gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{reward.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
-                        {campaignMap.get(reward.campaignId) ?? "Campana"} · costo {reward.cost} pts
-                      </p>
                       {reward.description && (
                         <p className="mt-1 truncate text-[11px] text-zinc-400">{reward.description}</p>
                       )}
                     </div>
 
-                    <div className="text-right">
+                    <div>
+                      <p className="truncate text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">{campaignMap.get(reward.campaignId) ?? "Campana"}</p>
                       <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        className={`mt-1 inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                           reward.status === "active"
                             ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
                             : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
@@ -240,10 +261,19 @@ export default function RewardsPage() {
                       >
                         {reward.status === "active" ? "Activa" : "Inactiva"}
                       </span>
-                      <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                        stock: {typeof reward.stock === "number" ? reward.stock : "ilimitado"}
-                      </p>
                     </div>
+
+                    <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">{reward.cost} pts</p>
+
+                    <p
+                      className={`text-[11px] font-semibold ${
+                        typeof reward.stock === "number" && reward.stock <= 5
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-zinc-700 dark:text-zinc-200"
+                      }`}
+                    >
+                      {typeof reward.stock === "number" ? reward.stock : "Ilimitado"}
+                    </p>
                   </div>
                 </li>
               ))}

@@ -332,7 +332,6 @@ export default function HomePage() {
 
       {/* Two column section */}
       <div className="grid gap-6 lg:grid-cols-5">
-        {/* Campaign metrics placeholder — spans 3 cols */}
         <div className="lg:col-span-3 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/50">
           <div className="mb-5 flex items-center justify-between">
             <div>
@@ -344,18 +343,15 @@ export default function HomePage() {
             </span>
           </div>
 
-          <div className="flex h-36 items-end gap-1.5 px-1">
+          <div className="flex h-40 items-end gap-1.5 rounded-lg border border-zinc-100 bg-zinc-50 px-2 py-2 dark:border-zinc-800 dark:bg-zinc-950/50">
             {(dailyPerformance.length ? dailyPerformance : [{ date: "", transactions: 0 }]).map((point: DailyPerformancePoint, i: number) => {
               const maxTransactions = Math.max(...(dailyPerformance.map((entry: DailyPerformancePoint) => entry.transactions) || [1]));
-              const normalized = maxTransactions > 0 ? Math.max(8, Math.round((point.transactions / maxTransactions) * 100)) : 8;
+              const normalized = maxTransactions > 0 ? Math.max(6, Math.round((point.transactions / maxTransactions) * 100)) : 0;
 
               return (
-              <div key={i} className="flex-1 flex flex-col justify-end">
-                <div
-                  className="rounded-sm bg-blue-100 dark:bg-blue-900/50"
-                  style={{ height: `${normalized}%` }}
-                />
-              </div>
+                <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                  <div className="w-full rounded-sm bg-blue-200/90 dark:bg-blue-500/60" style={{ height: `${normalized}%` }} />
+                </div>
               );
             })}
           </div>
@@ -366,9 +362,12 @@ export default function HomePage() {
               </span>
             ))}
           </div>
+
+          {dailyPerformance.every((entry) => entry.transactions === 0) && (
+            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Aún no hay transacciones asociadas a campañas activas en este periodo.</p>
+          )}
         </div>
 
-        {/* Quick actions — spans 2 cols */}
         <div className="lg:col-span-2 space-y-3">
           <div className="mb-2">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Acciones rápidas</h2>
@@ -428,8 +427,8 @@ export default function HomePage() {
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900/50">
         <div className="mb-5 flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Campañas activas</h2>
-            <p className="text-xs text-zinc-400 mt-0.5">Estado actual de tus campañas de fidelización</p>
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Campañas con mayor tracción</h2>
+            <p className="text-xs text-zinc-400 mt-0.5">Top por transacciones y ventas en la ventana actual</p>
           </div>
           <Link
             href="/campaigns"
@@ -448,31 +447,41 @@ export default function HomePage() {
         ) : activeCampaigns === 0 ? (
           <CampaignPlaceholder />
         ) : (
-          <ul className="space-y-2">
-            {campaigns
-              .filter((campaign: { status: string }) => campaign.status === "active")
-              .slice(0, 5)
-              .map((campaign: { id: string; name: string; startsAt?: string; endsAt?: string }) => (
-                <li
-                  key={campaign.id}
-                  className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+          <div className="space-y-2">
+            {((cpgSummaryData?.data.campaigns as Array<{
+              campaignId: string;
+              name: string;
+              status: string;
+              transactions: number;
+              salesAmount: number;
+              redemptions: number;
+            }> | undefined) ?? [])
+              .slice(0, 6)
+              .map((campaign) => (
+                <article
+                  key={campaign.campaignId}
+                  className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs dark:border-zinc-800 dark:bg-zinc-900"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium text-zinc-800 dark:text-zinc-200">{campaign.name}</p>
-                    <Link
-                      href={`/campaigns/${campaign.id}`}
-                      className="rounded-md border border-zinc-200 px-2 py-0.5 text-[10px] font-semibold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
-                    >
-                      Abrir
-                    </Link>
+                    <p className="font-semibold text-zinc-800 dark:text-zinc-200">{campaign.name}</p>
+                    <span className="rounded-full bg-zinc-200/70 px-2 py-0.5 text-[10px] uppercase text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                      {campaign.status}
+                    </span>
                   </div>
-                  <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-                    {campaign.startsAt ? `Inicio: ${new Date(campaign.startsAt).toLocaleDateString("es-MX")}` : "Sin inicio"}
-                    {campaign.endsAt ? ` · Fin: ${new Date(campaign.endsAt).toLocaleDateString("es-MX")}` : ""}
-                  </p>
-                </li>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    <span>Tx: <b className="text-zinc-700 dark:text-zinc-200">{campaign.transactions}</b></span>
+                    <span>Ventas: <b className="text-zinc-700 dark:text-zinc-200">${campaign.salesAmount.toLocaleString("es-MX")}</b></span>
+                    <span>Canjes: <b className="text-zinc-700 dark:text-zinc-200">{campaign.redemptions}</b></span>
+                  </div>
+                </article>
               ))}
-          </ul>
+
+            {((cpgSummaryData?.data.campaigns ?? []) as Array<unknown>).length === 0 && (
+              <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                Sin campañas con tracción aún en el periodo actual.
+              </p>
+            )}
+          </div>
         )}
       </div>
 
