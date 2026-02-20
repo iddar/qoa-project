@@ -56,9 +56,22 @@ type AuditItem = {
 };
 
 type DailyPoint = {
-  date: string;
+  date: string | Date | number;
   transactions: number;
   redemptions: number;
+};
+
+const toDayLabel = (value: string | Date | number) => {
+  if (typeof value === "string") {
+    return value.length >= 10 ? value.slice(5, 10) : value;
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "--";
+  }
+
+  return parsed.toISOString().slice(5, 10);
 };
 
 const emptyPolicyForm: PolicyForm = {
@@ -350,8 +363,8 @@ export default function CampaignDetailPage() {
               const txHeight = Math.min(100, point.transactions * 8);
               const redemptionsHeight = Math.min(100, point.redemptions * 12);
               return (
-                <div key={point.date} className="grid grid-cols-[64px_1fr_1fr] items-center gap-3 text-xs">
-                  <span className="text-zinc-400">{point.date.slice(5)}</span>
+                <div key={`${String(point.date)}-${point.transactions}-${point.redemptions}`} className="grid grid-cols-[64px_1fr_1fr] items-center gap-3 text-xs">
+                  <span className="text-zinc-400">{toDayLabel(point.date)}</span>
                   <div className="h-2 rounded bg-blue-100 dark:bg-blue-950/40">
                     <div className="h-full rounded bg-blue-500" style={{ width: `${txHeight}%` }} />
                   </div>

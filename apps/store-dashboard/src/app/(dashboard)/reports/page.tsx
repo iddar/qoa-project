@@ -7,7 +7,20 @@ import { getAccessToken } from "@/lib/auth";
 import { useAuth } from "@/providers/auth-provider";
 
 type StoreItem = { id: string; name: string; code: string };
-type DailyPoint = { date: string; transactions: number; salesAmount: number; accumulations: number; redemptions: number };
+type DailyPoint = { date: string | Date | number; transactions: number; salesAmount: number; accumulations: number; redemptions: number };
+
+const toDayLabel = (value: string | Date | number) => {
+  if (typeof value === "string") {
+    return value.length >= 10 ? value.slice(5, 10) : value;
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "--";
+  }
+
+  return parsed.toISOString().slice(5, 10);
+};
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-MX", {
@@ -112,8 +125,8 @@ export default function StoreReportsPage() {
         <div className="mt-4 space-y-2">
           {last15.length === 0 && <p className="text-xs text-zinc-500">Sin datos para el periodo.</p>}
           {last15.map((day) => (
-            <div key={day.date} className="grid grid-cols-[70px_1fr_90px] items-center gap-3 text-xs">
-              <span className="text-zinc-500">{day.date.slice(5)}</span>
+            <div key={`${String(day.date)}-${day.transactions}`} className="grid grid-cols-[70px_1fr_90px] items-center gap-3 text-xs">
+              <span className="text-zinc-500">{toDayLabel(day.date)}</span>
               <div className="h-2 rounded bg-zinc-100 dark:bg-zinc-800">
                 <div className="h-2 rounded bg-amber-400 dark:bg-amber-500" style={{ width: `${Math.max(4, Math.round((day.salesAmount / maxSales) * 100))}%` }} />
               </div>
