@@ -256,6 +256,8 @@ export default function StoresPage() {
               <ReactQRCode
                 value={JSON.stringify({ code: qrModal.code, payload: qrModal.payload })}
                 size={320}
+                bgColor="#FFFFFF"
+                fgColor="#111111"
               />
             </div>
 

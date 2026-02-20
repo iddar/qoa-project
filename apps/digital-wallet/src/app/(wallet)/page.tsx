@@ -122,8 +122,8 @@ export default function WalletHomePage() {
 
           {activeCard && qrValue && !cardsQuery.isLoading && (
             <div className="mt-4 grid gap-4">
-              <div className="mx-auto rounded-2xl border border-amber-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
-                <ReactQRCode value={qrValue} size={220} />
+              <div className="mx-auto rounded-2xl border border-amber-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-white">
+                <ReactQRCode value={qrValue} size={220} bgColor="#FFFFFF" fgColor="#111111" />
               </div>
               <div className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-900/70 dark:text-zinc-300">
                 <span>Estado: {activeCard.status}</span>

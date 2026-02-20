@@ -180,8 +180,8 @@ export default function StoreHomePage() {
 
           <div className="mt-4 flex justify-center">
             {storeQrValue && (
-              <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
-                <ReactQRCode value={storeQrValue} size={208} />
+              <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-white">
+                <ReactQRCode value={storeQrValue} size={208} bgColor="#FFFFFF" fgColor="#111111" />
               </div>
             )}
           </div>
