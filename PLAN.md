@@ -135,6 +135,7 @@
 - V2 Loyalty Wallet: onboarding con campaña universal, suscripción a campañas tipo reto y acumulación simultánea (universal + suscritas/abiertas).
 - Wallet-Rewards conectada por campaña: saldo wallet por campaña suscrita y catálogo de recompensas por reto activo.
 - Seeds de QA ampliados: usuario `store.<entorno>@qoa.local` con tenant store asociado y fixtures base (store/brand/product/campaña/recompensa).
+- Seeds enriquecidos (`development`/`local`): 30 días de actividad demo (transacciones, acumulaciones y canjes) + campañas/recompensas adicionales para dashboards y métricas.
 
 **Estructura del proyecto:**
 ```

@@ -114,7 +114,7 @@ export const getMyWalletCard = async (request: APIRequestContext, token: string)
 };
 
 export const listTransactionsByCard = async (request: APIRequestContext, token: string, cardId: string) => {
-  const response = await request.get(`${env.apiUrl}/v1/transactions?cardId=${cardId}&limit=50`, {
+  const response = await request.get(`${env.apiUrl}/v1/transactions?cardId=${cardId}&limit=200`, {
     headers: authHeaders(token),
   });
   expect(response.ok()).toBeTruthy();
