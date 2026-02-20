@@ -158,7 +158,7 @@ export default function StoreHomePage() {
         </article>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_380px]">
         <article className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tendencia 7 días</h2>
           <p className="mt-1 text-xs text-zinc-500">Comparativo de volumen de transacciones por día.</p>
@@ -173,15 +173,15 @@ export default function StoreHomePage() {
           </div>
         </article>
 
-        <article className="rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white p-5 dark:border-zinc-700 dark:from-zinc-900 dark:to-zinc-950">
+        <article className="w-full max-w-[380px] justify-self-end rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white p-5 dark:border-zinc-700 dark:from-zinc-900 dark:to-zinc-950">
           <p className="text-xs uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Código de caja</p>
           <h2 className="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">QR de la tienda</h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Tenlo visible para registrar compras rápido en esta sucursal.</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Tenlo visible para registrar compras rapido en esta sucursal.</p>
 
           <div className="mt-4 flex justify-center">
             {storeQrValue && (
               <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-white">
-                <ReactQRCode value={storeQrValue} size={208} bgColor="#FFFFFF" fgColor="#111111" />
+                <ReactQRCode value={storeQrValue} size={184} bgColor="#FFFFFF" fgColor="#111111" />
               </div>
             )}
           </div>
