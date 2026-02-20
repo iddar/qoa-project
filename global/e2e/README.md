@@ -32,9 +32,18 @@ Opciones:
 ```bash
 bun run e2e:headed
 bun run e2e:ui
+bun run e2e:video
 ```
+
+`e2e:video` graba video para toda la suite (uso local para evidencia).
 
 ## Ubicacion de specs
 
 - `global/e2e/specs/**/*.spec.ts`
 - helpers en `global/e2e/support/`
+
+## Flujos cubiertos
+
+- Journey full multi-app (`full-platform-flow.spec.ts`)
+- Compra manual desde Wallet por payload (`wallet-manual-purchase-flow.spec.ts`)
+- Propagacion Store Dashboard -> Wallet (`store-to-wallet-propagation.spec.ts`)
