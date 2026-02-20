@@ -158,40 +158,44 @@ export default function StoreHomePage() {
         </article>
       </section>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">QR de la tienda</h2>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Comparto este QR para registrar compras en esta sucursal.</p>
+      <section className="grid gap-4 lg:grid-cols-[1.35fr_0.65fr]">
+        <article className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tendencia 7 días</h2>
+          <p className="mt-1 text-xs text-zinc-500">Comparativo de volumen de transacciones por día.</p>
+          <div className="mt-4 flex h-40 items-end gap-2">
+            {dailyLastWeek.length === 0 && <p className="text-xs text-zinc-400">Sin datos aún.</p>}
+            {dailyLastWeek.map((point) => (
+              <div key={`${String(point.date)}-${point.transactions}`} className="flex flex-1 flex-col items-center justify-end gap-2">
+                <div className="w-full rounded bg-amber-300/70 dark:bg-amber-500/40" style={{ height: `${Math.max(8, Math.round((point.transactions / maxTx) * 100))}%` }} />
+                <p className="text-[10px] text-zinc-400">{toDayLabel(point.date)}</p>
+              </div>
+            ))}
+          </div>
+        </article>
 
-        <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-          {storeQrValue && (
-            <div className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950">
-              <ReactQRCode value={storeQrValue} size={144} />
-            </div>
-          )}
-          <div className="text-xs text-zinc-500 dark:text-zinc-400">
+        <article className="rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white p-5 dark:border-zinc-700 dark:from-zinc-900 dark:to-zinc-950">
+          <p className="text-xs uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Código de caja</p>
+          <h2 className="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">QR de la tienda</h2>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Tenlo visible para registrar compras rápido en esta sucursal.</p>
+
+          <div className="mt-4 flex justify-center">
+            {storeQrValue && (
+              <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+                <ReactQRCode value={storeQrValue} size={208} />
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-lg border border-zinc-200 bg-white/70 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-300">
             {storeQrQuery.isLoading && <p>Cargando QR de tienda...</p>}
             {!storeQrQuery.isLoading && !storeQrValue && <p>No se pudo cargar el QR de esta tienda.</p>}
             {storeQrQuery.data?.data.code && (
               <p>
-                Código tienda: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{storeQrQuery.data.data.code}</span>
+                Código tienda: <span className="font-semibold text-zinc-800 dark:text-zinc-100">{storeQrQuery.data.data.code}</span>
               </p>
             )}
           </div>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tendencia 7 días</h2>
-        <p className="mt-1 text-xs text-zinc-500">Comparativo de volumen de transacciones por día.</p>
-        <div className="mt-4 flex h-36 items-end gap-2">
-          {dailyLastWeek.length === 0 && <p className="text-xs text-zinc-400">Sin datos aún.</p>}
-          {dailyLastWeek.map((point) => (
-            <div key={`${String(point.date)}-${point.transactions}`} className="flex flex-1 flex-col items-center justify-end gap-2">
-              <div className="w-full rounded bg-amber-300/70 dark:bg-amber-500/40" style={{ height: `${Math.max(8, Math.round((point.transactions / maxTx) * 100))}%` }} />
-              <p className="text-[10px] text-zinc-400">{toDayLabel(point.date)}</p>
-            </div>
-          ))}
-        </div>
+        </article>
       </section>
     </div>
   );
