@@ -14,6 +14,15 @@ export const findStoreByName = async (request: APIRequestContext, token: string,
   return body.data.find((entry) => entry.name === name);
 };
 
+export const findStoreByCode = async (request: APIRequestContext, token: string, code: string) => {
+  const response = await request.get(`${env.apiUrl}/v1/stores?limit=200`, {
+    headers: authHeaders(token),
+  });
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { data: Entity[] };
+  return body.data.find((entry) => entry.code === code);
+};
+
 export const findProductBySku = async (request: APIRequestContext, token: string, sku: string) => {
   const endpoints = ["/v1/products?limit=500", "/v1/catalog/products?limit=500"];
 
@@ -43,6 +52,15 @@ export const findCampaignByName = async (request: APIRequestContext, token: stri
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as { data: Entity[] };
   return body.data.find((entry) => entry.name === name);
+};
+
+export const findCampaignByKey = async (request: APIRequestContext, token: string, key: string) => {
+  const response = await request.get(`${env.apiUrl}/v1/campaigns?limit=200`, {
+    headers: authHeaders(token),
+  });
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as { data: Array<Entity & { key?: string }> };
+  return body.data.find((entry) => entry.key === key);
 };
 
 export const ensureCampaignActive = async (request: APIRequestContext, token: string, campaignId: string) => {
@@ -104,4 +122,22 @@ export const listTransactionsByCard = async (request: APIRequestContext, token: 
     data: Array<{ id: string }>;
   };
   return body.data;
+};
+
+export const waitForTransactionIncrease = async (
+  request: APIRequestContext,
+  token: string,
+  cardId: string,
+  baselineCount: number,
+) => {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const transactions = await listTransactionsByCard(request, token, cardId);
+    if (transactions.length > baselineCount) {
+      return transactions;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+
+  return await listTransactionsByCard(request, token, cardId);
 };

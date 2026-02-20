@@ -17,5 +17,9 @@ export const env = {
       email: process.env.STORE_EMAIL ?? "store.development@qoa.local",
       password: process.env.STORE_PASSWORD ?? "Password123!",
     },
+    consumer: {
+      email: process.env.CONSUMER_EMAIL ?? "consumer.development@qoa.local",
+      password: process.env.CONSUMER_PASSWORD ?? "Password123!",
+    },
   },
 };
