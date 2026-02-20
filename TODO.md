@@ -144,6 +144,7 @@
 | 2026-02-18 | Wallet-Rewards enlazada por campaña suscrita con endpoint `/users/me/wallet` y onboarding universal en login/seeds |
 | 2026-02-18 | Seeds de prueba fortalecidos con tenant store para `store.<entorno>` y fixtures base para flujo wallet (store/product/campaña/recompensa) |
 | 2026-02-20 | Seeds de `development/local` enriquecidos con 30 días de actividad demo (tx/acumulaciones/canjes) y catálogo/campañas extra para demos de escritorio |
+| 2026-02-20 | UX iteration: CPG insights con métricas Loyalty V2, campañas/recompensas más densas; Store clientes con KPIs; Wallet rewards unificada con objetivos bloqueados |
 
 ---
 
