@@ -165,7 +165,7 @@ export default function StoreHomePage() {
           <div className="mt-4 flex h-40 items-end gap-2">
             {dailyLastWeek.length === 0 && <p className="text-xs text-zinc-400">Sin datos aún.</p>}
             {dailyLastWeek.map((point) => (
-              <div key={`${String(point.date)}-${point.transactions}`} className="flex flex-1 flex-col items-center justify-end gap-2">
+              <div key={`${String(point.date)}-${point.transactions}`} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
                 <div className="w-full rounded bg-amber-300/70 dark:bg-amber-500/40" style={{ height: `${Math.max(8, Math.round((point.transactions / maxTx) * 100))}%` }} />
                 <p className="text-[10px] text-zinc-400">{toDayLabel(point.date)}</p>
               </div>
