@@ -8,21 +8,22 @@ import { useAuth } from "@/providers/auth-provider";
 const navItems = [
   {
     href: "/",
-    label: "Mi tarjeta",
+    label: "Inicio",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <rect width="20" height="14" x="2" y="5" rx="2" />
-        <path d="M2 10h20" />
+        <path d="M3 10.5 12 3l9 7.5" />
+        <path d="M5 9.5V21h14V9.5" />
       </svg>
     ),
   },
   {
-    href: "/transactions",
-    label: "Historial",
+    href: "/rewards",
+    label: "Recompensas",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 8v4l3 3" />
-        <circle cx="12" cy="12" r="9" />
+        <path d="M20 12v10H4V12" />
+        <path d="M2 7h20v5H2z" />
+        <path d="M12 22V7" />
       </svg>
     ),
   },
@@ -38,23 +39,22 @@ const navItems = [
     ),
   },
   {
-    href: "/campaigns",
-    label: "Retos",
+    href: "/transactions",
+    label: "Historial",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m9 12 2 2 4-4" />
-        <path d="M12 3c4.97 0 9 4.03 9 9s-4.03 9-9 9-9-4.03-9-9 4.03-9 9-9Z" />
+        <path d="M12 8v4l3 3" />
+        <circle cx="12" cy="12" r="9" />
       </svg>
     ),
   },
   {
-    href: "/rewards",
-    label: "Recompensas",
+    href: "/profile",
+    label: "Perfil",
     icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 12v10H4V12" />
-        <path d="M2 7h20v5H2z" />
-        <path d="M12 22V7" />
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21a8 8 0 0 1 16 0" />
       </svg>
     ),
   },
@@ -63,7 +63,7 @@ const navItems = [
 export default function WalletLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isLoading, isAuthenticated, logout } = useAuth();
+  const { isLoading, isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -87,13 +87,6 @@ export default function WalletLayout({ children }: { children: React.ReactNode }
             <p className="text-xs uppercase tracking-[0.18em] text-amber-600 dark:text-amber-400">Qoa Wallet</p>
             <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tarjeta Digital</p>
           </div>
-          <button
-            type="button"
-            onClick={() => logout()}
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
-          >
-            Salir
-          </button>
         </div>
       </header>
 
