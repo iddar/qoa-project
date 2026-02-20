@@ -39,6 +39,7 @@ For `development` and `local`, the seed also creates demo activity for UX valida
 
 - 30-day purchase history
 - campaign subscriptions and multi-campaign accumulation
+- active policy fixtures per campaign (min amount, min quantity, max accumulations, cooldown)
 - active rewards and completed redemptions for KPI/report widgets
 
 `test` keeps a minimal dataset for faster automated runs.

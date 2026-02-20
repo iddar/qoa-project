@@ -33,6 +33,30 @@ export const campaignSchema = t.Object({
   updatedBy: t.Optional(t.String()),
   createdAt: t.String(),
   updatedAt: t.Optional(t.String()),
+  daysRemaining: t.Optional(t.Number()),
+  isExpired: t.Optional(t.Boolean()),
+  policySummaries: t.Optional(
+    t.Array(
+      t.Object({
+        policyType: t.Union([
+          t.Literal('max_accumulations'),
+          t.Literal('min_amount'),
+          t.Literal('min_quantity'),
+          t.Literal('cooldown'),
+        ]),
+        scopeType: t.Union([t.Literal('campaign'), t.Literal('brand'), t.Literal('product')]),
+        period: t.Union([
+          t.Literal('transaction'),
+          t.Literal('day'),
+          t.Literal('week'),
+          t.Literal('month'),
+          t.Literal('lifetime'),
+        ]),
+        value: t.Number(),
+        label: t.String(),
+      }),
+    ),
+  ),
 });
 
 export const campaignAuditLogSchema = t.Object({
@@ -117,6 +141,31 @@ export const campaignSubscriptionSchema = t.Object({
   enrollmentMode: campaignEnrollmentModeSchema,
   status: t.String(),
   subscribedAt: t.Optional(t.String()),
+  startsAt: t.Optional(t.String()),
+  endsAt: t.Optional(t.String()),
+  daysRemaining: t.Optional(t.Number()),
+  policySummaries: t.Optional(
+    t.Array(
+      t.Object({
+        policyType: t.Union([
+          t.Literal('max_accumulations'),
+          t.Literal('min_amount'),
+          t.Literal('min_quantity'),
+          t.Literal('cooldown'),
+        ]),
+        scopeType: t.Union([t.Literal('campaign'), t.Literal('brand'), t.Literal('product')]),
+        period: t.Union([
+          t.Literal('transaction'),
+          t.Literal('day'),
+          t.Literal('week'),
+          t.Literal('month'),
+          t.Literal('lifetime'),
+        ]),
+        value: t.Number(),
+        label: t.String(),
+      }),
+    ),
+  ),
 });
 
 export const campaignSubscriptionListResponse = t.Object({

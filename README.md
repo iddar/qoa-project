@@ -178,6 +178,7 @@ En `development` y `local`, el seed ahora incluye dataset enriquecido para demos
 - 2 tiendas activas de prueba
 - catálogo ampliado (múltiples marcas y productos)
 - campañas activas adicionales (`opt_in` y `open`)
+- políticas activas por campaña (`min_amount`, `min_quantity`, `max_accumulations`, `cooldown`)
 - recompensas activas por campaña
 - actividad histórica de 30 días (transacciones, acumulaciones y canjes)
 

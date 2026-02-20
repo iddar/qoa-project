@@ -5,6 +5,7 @@ import {
   balances,
   brands,
   campaignBalances,
+  campaignPolicies,
   campaignSubscriptions,
   campaigns,
   cpgs,
@@ -386,6 +387,49 @@ const upsertRewardByName = async (payload: {
     .returning({ id: rewards.id })) as Array<{ id: string }>;
 
   return created!.id;
+};
+
+const ensurePolicy = async (payload: {
+  campaignId: string;
+  policyType: 'max_accumulations' | 'min_amount' | 'min_quantity' | 'cooldown';
+  scopeType: 'campaign' | 'brand' | 'product';
+  period: 'transaction' | 'day' | 'week' | 'month' | 'lifetime';
+  value: number;
+}) => {
+  const [existing] = (await db
+    .select({ id: campaignPolicies.id })
+    .from(campaignPolicies)
+    .where(
+      and(
+        eq(campaignPolicies.campaignId, payload.campaignId),
+        eq(campaignPolicies.policyType, payload.policyType),
+        eq(campaignPolicies.scopeType, payload.scopeType),
+        eq(campaignPolicies.period, payload.period),
+      ),
+    )
+    .limit(1)) as Array<{ id: string }>;
+
+  if (existing) {
+    await db
+      .update(campaignPolicies)
+      .set({
+        value: payload.value,
+        active: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(campaignPolicies.id, existing.id));
+    return;
+  }
+
+  await db.insert(campaignPolicies).values({
+    campaignId: payload.campaignId,
+    policyType: payload.policyType,
+    scopeType: payload.scopeType,
+    period: payload.period,
+    value: payload.value,
+    active: true,
+    updatedAt: new Date(),
+  });
 };
 
 /**
@@ -939,6 +983,42 @@ export const seedUsers = async (scope: 'development' | 'local' | 'test') => {
         stock: 80,
       }),
     ];
+
+    await ensurePolicy({
+      campaignId,
+      policyType: 'min_amount',
+      scopeType: 'campaign',
+      period: 'transaction',
+      value: 80,
+    });
+    await ensurePolicy({
+      campaignId,
+      policyType: 'max_accumulations',
+      scopeType: 'campaign',
+      period: 'day',
+      value: 3,
+    });
+    await ensurePolicy({
+      campaignId: openCampaignId,
+      policyType: 'min_quantity',
+      scopeType: 'campaign',
+      period: 'transaction',
+      value: 2,
+    });
+    await ensurePolicy({
+      campaignId: openCampaignId,
+      policyType: 'cooldown',
+      scopeType: 'campaign',
+      period: 'day',
+      value: 1,
+    });
+    await ensurePolicy({
+      campaignId: flashCampaignId,
+      policyType: 'min_amount',
+      scopeType: 'campaign',
+      period: 'transaction',
+      value: 120,
+    });
 
     const consumerEmail = `consumer.${scope}@qoa.local`;
     const consumerUserId = userIdsByEmail.get(consumerEmail);

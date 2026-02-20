@@ -69,6 +69,14 @@ type CampaignPolicyRow = {
   updatedAt: Date | null;
 };
 
+type PolicySummary = {
+  policyType: CampaignPolicyRow['policyType'];
+  scopeType: CampaignPolicyRow['scopeType'];
+  period: CampaignPolicyRow['period'];
+  value: number;
+  label: string;
+};
+
 type CampaignListContext = {
   auth: AuthContext | null;
   query: {
@@ -198,22 +206,60 @@ const isUserAuth = (auth: AuthContext): auth is Extract<AuthContext, { type: 'jw
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
-const serializeCampaign = (campaign: CampaignRow) => ({
-  id: campaign.id,
-  key: campaign.key ?? undefined,
-  name: campaign.name,
-  description: campaign.description ?? undefined,
-  cpgId: campaign.cpgId ?? undefined,
-  status: campaign.status,
-  enrollmentMode: campaign.enrollmentMode,
-  startsAt: campaign.startsAt ? campaign.startsAt.toISOString() : undefined,
-  endsAt: campaign.endsAt ? campaign.endsAt.toISOString() : undefined,
-  version: campaign.version,
-  createdBy: campaign.createdBy ?? undefined,
-  updatedBy: campaign.updatedBy ?? undefined,
-  createdAt: campaign.createdAt.toISOString(),
-  updatedAt: campaign.updatedAt ? campaign.updatedAt.toISOString() : undefined,
-});
+const buildPolicyLabel = (entry: Pick<CampaignPolicyRow, 'policyType' | 'scopeType' | 'period' | 'value'>) => {
+  if (entry.policyType === 'min_amount') {
+    return `Compra mínima de $${entry.value.toLocaleString('es-MX')} por ${entry.period}`;
+  }
+
+  if (entry.policyType === 'min_quantity') {
+    return `Compra mínima de ${entry.value} pieza(s) por ${entry.period}`;
+  }
+
+  if (entry.policyType === 'max_accumulations') {
+    return `Máximo ${entry.value} acumulaciones por ${entry.period}`;
+  }
+
+  return `Enfriamiento de ${entry.value} unidad(es) de tiempo por ${entry.period}`;
+};
+
+const deriveCampaignTiming = (campaign: CampaignRow) => {
+  if (!campaign.endsAt) {
+    return {
+      daysRemaining: undefined,
+      isExpired: false,
+    };
+  }
+
+  const diffMs = campaign.endsAt.getTime() - Date.now();
+  const daysRemaining = Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+  return {
+    daysRemaining,
+    isExpired: daysRemaining < 0,
+  };
+};
+
+const serializeCampaign = (campaign: CampaignRow, policySummaries: PolicySummary[] = []) => {
+  const timing = deriveCampaignTiming(campaign);
+  return {
+    id: campaign.id,
+    key: campaign.key ?? undefined,
+    name: campaign.name,
+    description: campaign.description ?? undefined,
+    cpgId: campaign.cpgId ?? undefined,
+    status: campaign.status,
+    enrollmentMode: campaign.enrollmentMode,
+    startsAt: campaign.startsAt ? campaign.startsAt.toISOString() : undefined,
+    endsAt: campaign.endsAt ? campaign.endsAt.toISOString() : undefined,
+    version: campaign.version,
+    createdBy: campaign.createdBy ?? undefined,
+    updatedBy: campaign.updatedBy ?? undefined,
+    createdAt: campaign.createdAt.toISOString(),
+    updatedAt: campaign.updatedAt ? campaign.updatedAt.toISOString() : undefined,
+    daysRemaining: timing.daysRemaining,
+    isExpired: timing.isExpired,
+    policySummaries,
+  };
+};
 
 const serializeAuditLog = (entry: CampaignAuditRow) => ({
   id: entry.id,
@@ -455,8 +501,31 @@ export const campaignsModule = new Elysia({
         .orderBy(desc(campaigns.createdAt))) as CampaignRow[];
 
       const filtered = rows.filter((row) => row.enrollmentMode !== 'system_universal');
+
+      const policyEntries = await Promise.all(
+        filtered.map(async (campaign) => {
+          const rows = (await db
+            .select()
+            .from(campaignPolicies)
+            .where(and(eq(campaignPolicies.campaignId, campaign.id), eq(campaignPolicies.active, true)))
+            .orderBy(desc(campaignPolicies.createdAt))) as CampaignPolicyRow[];
+
+          return [
+            campaign.id,
+            rows.slice(0, 4).map((entry) => ({
+              policyType: entry.policyType,
+              scopeType: entry.scopeType,
+              period: entry.period,
+              value: entry.value,
+              label: buildPolicyLabel(entry),
+            })),
+          ] as const;
+        }),
+      );
+      const policyMap = new Map<string, PolicySummary[]>(policyEntries);
+
       return {
-        data: filtered.map(serializeCampaign),
+        data: filtered.map((campaign) => serializeCampaign(campaign, policyMap.get(campaign.id) ?? [])),
         pagination: {
           hasMore: false,
         },
@@ -490,6 +559,8 @@ export const campaignsModule = new Elysia({
           cs.campaign_id as "campaignId",
           c.name as "campaignName",
           c.enrollment_mode as "enrollmentMode",
+          c.starts_at as "startsAt",
+          c.ends_at as "endsAt",
           cs.status,
           cs.subscribed_at as "subscribedAt"
         from campaign_subscriptions cs
@@ -500,15 +571,57 @@ export const campaignsModule = new Elysia({
         campaignId: string;
         campaignName: string;
         enrollmentMode: 'open' | 'opt_in' | 'system_universal';
+        startsAt: Date | null;
+        endsAt: Date | null;
         status: string;
         subscribedAt: Date | null;
       }>;
+
+      const policyEntries = await Promise.all(
+        rows.map(async (entry) => {
+          const items = (await db
+            .select()
+            .from(campaignPolicies)
+            .where(and(eq(campaignPolicies.campaignId, entry.campaignId), eq(campaignPolicies.active, true)))
+            .orderBy(desc(campaignPolicies.createdAt))) as CampaignPolicyRow[];
+
+          return [
+            entry.campaignId,
+            items.slice(0, 4).map((policy) => ({
+              policyType: policy.policyType,
+              scopeType: policy.scopeType,
+              period: policy.period,
+              value: policy.value,
+              label: buildPolicyLabel(policy),
+            })),
+          ] as const;
+        }),
+      );
+      const policyMap = new Map<string, PolicySummary[]>(policyEntries);
 
       return {
         data: rows.map((row) => ({
           campaignId: row.campaignId,
           campaignName: row.campaignName,
           enrollmentMode: row.enrollmentMode,
+          startsAt:
+            row.startsAt instanceof Date
+              ? row.startsAt.toISOString()
+              : typeof row.startsAt === 'string'
+                ? new Date(row.startsAt).toISOString()
+                : undefined,
+          endsAt:
+            row.endsAt instanceof Date
+              ? row.endsAt.toISOString()
+              : typeof row.endsAt === 'string'
+                ? new Date(row.endsAt).toISOString()
+                : undefined,
+          daysRemaining:
+            row.endsAt instanceof Date
+              ? Math.ceil((row.endsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+              : typeof row.endsAt === 'string'
+                ? Math.ceil((new Date(row.endsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+                : undefined,
           status: row.status,
           subscribedAt:
             row.subscribedAt instanceof Date
@@ -516,6 +629,7 @@ export const campaignsModule = new Elysia({
               : typeof row.subscribedAt === 'string'
                 ? new Date(row.subscribedAt).toISOString()
                 : undefined,
+          policySummaries: policyMap.get(row.campaignId) ?? [],
         })),
       };
     },
@@ -695,7 +809,7 @@ export const campaignsModule = new Elysia({
       const nextCursor = hasMore ? items[items.length - 1]?.createdAt.toISOString() : null;
 
       return {
-        data: items.map(serializeCampaign),
+        data: items.map((item) => serializeCampaign(item)),
         pagination: {
           hasMore,
           nextCursor: nextCursor ?? undefined,
