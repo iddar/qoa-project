@@ -305,10 +305,11 @@ export default function ProductsPage() {
                 }}
               >
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  <label htmlFor="product-brand" className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                     Marca <span className="text-red-400">*</span>
                   </label>
                   <select
+                    id="product-brand"
                     value={form.brandId}
                     onChange={(e) => setForm((p) => ({ ...p, brandId: e.target.value }))}
                     required
@@ -329,10 +330,11 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  <label htmlFor="product-name" className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                     Nombre del producto <span className="text-red-400">*</span>
                   </label>
                   <input
+                    id="product-name"
                     value={form.name}
                     onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                     required
@@ -344,10 +346,11 @@ export default function ProductsPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  <label htmlFor="product-sku" className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                     SKU <span className="text-red-400">*</span>
                   </label>
                   <input
+                    id="product-sku"
                     value={form.sku}
                     onChange={(e) => setForm((p) => ({ ...p, sku: e.target.value.toUpperCase() }))}
                     required

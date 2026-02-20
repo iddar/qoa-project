@@ -233,9 +233,10 @@ export default function CampaignsPage() {
                 createCampaign.mutate();
               }}
             >
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="campaign-name" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Nombre
                 <input
+                  id="campaign-name"
                   required
                   minLength={3}
                   value={form.name}
@@ -244,9 +245,10 @@ export default function CampaignsPage() {
                 />
               </label>
 
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="campaign-description" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Descripción
                 <textarea
+                  id="campaign-description"
                   value={form.description}
                   onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
                   className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"

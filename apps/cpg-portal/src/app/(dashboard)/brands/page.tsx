@@ -234,10 +234,11 @@ export default function BrandsPage() {
               }}
             >
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                <label htmlFor="brand-name" className="mb-1.5 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   Nombre <span className="text-red-400">*</span>
                 </label>
                 <input
+                  id="brand-name"
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                   required

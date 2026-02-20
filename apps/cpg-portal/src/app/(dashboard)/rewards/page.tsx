@@ -261,9 +261,10 @@ export default function RewardsPage() {
                 createRewardMutation.mutate();
               }}
             >
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="reward-campaign" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Campana
                 <select
+                  id="reward-campaign"
                   required
                   value={formCampaignId}
                   onChange={(event) => setForm((prev) => ({ ...prev, campaignId: event.target.value }))}
@@ -278,9 +279,10 @@ export default function RewardsPage() {
                 </select>
               </label>
 
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="reward-name" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Nombre
                 <input
+                  id="reward-name"
                   required
                   minLength={3}
                   value={form.name}
@@ -289,9 +291,10 @@ export default function RewardsPage() {
                 />
               </label>
 
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="reward-description" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Descripcion
                 <textarea
+                  id="reward-description"
                   value={form.description}
                   onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
                   className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
@@ -299,9 +302,10 @@ export default function RewardsPage() {
               </label>
 
               <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                <label htmlFor="reward-cost" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   Costo (pts)
                   <input
+                    id="reward-cost"
                     required
                     type="number"
                     min={1}
@@ -310,9 +314,10 @@ export default function RewardsPage() {
                     className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
                 </label>
-                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                <label htmlFor="reward-stock" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   Stock
                   <input
+                    id="reward-stock"
                     required
                     type="number"
                     min={0}

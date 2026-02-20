@@ -3,3 +3,5 @@ node_modules
 .env
 .obsidian
 .next
+global/e2e/report
+global/e2e/test-results
