@@ -66,6 +66,13 @@ export default function StoreReportsPage() {
   const daily = (summaryQuery.data?.data.daily ?? []) as DailyPoint[];
   const last15 = daily.slice(-15);
   const maxSales = Math.max(...last15.map((row) => row.salesAmount), 1);
+  const salesBarWidth = (salesAmount: number) => {
+    if (salesAmount <= 0) {
+      return 0;
+    }
+
+    return Math.max(4, Math.round((salesAmount / maxSales) * 100));
+  };
   const totals = useMemo(
     () => ({
       transactions: last15.reduce((acc, row) => acc + row.transactions, 0),
@@ -128,7 +135,7 @@ export default function StoreReportsPage() {
             <div key={`${String(day.date)}-${day.transactions}`} className="grid grid-cols-[70px_1fr_90px] items-center gap-3 text-xs">
               <span className="text-zinc-500">{toDayLabel(day.date)}</span>
               <div className="h-2 rounded bg-zinc-100 dark:bg-zinc-800">
-                <div className="h-2 rounded bg-amber-400 dark:bg-amber-500" style={{ width: `${Math.max(4, Math.round((day.salesAmount / maxSales) * 100))}%` }} />
+                <div className="h-2 rounded bg-amber-400 dark:bg-amber-500" style={{ width: `${salesBarWidth(day.salesAmount)}%` }} />
               </div>
               <span className="text-right text-zinc-600 dark:text-zinc-300">{formatMoney(day.salesAmount)}</span>
             </div>
