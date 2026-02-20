@@ -137,6 +137,7 @@
 - Seeds de QA ampliados: usuario `store.<entorno>@qoa.local` con tenant store asociado y fixtures base (store/brand/product/campaña/recompensa).
 - Seeds enriquecidos (`development`/`local`): 30 días de actividad demo (transacciones, acumulaciones y canjes) + campañas/recompensas adicionales para dashboards y métricas.
 - UX refresh transversal: CPG dashboard/campañas/recompensas con mayor contexto operativo, Store Dashboard clientes con KPIs útiles y Wallet rewards con catálogo unificado + objetivos bloqueados (FOMO).
+- Wallet y campañas v2.2: home/navegación/historial simplificados, reglas visibles por campaña y vigencia (inicio/fin/días restantes) en wallet, CPG Portal y backoffice.
 
 **Estructura del proyecto:**
 ```
