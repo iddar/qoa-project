@@ -13,9 +13,22 @@ type StoreItem = {
 };
 
 type DailyPoint = {
-  date: string;
+  date: string | Date | number;
   transactions: number;
   salesAmount: number;
+};
+
+const toDayLabel = (value: string | Date | number) => {
+  if (typeof value === "string") {
+    return value.length >= 10 ? value.slice(5, 10) : value;
+  }
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return "--";
+  }
+
+  return parsed.toISOString().slice(5, 10);
 };
 
 const formatMoney = (value: number) =>
@@ -132,9 +145,9 @@ export default function StoreHomePage() {
         <div className="mt-4 flex h-36 items-end gap-2">
           {dailyLastWeek.length === 0 && <p className="text-xs text-zinc-400">Sin datos aún.</p>}
           {dailyLastWeek.map((point) => (
-            <div key={point.date} className="flex flex-1 flex-col items-center justify-end gap-2">
+            <div key={`${String(point.date)}-${point.transactions}`} className="flex flex-1 flex-col items-center justify-end gap-2">
               <div className="w-full rounded bg-amber-300/70 dark:bg-amber-500/40" style={{ height: `${Math.max(8, Math.round((point.transactions / maxTx) * 100))}%` }} />
-              <p className="text-[10px] text-zinc-400">{point.date.slice(5)}</p>
+              <p className="text-[10px] text-zinc-400">{toDayLabel(point.date)}</p>
             </div>
           ))}
         </div>
