@@ -28,6 +28,16 @@ type RewardItem = {
   status: "active" | "inactive";
 };
 
+type WalletCurrentTier = {
+  id: string;
+  name: string;
+  order: number;
+  windowUnit: "day" | "month" | "year";
+  windowValue: number;
+  minPurchaseCount?: number;
+  minPurchaseAmount?: number;
+};
+
 export default function WalletHomePage() {
   const token = getAccessToken();
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
@@ -132,6 +142,8 @@ export default function WalletHomePage() {
         payload: qrQuery.data.data.payload,
       })
     : "";
+  const currentTier = walletQuery.data?.data.card.currentTier as WalletCurrentTier | undefined;
+  const tierState = walletQuery.data?.data.card.tierState as "unqualified" | "qualified" | "at_risk" | undefined;
 
   return (
     <div className="space-y-4">
@@ -142,10 +154,20 @@ export default function WalletHomePage() {
             <p className="text-xs uppercase tracking-[0.18em] text-amber-800 dark:text-amber-300">Tarjeta de lealtad</p>
             <p className="mt-2 text-6xl font-extrabold leading-none text-zinc-900 dark:text-zinc-100">{walletQuery.data?.data.totals.current ?? 0}</p>
             <p className="mt-1 text-4xl font-bold text-zinc-900 dark:text-zinc-100">Mis puntos</p>
-            <p className="mt-6 text-sm text-zinc-700 dark:text-zinc-300">Estado: <b>{walletQuery.data?.data.card.status ?? "active"}</b></p>
-            <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
-              Alta: {walletQuery.data?.data.card.createdAt ? new Date(walletQuery.data.data.card.createdAt).toLocaleDateString("es-MX") : "--"}
-            </p>
+             <p className="mt-6 text-sm text-zinc-700 dark:text-zinc-300">Estado: <b>{walletQuery.data?.data.card.status ?? "active"}</b></p>
+             <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
+               Nivel: <b>{currentTier ? `${currentTier.order} · ${currentTier.name}` : "Base"}</b>
+               {tierState === "at_risk" ? " (en riesgo)" : ""}
+             </p>
+             <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
+               Alta: {walletQuery.data?.data.card.createdAt ? new Date(walletQuery.data.data.card.createdAt).toLocaleDateString("es-MX") : "--"}
+             </p>
+
+             {currentTier && (
+               <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                 Ventana de mantenimiento: {currentTier.windowValue} {currentTier.windowUnit}(s)
+               </p>
+             )}
 
             {qrValue && (
               <button

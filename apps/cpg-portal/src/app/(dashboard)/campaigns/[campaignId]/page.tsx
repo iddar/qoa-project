@@ -20,6 +20,20 @@ type CampaignStatus =
 type PolicyType = "max_accumulations" | "min_amount" | "min_quantity" | "cooldown";
 type ScopeType = "campaign" | "brand" | "product";
 type PeriodType = "transaction" | "day" | "week" | "month" | "lifetime";
+type TierWindowUnit = "day" | "month" | "year";
+type TierQualificationMode = "any" | "all";
+
+type TierForm = {
+  name: string;
+  order: number;
+  thresholdValue: number;
+  windowUnit: TierWindowUnit;
+  windowValue: number;
+  minPurchaseCount: number;
+  minPurchaseAmount: number;
+  qualificationMode: TierQualificationMode;
+  graceDays: number;
+};
 
 type PolicyForm = {
   policyType: PolicyType;
@@ -46,6 +60,19 @@ type CampaignPolicy = {
   scopeType: ScopeType;
   period: PeriodType;
   value: number;
+};
+
+type CampaignTier = {
+  id: string;
+  name: string;
+  order: number;
+  thresholdValue: number;
+  windowUnit: TierWindowUnit;
+  windowValue: number;
+  minPurchaseCount?: number;
+  minPurchaseAmount?: number;
+  qualificationMode: TierQualificationMode;
+  graceDays: number;
 };
 
 type AuditItem = {
@@ -82,6 +109,18 @@ const emptyPolicyForm: PolicyForm = {
   value: 1,
 };
 
+const emptyTierForm: TierForm = {
+  name: "",
+  order: 1,
+  thresholdValue: 1,
+  windowUnit: "day",
+  windowValue: 90,
+  minPurchaseCount: 1,
+  minPurchaseAmount: 0,
+  qualificationMode: "any",
+  graceDays: 7,
+};
+
 const nextStatusAction: Partial<Record<CampaignStatus, { label: string; action: "ready" | "review" | "confirm" | "activate" }>> = {
   draft: { label: "Enviar a revisión", action: "ready" },
   rejected: { label: "Reenviar a revisión", action: "ready" },
@@ -114,6 +153,7 @@ export default function CampaignDetailPage() {
   const queryClient = useQueryClient();
 
   const [policyForm, setPolicyForm] = useState<PolicyForm>(emptyPolicyForm);
+  const [tierForm, setTierForm] = useState<TierForm>(emptyTierForm);
 
   const campaignQuery = useQuery({
     queryKey: ["campaign", campaignId],
@@ -158,6 +198,18 @@ export default function CampaignDetailPage() {
         query: {
           limit: "20",
         },
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const tiersQuery = useQuery({
+    queryKey: ["campaign-tiers", campaignId],
+    queryFn: async () => {
+      const { data, error } = await api.v1.campaigns({ campaignId }).tiers.get({
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -281,11 +333,43 @@ export default function CampaignDetailPage() {
     },
   });
 
+  const createTierMutation = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await api.v1.campaigns({ campaignId }).tiers.post(
+        {
+          name: tierForm.name,
+          order: tierForm.order,
+          thresholdValue: tierForm.thresholdValue,
+          windowUnit: tierForm.windowUnit,
+          windowValue: tierForm.windowValue,
+          minPurchaseCount: tierForm.minPurchaseCount > 0 ? tierForm.minPurchaseCount : undefined,
+          minPurchaseAmount: tierForm.minPurchaseAmount > 0 ? tierForm.minPurchaseAmount : undefined,
+          qualificationMode: tierForm.qualificationMode,
+          graceDays: tierForm.graceDays,
+          benefits: [],
+        },
+        {
+          headers: { authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      setTierForm(emptyTierForm);
+      queryClient.invalidateQueries({ queryKey: ["campaign-tiers", campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-audit", campaignId] });
+    },
+  });
+
   const campaign = campaignQuery.data?.data;
   const currentStatus = campaign?.status as CampaignStatus | undefined;
   const transitionInfo = currentStatus ? nextStatusAction[currentStatus] : undefined;
 
   const policies = (policiesQuery.data?.data ?? []) as CampaignPolicy[];
+  const tiers = (tiersQuery.data?.data ?? []) as CampaignTier[];
   const auditItems = (auditQuery.data?.data ?? []) as AuditItem[];
   const rewards = (rewardsQuery.data?.data ?? []) as Array<{ status: string; stock?: number }>;
   const activeRewards = rewards.filter((reward) => reward.status === "active").length;
@@ -442,6 +526,26 @@ export default function CampaignDetailPage() {
           </div>
 
           <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tiers por ventana</h2>
+            <ul className="mt-3 space-y-2">
+              {tiers.length === 0 && <li className="text-xs text-zinc-500 dark:text-zinc-400">Sin tiers configurados.</li>}
+              {tiers.map((tier: CampaignTier) => (
+                <li key={tier.id} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+                  <p className="font-medium text-zinc-800 dark:text-zinc-200">Nivel {tier.order}: {tier.name}</p>
+                  <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
+                    ventana {tier.windowValue} {tier.windowUnit}(s) · modo {tier.qualificationMode} · gracia {tier.graceDays} dia(s)
+                  </p>
+                  <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
+                    requisitos: {tier.minPurchaseCount ? `${tier.minPurchaseCount} compras` : "-"}
+                    {tier.minPurchaseCount && tier.minPurchaseAmount ? " o " : ""}
+                    {tier.minPurchaseAmount ? `$${tier.minPurchaseAmount.toLocaleString("es-MX")}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Nueva politica</h2>
             <form
               className="mt-3 space-y-3"
@@ -544,6 +648,133 @@ export default function CampaignDetailPage() {
                 className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 {createPolicyMutation.isPending ? "Guardando..." : "Agregar politica"}
+              </button>
+            </form>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Nuevo tier</h2>
+            <form
+              className="mt-3 space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                createTierMutation.mutate();
+              }}
+            >
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Nombre
+                <input
+                  required
+                  value={tierForm.name}
+                  onChange={(event) => setTierForm((prev) => ({ ...prev, name: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Orden
+                  <input
+                    type="number"
+                    min={1}
+                    value={tierForm.order}
+                    onChange={(event) => setTierForm((prev) => ({ ...prev, order: Number(event.target.value) }))}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Threshold
+                  <input
+                    type="number"
+                    min={1}
+                    value={tierForm.thresholdValue}
+                    onChange={(event) => setTierForm((prev) => ({ ...prev, thresholdValue: Number(event.target.value) }))}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Ventana
+                  <select
+                    value={tierForm.windowUnit}
+                    onChange={(event) => setTierForm((prev) => ({ ...prev, windowUnit: event.target.value as TierWindowUnit }))}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    <option value="day">day</option>
+                    <option value="month">month</option>
+                    <option value="year">year</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Valor ventana
+                  <input
+                    type="number"
+                    min={1}
+                    value={tierForm.windowValue}
+                    onChange={(event) => setTierForm((prev) => ({ ...prev, windowValue: Number(event.target.value) }))}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Min compras
+                  <input
+                    type="number"
+                    min={0}
+                    value={tierForm.minPurchaseCount}
+                    onChange={(event) => setTierForm((prev) => ({ ...prev, minPurchaseCount: Number(event.target.value) }))}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Min monto
+                  <input
+                    type="number"
+                    min={0}
+                    value={tierForm.minPurchaseAmount}
+                    onChange={(event) => setTierForm((prev) => ({ ...prev, minPurchaseAmount: Number(event.target.value) }))}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Modo
+                  <select
+                    value={tierForm.qualificationMode}
+                    onChange={(event) =>
+                      setTierForm((prev) => ({ ...prev, qualificationMode: event.target.value as TierQualificationMode }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    <option value="any">any</option>
+                    <option value="all">all</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Dias de gracia
+                  <input
+                    type="number"
+                    min={0}
+                    max={90}
+                    value={tierForm.graceDays}
+                    onChange={(event) => setTierForm((prev) => ({ ...prev, graceDays: Number(event.target.value) }))}
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={createTierMutation.isPending}
+                className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {createTierMutation.isPending ? "Guardando..." : "Agregar tier"}
               </button>
             </form>
           </div>
