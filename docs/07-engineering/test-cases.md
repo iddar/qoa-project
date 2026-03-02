@@ -1,80 +1,80 @@
 # Casos de Uso - Tests E2E
 
-> Documentación de escenarios de prueba end-to-end cubiertos por Playwright.
-> Este documento sirve como referencia para el equipo sobre qué flujos están automatizados
-> y qué escenarios requieren cobertura adicional.
+> Documentación de los escenarios end-to-end cubiertos por Playwright.
+> Este documento ayuda al equipo a entender qué flujos ya están automatizados,
+> qué errores se validan y qué escenarios siguen pendientes.
 
 ---
 
 ## Flujos Principales (Happy Path)
 
-Los siguientes flujos representan el ciclo de vida principal de la plataforma y están cubiertos por tests E2E automatizados.
+Los siguientes flujos representan el ciclo de vida principal de la plataforma y cuentan con cobertura automatizada.
 
-| ID           | Nombre                       | Descripción                                                         | Archivo                                                |     |
-| ------------ | ---------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------ | --- |
-| E2E-FLOW-001 | Ciclo completo de plataforma | Backoffice → CPG Portal → Wallet → Store Dashboard                  | `global/e2e/specs/full-platform-flow.spec.ts`          |     |
-| E2E-FLOW-002 | Propagación Store → Wallet   | Tienda registra transacción → Consumidor ve en historial            | `global/e2e/specs/store-to-wallet-propagation.spec.ts` |     |
-| E2E-FLOW-003 | Compra manual desde Wallet   | Consumidor suscribe → Registra compra via payload → Ver acumulación | `global/e2e/specs/wallet-manual-purchase-flow.spec.ts` |     |
+| ID | Nombre | Descripción | Archivo |
+|----|--------|-------------|---------|
+| E2E-FLOW-001 | Ciclo completo de plataforma | Backoffice -> CPG Portal -> Wallet -> Store Dashboard | `global/e2e/specs/full-platform-flow.spec.ts` |
+| E2E-FLOW-002 | Propagación Store -> Wallet | La tienda registra una transacción y el consumidor la ve en su historial | `global/e2e/specs/store-to-wallet-propagation.spec.ts` |
+| E2E-FLOW-003 | Compra manual desde Wallet | El consumidor se suscribe y registra una compra mediante payload | `global/e2e/specs/wallet-manual-purchase-flow.spec.ts` |
 
 ### E2E-FLOW-001: Ciclo Completo de Plataforma
 
 #### Historia
 
-> María es gerente de marca en una empresa de bebidas. Necesita lanzar una campaña de lealtad para promover sus productos en tiendas de conveniencia. Simultaneously, Juan es un consumidor que quiere participar y acumular puntos por sus compras.
->
-> Este test verifica que todo el ecosistema funcione en harmony: desde que el admin crea la tienda en el backoffice, pasando por la configuración de campaña en el portal CPG, hasta que Juan puede ver sus transacciones reflejadas en su wallet digital.
+María, gerente de marca en un CPG, necesita lanzar una campaña de lealtad para impulsar ventas en tiendas de conveniencia. Primero, el equipo de Qoa habilita la tienda desde Backoffice. Después, el equipo CPG crea la marca, el producto, la campaña y la recompensa, y avanza la campaña por todo el ciclo de estados hasta dejarla activa.
 
-**Actors:** Admin Qoa → CPG Manager → Consumidor
+Cuando la campaña ya está publicada, Juan (consumidor) se registra en la wallet, se suscribe y compra en tienda. El objetivo de este test es validar de punta a punta que todas las piezas del ecosistema funcionen juntas: configuración, suscripción, transacción y visibilidad en el historial del usuario.
+
+**Actores:** Admin Qoa -> CPG Manager -> Consumidor
 
 **Precondiciones:**
-- Usuario admin autenticado en backoffice
+- Usuario admin autenticado en Backoffice
 - Usuario CPG autenticado en CPG Portal
 
 **Pasos:**
-1. Backoffice: Crear tienda (nombre, tipo)
-2. CPG Portal: Crear marca, producto y campaña
-3. CPG Portal: Configurar políticas de campaña
-4. CPG Portal: Ejecutar lifecycle (draft → ready → review → confirm → active)
-5. CPG Portal: Crear recompensa con stock
-6. Wallet: Registro de consumidor con signup
-7. Wallet: Suscribirse a campaña activa
-8. Wallet: Ver recompensas disponibles
-9. Store Dashboard: Registrar transacción (cardId, productId, cantidad, monto)
-10. Wallet: Ver transacción en historial
+1. Backoffice: crear tienda (nombre y tipo)
+2. CPG Portal: crear marca, producto y campaña
+3. CPG Portal: configurar políticas de campaña
+4. CPG Portal: ejecutar lifecycle (draft -> ready -> review -> confirm -> active)
+5. CPG Portal: crear recompensa con stock
+6. Wallet: registrar consumidor con signup
+7. Wallet: suscribirse a campaña activa
+8. Wallet: validar visibilidad de recompensas
+9. Store Dashboard: registrar transacción (cardId, productId, cantidad, monto)
+10. Wallet: validar transacción en historial
 
 **Validaciones:**
 - Tienda creada correctamente
-- Campaña alcanza estado `active`
+- Campaña en estado `active`
 - Recompensa visible en wallet
-- Transacción propagada a historial del consumidor
+- Transacción reflejada en historial del consumidor
 
 ---
 
-### E2E-FLOW-002: Propagación Store → Wallet
+### E2E-FLOW-002: Propagación Store -> Wallet
 
 #### Historia
 
-> Ana es tendera en una tiendita de la esquina. Un cliente frecuentelega con sus productos y ella registra la compra usando el código de la tarjeta del cliente. El cliente, sin saberlo, recibe automáticamente la acumulación en su wallet y puede consultarlo después desde su celular.
->
-> Este test valida que la información fluye correctamente desde el Store Dashboard hasta la Digital Wallet del consumidor, sin necesidad de intervención manual.
+Ana atiende una tienda de barrio y registra una compra con los datos de la tarjeta del cliente. El consumidor no necesita hacer ningún paso adicional: la transacción debe viajar desde el sistema de tienda hasta su wallet de forma automática.
 
-**Actors:** Store Dashboard → Digital Wallet
+Este test confirma que la sincronización entre Store Dashboard y Wallet es confiable. Si este flujo falla, el usuario pierde confianza porque su compra no aparece, aunque haya sido registrada correctamente en el punto de venta.
+
+**Actores:** Store Dashboard -> Digital Wallet
 
 **Precondiciones:**
 - Consumidor existente con wallet activa
-- Producto seed disponible (SKU: SEED-DEVELOPMENT-001)
+- Producto seed disponible (`SEED-DEVELOPMENT-001`)
 
 **Pasos:**
-1. Obtener card del consumidor via API
-2. Store Dashboard: Registrar transacción con cardId
-3. Verificar aumento en contador de transacciones
-4. Wallet: Acceder a historial de transacciones
-5. Validar que la nueva transacción aparece
+1. Obtener card del consumidor vía API
+2. Store Dashboard: registrar transacción con `cardId`
+3. Verificar incremento en contador de transacciones
+4. Wallet: abrir historial de transacciones
+5. Confirmar que la nueva transacción aparece
 
 **Validaciones:**
 - Transacción registrada exitosamente
-- Contador de transacciones aumenta
-- Transacción visible en wallet
+- El total de transacciones incrementa
+- La transacción es visible en wallet
 
 ---
 
@@ -82,121 +82,99 @@ Los siguientes flujos representan el ciclo de vida principal de la plataforma y 
 
 #### Historia
 
-> Pedro es un consumidor que no siempre tiene su tarjeta física a la mano. Un día compra en una tienda que no tiene escáner, pero igual quiere acumular sus puntos. Abre su wallet, selecciona la opción de registro manual, ingresa los datos de su compra y listo: sus puntos se acumulan automáticamente.
->
-> Este test cubre el flujo alternativo donde el propio consumidor registra su compra desde la app cuando el método QR no está disponible.
+Pedro compra en una tienda que no tiene escáner disponible en ese momento, pero no quiere perder su acumulación. Desde la wallet, registra la compra manualmente con el payload de la transacción y espera ver su movimiento reflejado en el historial.
 
-**Actors:** Consumidor
+Este test cubre un camino alternativo clave para operación real: incluso cuando no hay lectura directa en tienda, el consumidor puede registrar su compra y mantener continuidad en su programa de lealtad.
+
+**Actores:** Consumidor
 
 **Precondiciones:**
-- Consumidor autenticado en wallet
-- Tienda seed disponible (code: seed_store_development)
+- Consumidor autenticado en Wallet
+- Tienda seed disponible (`seed_store_development`)
 - Producto seed disponible
 - Campaña "Reto Seed" activa
 
 **Pasos:**
-1. Wallet: Navegar a campañas
-2. Suscribirse a campaña (si no está suscrito)
-3. Wallet: Navegar a compra manual
-4. Completar payload JSON con storeId, items, monto
+1. Wallet: navegar a campañas
+2. Suscribirse a campaña (si aún no está suscrito)
+3. Wallet: navegar a compra manual
+4. Completar payload JSON con `storeId`, `items`, `amount`
 5. Enviar registro de compra
 6. Verificar acumulación en historial
 
 **Validaciones:**
-- Susripción a campaña exitosa
+- Suscripción a campaña exitosa
 - Compra registrada exitosamente
-- Acumulación reflejada en balance
+- Acumulación reflejada en balance/historial
 
 ---
 
 ## Escenarios de Error Cubiertos
 
-Los siguientes escenarios de error están validados en los specs de integración (`src/spec/*.spec.ts`). Estos representan las situaciones donde el sistema debe responder de forma adecuada cuando las cosas no salen como se espera.
+Los siguientes errores están validados en los specs de integración (`src/spec/*.spec.ts`).
+La meta es asegurar que, cuando una acción no es válida, la API responda con el código correcto y un comportamiento consistente.
 
-> Cuando un usuario intenta acceder sin token, o un CPG intenta ver datos de otro, el sistema debe rechazar la petición con el código de error apropiado.
+> En términos de negocio: el sistema no solo debe funcionar cuando todo sale bien; también debe fallar de forma clara, segura y predecible.
 
-| ID | Escenario | Código de Error | Archivo de Test |
-|----|-----------|------------------|-----------------|
-| E2E-ERR-001 | Acceso sin autenticación | `UNAUTHORIZED` | Múltiples spec files |
-| E2E-ERR-002 | Recurso no encontrado | `NOT_FOUND` | campaigns.spec.ts |
-| E2E-ERR-003 | Acceso a otro tenant | `FORBIDDEN` | reports.spec.ts |
-| E2E-ERR-004 | Saldo insuficiente para canje | `INSUFFICIENT_BALANCE` | rewards.spec.ts |
-| E2E-ERR-005 | Campaña inactiva | `CAMPAIGN_NOT_ACTIVE` | campaigns.spec.ts |
-| E2E-ERR-006 | Transición de estado inválida | `INVALID_STATUS_TRANSITION` | campaigns.spec.ts |
-| E2E-ERR-007 | Usuario duplicado | `USER_EXISTS` | auth.spec.ts |
-| E2E-ERR-008 | Usuario bloqueado | `ACCOUNT_BLOCKED` | auth.spec.ts |
-
-### Detalle de Errores de Integración
-
-#### E2E-ERR-001: Acceso sin autenticación
-```typescript
-// src/spec/auth.spec.ts
-test("expects 401 for missing token", async ({ request }) => {
-  const response = await request.get("/v1/users/me");
-  expect(response.status()).toBe(401);
-});
-```
-
-#### E2E-ERR-003: Acceso a otro tenant (FORBIDDEN)
-```typescript
-// src/spec/reports.spec.ts
-test("cpg summary rejects foreign cpg", async ({ request }) => {
-  const token = await login(request, "other_cpg@qoa.local", "password");
-  const response = await request.get("/v1/reports/cpgs/foreign-id/summary", {
-    headers: { Authorization: `Bearer ${token}` }
-  });
-  expect(response.status()).toBe(403);
-});
-```
+| ID | Escenario | Código de error | Archivo de test |
+|----|-----------|-----------------|-----------------|
+| E2E-ERR-001 | Acceso sin autenticación | `UNAUTHORIZED` | `src/spec/auth.spec.ts` |
+| E2E-ERR-002 | Recurso no encontrado | `NOT_FOUND` | `src/spec/campaigns.spec.ts` |
+| E2E-ERR-003 | Acceso a otro tenant | `FORBIDDEN` | `src/spec/reports.spec.ts` |
+| E2E-ERR-004 | Saldo insuficiente para canje | `INSUFFICIENT_BALANCE` | `src/spec/rewards.spec.ts` |
+| E2E-ERR-005 | Campaña inactiva | `CAMPAIGN_NOT_ACTIVE` | `src/spec/campaigns.spec.ts` |
+| E2E-ERR-006 | Transición de estado inválida | `INVALID_STATUS_TRANSITION` | `src/spec/campaigns.spec.ts` |
+| E2E-ERR-007 | Usuario duplicado | `USER_EXISTS` | `src/spec/auth.spec.ts` |
+| E2E-ERR-008 | Usuario bloqueado | `ACCOUNT_BLOCKED` | `src/spec/auth.spec.ts` |
+| E2E-ERR-009 | Doble canje de recompensa | `ALREADY_REDEEMED` | `src/spec/rewards.spec.ts` |
 
 ---
 
-## Escenarios NO Cubiertos (Gap Analysis)
+## Escenarios No Cubiertos (Gap Analysis)
 
-Los siguientes escenarios no tienen cobertura de tests automatizados y deben ser considerados para futuras iteraciones.
+Estos escenarios aún no tienen cobertura automatizada y se mantienen como pendientes del roadmap de calidad.
 
-### Alta Prioridad
+### Alta prioridad
 
-| ID | Escenario | Código de Error | Razón del Gap |
-|----|-----------|------------------|---------------|
-| GAP-001 | Doble canje de recompensa | `ALREADY_REDEEMED` | No se ha implementado test de retry |
-| GAP-002 | Rate limiting | `RATE_LIMITED` | Requiere infraestructura de throttling |
-| GAP-003 | Transacciones duplicadas | Idempotency | Webhook retry no validado E2E |
-| GAP-004 | Firma de webhook inválida | `INVALID_WEBHOOK_SIGNATURE` | Solo path happy implementado |
+| ID | Escenario | Código esperado | Razón del gap |
+|----|-----------|-----------------|---------------|
+| GAP-002 | Rate limiting | `RATE_LIMITED` | Requiere infraestructura de throttling para pruebas deterministas |
+| GAP-003 | Transacciones duplicadas | Idempotency | Falta validar comportamiento ante retries de webhook |
+| GAP-004 | Firma de webhook inválida | `INVALID_WEBHOOK_SIGNATURE` | Falta escenario E2E negativo completo |
 
-### Media Prioridad
+### Media prioridad
 
-| ID | Escenario | Código de Error | Razón del Gap |
-|----|-----------|------------------|---------------|
-| GAP-005 | Código de campaña expirado | `CODE_EXPIRED` | Tests de vigencia no implementados |
-| GAP-006 | Política de cooldown | `BUSINESS_RULE_VIOLATION` | Tests de timing no implementados |
-| GAP-007 | Stock de recompensa agotado | `REWARD_OUT_OF_STOCK` | Tests de inventario no implementados |
-| GAP-008 | Campaña expirada | `CAMPAIGN_EXPIRED` | Tests de vigencia no implementados |
+| ID | Escenario | Código esperado | Razón del gap |
+|----|-----------|-----------------|---------------|
+| GAP-005 | Código de campaña expirado | `CODE_EXPIRED` | Falta fixture con control de vigencia |
+| GAP-006 | Política de cooldown | `BUSINESS_RULE_VIOLATION` | Falta simulación de ventanas de tiempo |
+| GAP-007 | Stock de recompensa agotado | `REWARD_OUT_OF_STOCK` | Falta escenario de agotamiento concurrente |
+| GAP-008 | Campaña expirada | `CAMPAIGN_EXPIRED` | Falta prueba basada en fechas de cierre |
 
-### Baja Prioridad
+### Baja prioridad
 
-| ID | Escenario | Código de Error | Razón del Gap |
-|----|-----------|------------------|---------------|
-| GAP-009 | Invalid cursor | `INVALID_CURSOR` | Paginación edge cases |
-| GAP-010 | Sesión expirada | `SESSION_EXPIRED` | Tests de refresh token |
-| GAP-011 | Cuota API excedida | `QUOTA_EXCEEDED` | Límites de API key |
+| ID | Escenario | Código esperado | Razón del gap |
+|----|-----------|-----------------|---------------|
+| GAP-009 | Cursor inválido | `INVALID_CURSOR` | Cobertura de edge cases de paginación pendiente |
+| GAP-010 | Sesión expirada | `SESSION_EXPIRED` | Falta ciclo completo de refresh token expirado |
+| GAP-011 | Cuota API excedida | `QUOTA_EXCEEDED` | Requiere entorno con límites configurados |
 
 ---
 
 ## Matriz de Cobertura
 
-| Módulo | Happy Path | Errores | Gap Principal |
+| Módulo | Happy path | Errores | Gap principal |
 |--------|------------|---------|---------------|
-| Auth | ✅ | ✅ | Refresh token |
-| Users | ✅ | ✅ | - |
-| Stores | ✅ | ⚠️ Parcial | - |
-| Cards | ✅ | ⚠️ Parcial | - |
-| Campaigns | ✅ | ✅ | Vigencia/Expiry |
-| Transactions | ✅ | ⚠️ Parcial | Webhook signature |
-| Rewards | ✅ | ⚠️ Parcial | Double redeem |
-| Reports | ✅ | ✅ | - |
-| WhatsApp | ⚠️ Parcial | ❌ | Firma webhook |
-| Alerts | ⚠️ Parcial | ❌ | - |
+| Auth | Sí | Sí | Refresh token expirado |
+| Users | Sí | Sí | - |
+| Stores | Sí | Parcial | Casos de borde de paginación |
+| Cards | Sí | Parcial | Casos de pertenencia cruzada |
+| Campaigns | Sí | Sí | Vigencia/expiración |
+| Transactions | Sí | Parcial | Firma e idempotencia de webhook |
+| Rewards | Sí | Sí | Agotamiento concurrente de stock |
+| Reports | Sí | Sí | - |
+| WhatsApp | Parcial | Parcial | Firma webhook E2E negativa |
+| Alerts | Parcial | No | Cobertura de errores por canal |
 
 ---
 
