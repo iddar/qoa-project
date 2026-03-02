@@ -36,3 +36,17 @@ export const reminderListResponse = t.Object({
   data: t.Array(reminderJobSchema),
   pagination: paginationSchema,
 });
+
+export const tierRunRequest = t.Object({
+  limit: t.Optional(t.Number({ minimum: 1, maximum: 500 })),
+});
+
+export const tierRunResponse = t.Object({
+  data: t.Object({
+    checked: t.Number(),
+    updated: t.Number(),
+    atRisk: t.Number(),
+    unchanged: t.Number(),
+    runAt: t.String(),
+  }),
+});

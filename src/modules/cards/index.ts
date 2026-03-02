@@ -19,6 +19,8 @@ type CardRow = {
   storeId: string | null;
   code: string;
   currentTierId: string | null;
+  tierGraceUntil: Date | null;
+  tierLastEvaluatedAt: Date | null;
   status: string;
   createdAt: Date;
 };
@@ -52,6 +54,8 @@ export const serializeCard = (card: CardRow) => ({
   storeId: card.storeId ?? undefined,
   code: card.code,
   currentTierId: card.currentTierId ?? undefined,
+  tierGraceUntil: card.tierGraceUntil ? card.tierGraceUntil.toISOString() : undefined,
+  tierLastEvaluatedAt: card.tierLastEvaluatedAt ? card.tierLastEvaluatedAt.toISOString() : undefined,
   status: card.status,
   createdAt: card.createdAt.toISOString(),
 });

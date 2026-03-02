@@ -9,6 +9,8 @@ export const cardSchema = t.Object({
   storeId: t.Optional(t.String()),
   code: t.String(),
   currentTierId: t.Optional(t.String()),
+  tierGraceUntil: t.Optional(t.String()),
+  tierLastEvaluatedAt: t.Optional(t.String()),
   status: t.String(),
   createdAt: t.String(),
 });

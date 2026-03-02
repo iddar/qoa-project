@@ -1,5 +1,6 @@
 import { index, pgEnum, pgTable, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { campaignTiers } from './campaign-tiers';
 import { stores } from './stores';
 import { users } from './users';
 
@@ -24,7 +25,9 @@ export const cards = pgTable(
     campaignId: uuid('campaign_id').notNull(),
     storeId: uuid('store_id').references(() => stores.id, { onDelete: 'set null' }),
     code: varchar('code', { length: 32 }).notNull(),
-    currentTierId: uuid('current_tier_id'),
+    currentTierId: uuid('current_tier_id').references(() => campaignTiers.id, { onDelete: 'set null' }),
+    tierGraceUntil: timestamp('tier_grace_until', { withTimezone: true }),
+    tierLastEvaluatedAt: timestamp('tier_last_evaluated_at', { withTimezone: true }),
     status: cardStatus('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),

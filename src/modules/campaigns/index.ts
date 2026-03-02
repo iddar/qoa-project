@@ -1,10 +1,19 @@
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
-import { Elysia } from 'elysia';
+import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { Elysia, t } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { brands, campaignAuditLogs, campaignPolicies, campaignSubscriptions, campaigns, products } from '../../db/schema';
+import {
+  brands,
+  campaignAuditLogs,
+  campaignPolicies,
+  campaignSubscriptions,
+  campaigns,
+  campaignTiers,
+  products,
+  tierBenefits,
+} from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
 import {
   campaignAuditListResponse,
@@ -19,6 +28,10 @@ import {
   campaignPolicyListResponse,
   campaignPolicyResponse,
   campaignPolicyUpdateRequest,
+  campaignTierCreateRequest,
+  campaignTierListResponse,
+  campaignTierResponse,
+  campaignTierUpdateRequest,
   campaignResponse,
   campaignReviewRequest,
   campaignUpdateRequest,
@@ -67,6 +80,29 @@ type CampaignPolicyRow = {
   active: boolean;
   createdAt: Date;
   updatedAt: Date | null;
+};
+
+type CampaignTierRow = {
+  id: string;
+  campaignId: string;
+  name: string;
+  order: number;
+  thresholdValue: number;
+  windowUnit: 'day' | 'month' | 'year';
+  windowValue: number;
+  minPurchaseCount: number | null;
+  minPurchaseAmount: number | null;
+  qualificationMode: 'any' | 'all';
+  graceDays: number;
+  createdAt: Date;
+  updatedAt: Date | null;
+};
+
+type TierBenefitRow = {
+  id: string;
+  tierId: string;
+  type: 'discount' | 'reward' | 'multiplier' | 'free_product';
+  config: string | null;
 };
 
 type PolicySummary = {
@@ -200,6 +236,60 @@ type CampaignPolicyUpdateContext = {
   status: StatusHandler;
 };
 
+type CampaignTierListContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string };
+  status: StatusHandler;
+};
+
+type CampaignTierCreateContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string };
+  body: {
+    name: string;
+    order: number;
+    thresholdValue: number;
+    windowUnit?: 'day' | 'month' | 'year';
+    windowValue?: number;
+    minPurchaseCount?: number;
+    minPurchaseAmount?: number;
+    qualificationMode?: 'any' | 'all';
+    graceDays?: number;
+    benefits?: Array<{
+      type: TierBenefitRow['type'];
+      config?: string;
+    }>;
+  };
+  status: StatusHandler;
+};
+
+type CampaignTierUpdateContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string; tierId: string };
+  body: {
+    name?: string;
+    order?: number;
+    thresholdValue?: number;
+    windowUnit?: 'day' | 'month' | 'year';
+    windowValue?: number;
+    minPurchaseCount?: number;
+    minPurchaseAmount?: number;
+    qualificationMode?: 'any' | 'all';
+    graceDays?: number;
+    benefits?: Array<{
+      type: TierBenefitRow['type'];
+      config?: string;
+    }>;
+  };
+  status: StatusHandler;
+};
+
+type CampaignTierDeleteContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string; tierId: string };
+  status: StatusHandler;
+};
+
 const isUserAuth = (auth: AuthContext): auth is Extract<AuthContext, { type: 'jwt' | 'dev' }> =>
   auth.type === 'jwt' || auth.type === 'dev';
 
@@ -238,7 +328,11 @@ const deriveCampaignTiming = (campaign: CampaignRow) => {
   };
 };
 
-const serializeCampaign = (campaign: CampaignRow, policySummaries: PolicySummary[] = []) => {
+const serializeCampaign = (
+  campaign: CampaignRow,
+  policySummaries: PolicySummary[] = [],
+  tiers: Array<Record<string, unknown>> = [],
+) => {
   const timing = deriveCampaignTiming(campaign);
   return {
     id: campaign.id,
@@ -258,6 +352,7 @@ const serializeCampaign = (campaign: CampaignRow, policySummaries: PolicySummary
     daysRemaining: timing.daysRemaining,
     isExpired: timing.isExpired,
     policySummaries,
+    tiers,
   };
 };
 
@@ -284,6 +379,53 @@ const serializePolicy = (entry: CampaignPolicyRow) => ({
   createdAt: entry.createdAt.toISOString(),
   updatedAt: entry.updatedAt ? entry.updatedAt.toISOString() : undefined,
 });
+
+const serializeTier = (entry: CampaignTierRow, benefits: TierBenefitRow[] = []) => ({
+  id: entry.id,
+  campaignId: entry.campaignId,
+  name: entry.name,
+  order: entry.order,
+  thresholdValue: entry.thresholdValue,
+  windowUnit: entry.windowUnit,
+  windowValue: entry.windowValue,
+  minPurchaseCount: entry.minPurchaseCount ?? undefined,
+  minPurchaseAmount: entry.minPurchaseAmount ?? undefined,
+  qualificationMode: entry.qualificationMode,
+  graceDays: entry.graceDays,
+  createdAt: entry.createdAt.toISOString(),
+  updatedAt: entry.updatedAt ? entry.updatedAt.toISOString() : undefined,
+  benefits: benefits.map((benefit) => ({
+    id: benefit.id,
+    type: benefit.type,
+    config: benefit.config ?? undefined,
+  })),
+});
+
+const loadTierBenefitsByTierId = async (campaignId: string) => {
+  const tiers = (await db
+    .select({ id: campaignTiers.id })
+    .from(campaignTiers)
+    .where(eq(campaignTiers.campaignId, campaignId))) as Array<{ id: string }>;
+
+  if (tiers.length === 0) {
+    return new Map<string, TierBenefitRow[]>();
+  }
+
+  const tierIds = tiers.map((entry) => entry.id);
+  const benefitRows = (await db
+    .select()
+    .from(tierBenefits)
+    .where(inArray(tierBenefits.tierId, tierIds))) as TierBenefitRow[];
+
+  const byTier = new Map<string, TierBenefitRow[]>();
+  for (const benefit of benefitRows) {
+    const current = byTier.get(benefit.tierId) ?? [];
+    current.push(benefit);
+    byTier.set(benefit.tierId, current);
+  }
+
+  return byTier;
+};
 
 const resolveActorUserId = (auth: AuthContext | null) => {
   if (!auth || !isUserAuth(auth)) {
@@ -946,8 +1088,19 @@ export const campaignsModule = new Elysia({
         });
       }
 
+      const tierRows = (await db
+        .select()
+        .from(campaignTiers)
+        .where(eq(campaignTiers.campaignId, campaign.id))
+        .orderBy(campaignTiers.order, campaignTiers.thresholdValue)) as CampaignTierRow[];
+      const benefitMap = await loadTierBenefitsByTierId(campaign.id);
+
       return {
-        data: serializeCampaign(campaign),
+        data: serializeCampaign(
+          campaign,
+          [],
+          tierRows.map((entry) => serializeTier(entry, benefitMap.get(entry.id) ?? [])),
+        ),
       };
     },
     {
@@ -1332,6 +1485,369 @@ export const campaignsModule = new Elysia({
       },
       detail: {
         summary: 'Actualizar política de campaña',
+      },
+    },
+  )
+  .get(
+    '/:campaignId/tiers',
+    async ({ auth, params, status }: CampaignTierListContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      const tierRows = (await db
+        .select()
+        .from(campaignTiers)
+        .where(eq(campaignTiers.campaignId, campaign.id))
+        .orderBy(campaignTiers.order, campaignTiers.thresholdValue)) as CampaignTierRow[];
+
+      const benefitMap = await loadTierBenefitsByTierId(campaign.id);
+      return {
+        data: tierRows.map((entry) => serializeTier(entry, benefitMap.get(entry.id) ?? [])),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authorizationHeader,
+      response: {
+        200: campaignTierListResponse,
+      },
+      detail: {
+        summary: 'Listar tiers de campaña',
+      },
+    },
+  )
+  .post(
+    '/:campaignId/tiers',
+    async ({ auth, params, body, status }: CampaignTierCreateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return status(409, {
+          error: {
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar tiers',
+          },
+        });
+      }
+
+      if (!body.minPurchaseAmount && !body.minPurchaseCount) {
+        return status(400, {
+          error: {
+            code: 'INVALID_ARGUMENT',
+            message: 'Debes enviar minPurchaseCount o minPurchaseAmount',
+          },
+        });
+      }
+
+      const [created] = (await db
+        .insert(campaignTiers)
+        .values({
+          campaignId: campaign.id,
+          name: body.name,
+          order: body.order,
+          thresholdValue: body.thresholdValue,
+          windowUnit: body.windowUnit ?? 'day',
+          windowValue: body.windowValue ?? 90,
+          minPurchaseCount: body.minPurchaseCount ?? null,
+          minPurchaseAmount: body.minPurchaseAmount ?? null,
+          qualificationMode: body.qualificationMode ?? 'any',
+          graceDays: body.graceDays ?? 7,
+          updatedAt: new Date(),
+        })
+        .returning()) as CampaignTierRow[];
+
+      if (!created) {
+        return status(500, {
+          error: {
+            code: 'CAMPAIGN_TIER_CREATE_FAILED',
+            message: 'No se pudo crear el tier',
+          },
+        });
+      }
+
+      if (body.benefits && body.benefits.length > 0) {
+        await db.insert(tierBenefits).values(
+          body.benefits.map((benefit) => ({
+            tierId: created.id,
+            type: benefit.type,
+            config: benefit.config ?? null,
+            updatedAt: new Date(),
+          })),
+        );
+      }
+
+      const benefits = (await db.select().from(tierBenefits).where(eq(tierBenefits.tierId, created.id))) as TierBenefitRow[];
+      await appendAudit(created.campaignId, 'campaign.tier_created', null, auth, {
+        tierId: created.id,
+        order: created.order,
+      });
+
+      return status(201, {
+        data: serializeTier(created, benefits),
+      });
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authorizationHeader,
+      body: campaignTierCreateRequest,
+      response: {
+        201: campaignTierResponse,
+      },
+      detail: {
+        summary: 'Crear tier de campaña',
+      },
+    },
+  )
+  .patch(
+    '/:campaignId/tiers/:tierId',
+    async ({ auth, params, body, status }: CampaignTierUpdateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return status(409, {
+          error: {
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar tiers',
+          },
+        });
+      }
+
+      const [existing] = (await db
+        .select()
+        .from(campaignTiers)
+        .where(and(eq(campaignTiers.id, params.tierId), eq(campaignTiers.campaignId, campaign.id)))) as CampaignTierRow[];
+
+      if (!existing) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_TIER_NOT_FOUND',
+            message: 'Tier no encontrado',
+          },
+        });
+      }
+
+      const nextCount = body.minPurchaseCount ?? existing.minPurchaseCount;
+      const nextAmount = body.minPurchaseAmount ?? existing.minPurchaseAmount;
+      if (!nextCount && !nextAmount) {
+        return status(400, {
+          error: {
+            code: 'INVALID_ARGUMENT',
+            message: 'Debes conservar minPurchaseCount o minPurchaseAmount',
+          },
+        });
+      }
+
+      const [updated] = (await db
+        .update(campaignTiers)
+        .set({
+          name: body.name ?? existing.name,
+          order: body.order ?? existing.order,
+          thresholdValue: body.thresholdValue ?? existing.thresholdValue,
+          windowUnit: body.windowUnit ?? existing.windowUnit,
+          windowValue: body.windowValue ?? existing.windowValue,
+          minPurchaseCount: nextCount,
+          minPurchaseAmount: nextAmount,
+          qualificationMode: body.qualificationMode ?? existing.qualificationMode,
+          graceDays: body.graceDays ?? existing.graceDays,
+          updatedAt: new Date(),
+        })
+        .where(eq(campaignTiers.id, existing.id))
+        .returning()) as CampaignTierRow[];
+
+      if (!updated) {
+        return status(500, {
+          error: {
+            code: 'CAMPAIGN_TIER_UPDATE_FAILED',
+            message: 'No se pudo actualizar el tier',
+          },
+        });
+      }
+
+      if (body.benefits) {
+        await db.delete(tierBenefits).where(eq(tierBenefits.tierId, updated.id));
+        if (body.benefits.length > 0) {
+          await db.insert(tierBenefits).values(
+            body.benefits.map((benefit) => ({
+              tierId: updated.id,
+              type: benefit.type,
+              config: benefit.config ?? null,
+              updatedAt: new Date(),
+            })),
+          );
+        }
+      }
+
+      const benefits = (await db.select().from(tierBenefits).where(eq(tierBenefits.tierId, updated.id))) as TierBenefitRow[];
+      await appendAudit(updated.campaignId, 'campaign.tier_updated', null, auth, {
+        tierId: updated.id,
+        order: updated.order,
+      });
+
+      return {
+        data: serializeTier(updated, benefits),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authorizationHeader,
+      body: campaignTierUpdateRequest,
+      response: {
+        200: campaignTierResponse,
+      },
+      detail: {
+        summary: 'Actualizar tier de campaña',
+      },
+    },
+  )
+  .delete(
+    '/:campaignId/tiers/:tierId',
+    async ({ auth, params, status }: CampaignTierDeleteContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return status(409, {
+          error: {
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar tiers',
+          },
+        });
+      }
+
+      const [existing] = (await db
+        .select({ id: campaignTiers.id, campaignId: campaignTiers.campaignId })
+        .from(campaignTiers)
+        .where(and(eq(campaignTiers.id, params.tierId), eq(campaignTiers.campaignId, campaign.id)))) as Array<{
+        id: string;
+        campaignId: string;
+      }>;
+
+      if (!existing) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_TIER_NOT_FOUND',
+            message: 'Tier no encontrado',
+          },
+        });
+      }
+
+      await db.delete(campaignTiers).where(eq(campaignTiers.id, existing.id));
+      await appendAudit(existing.campaignId, 'campaign.tier_deleted', null, auth, {
+        tierId: existing.id,
+      });
+
+      return status(204);
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authorizationHeader,
+      response: {
+        204: t.Void(),
+      },
+      detail: {
+        summary: 'Eliminar tier de campaña',
       },
     },
   )

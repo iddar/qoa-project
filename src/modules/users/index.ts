@@ -5,7 +5,16 @@ import { allUserRoles, backofficeRoles } from '../../app/plugins/roles';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { balances, campaignBalances, campaignSubscriptions, campaigns, cards, users } from '../../db/schema';
+import {
+  balances,
+  campaignBalances,
+  campaignSubscriptions,
+  campaigns,
+  campaignTiers,
+  cards,
+  tierBenefits,
+  users,
+} from '../../db/schema';
 import { ensureUserUniversalWalletCard } from '../../services/wallet-onboarding';
 import type { StatusHandler } from '../../types/handlers';
 import { serializeCard } from '../cards';
@@ -547,17 +556,23 @@ export const usersModule = new Elysia({
           id: cards.id,
           campaignId: cards.campaignId,
           code: cards.code,
+          currentTierId: cards.currentTierId,
+          tierGraceUntil: cards.tierGraceUntil,
+          tierLastEvaluatedAt: cards.tierLastEvaluatedAt,
           status: cards.status,
           createdAt: cards.createdAt,
         })
         .from(cards)
         .where(eq(cards.id, cardId))) as Array<{
-        id: string;
-        campaignId: string;
-        code: string;
-        status: string;
-        createdAt: Date;
-      }>;
+          id: string;
+          campaignId: string;
+          code: string;
+          currentTierId: string | null;
+          tierGraceUntil: Date | null;
+          tierLastEvaluatedAt: Date | null;
+          status: string;
+          createdAt: Date;
+        }>;
 
       if (!card) {
         return status(404, {
@@ -596,12 +611,70 @@ export const usersModule = new Elysia({
         lifetime: number | null;
       }>;
 
+      const [currentTier] = card.currentTierId
+        ? ((await db
+            .select()
+            .from(campaignTiers)
+            .where(eq(campaignTiers.id, card.currentTierId))) as Array<{
+            id: string;
+            name: string;
+            order: number;
+            thresholdValue: number;
+            windowUnit: 'day' | 'month' | 'year';
+            windowValue: number;
+            minPurchaseCount: number | null;
+            minPurchaseAmount: number | null;
+            qualificationMode: 'any' | 'all';
+            graceDays: number;
+          }>)
+        : [];
+
+      const tierBenefitRows = currentTier
+        ? ((await db
+            .select({ id: tierBenefits.id, type: tierBenefits.type, config: tierBenefits.config })
+            .from(tierBenefits)
+            .where(eq(tierBenefits.tierId, currentTier.id))) as Array<{
+            id: string;
+            type: 'discount' | 'reward' | 'multiplier' | 'free_product';
+            config: string | null;
+          }>)
+        : [];
+
+      const tierState = card.currentTierId
+        ? card.tierGraceUntil && card.tierGraceUntil > new Date()
+          ? 'at_risk'
+          : 'qualified'
+        : 'unqualified';
+
       return {
         data: {
           card: {
             id: card.id,
             campaignId: card.campaignId,
             code: card.code,
+            currentTierId: card.currentTierId ?? undefined,
+            tierGraceUntil: card.tierGraceUntil ? card.tierGraceUntil.toISOString() : undefined,
+            tierLastEvaluatedAt: card.tierLastEvaluatedAt ? card.tierLastEvaluatedAt.toISOString() : undefined,
+            tierState,
+            currentTier: currentTier
+              ? {
+                  id: currentTier.id,
+                  name: currentTier.name,
+                  order: currentTier.order,
+                  thresholdValue: currentTier.thresholdValue,
+                  windowUnit: currentTier.windowUnit,
+                  windowValue: currentTier.windowValue,
+                  minPurchaseCount: currentTier.minPurchaseCount ?? undefined,
+                  minPurchaseAmount: currentTier.minPurchaseAmount ?? undefined,
+                  qualificationMode: currentTier.qualificationMode,
+                  graceDays: currentTier.graceDays,
+                  benefits: tierBenefitRows.map((entry) => ({
+                    id: entry.id,
+                    type: entry.type,
+                    config: entry.config ?? undefined,
+                  })),
+                }
+              : undefined,
             status: card.status,
             createdAt: card.createdAt.toISOString(),
           },

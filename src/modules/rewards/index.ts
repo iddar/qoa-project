@@ -6,6 +6,7 @@ import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { balances, campaignBalances, campaigns, cards, redemptions, rewards } from '../../db/schema';
+import { evaluateCardTier } from '../../services/tier-engine';
 import type { StatusHandler } from '../../types/handlers';
 import {
   redemptionResponse,
@@ -550,6 +551,11 @@ export const rewardsModule = new Elysia({
           completedAt: new Date(),
         })
         .returning({ id: redemptions.id, createdAt: redemptions.createdAt })) as Array<{ id: string; createdAt: Date }>;
+
+      await evaluateCardTier({
+        cardId: card.cardId,
+        campaignId: reward.campaignId,
+      });
 
       return {
         data: {

@@ -21,6 +21,7 @@ import {
   webhookReceipts,
 } from '../../db/schema';
 import { UNIVERSAL_CAMPAIGN_KEY, ensureUserUniversalWalletCard } from '../../services/wallet-onboarding';
+import { evaluateCardTier } from '../../services/tier-engine';
 import type { StatusHandler } from '../../types/handlers';
 import {
   transactionCreateRequest,
@@ -812,6 +813,12 @@ const createOrReplayTransaction = async (payload: {
         .from(accumulations)
         .where(or(...itemIds.map((id) => eq(accumulations.transactionItemId, id))))) as AccumulationRow[];
     }
+
+    await evaluateCardTier({
+      cardId: resolvedCard.cardId,
+      campaignId: resolvedCard.baseCampaignId,
+      at: now,
+    });
   }
 
   return {

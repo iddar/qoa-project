@@ -6,8 +6,16 @@ import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { balances, campaigns, cards, reminderJobs } from '../../db/schema';
+import { evaluateCardTier } from '../../services/tier-engine';
 import type { StatusHandler } from '../../types/handlers';
-import { reminderListQuery, reminderListResponse, reminderRunRequest, reminderRunResponse } from './model';
+import {
+  reminderListQuery,
+  reminderListResponse,
+  reminderRunRequest,
+  reminderRunResponse,
+  tierRunRequest,
+  tierRunResponse,
+} from './model';
 
 type ReminderJobRow = {
   id: string;
@@ -22,6 +30,14 @@ type ReminderJobRow = {
 };
 
 type RunContext = {
+  auth: AuthContext | null;
+  body: {
+    limit?: number;
+  };
+  status: StatusHandler;
+};
+
+type TierRunContext = {
   auth: AuthContext | null;
   body: {
     limit?: number;
@@ -171,6 +187,71 @@ export const jobsModule = new Elysia({
       },
       detail: {
         summary: 'Ejecutar job de reminders',
+      },
+    },
+  )
+  .post(
+    '/tiers/run',
+    async ({ auth, body, status }: TierRunContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const runAt = new Date();
+      const hardLimit = Math.min(Math.max(body.limit ?? 100, 1), 500);
+
+      const candidateCards = (await db
+        .select({ id: cards.id, campaignId: cards.campaignId })
+        .from(cards)
+        .where(eq(cards.status, 'active'))
+        .limit(hardLimit)) as Array<{ id: string; campaignId: string }>;
+
+      let updated = 0;
+      let atRisk = 0;
+      let unchanged = 0;
+
+      for (const entry of candidateCards) {
+        const result = await evaluateCardTier({
+          cardId: entry.id,
+          campaignId: entry.campaignId,
+          at: runAt,
+        });
+
+        if (result.changed) {
+          updated += 1;
+        } else {
+          unchanged += 1;
+        }
+
+        if (result.tierState === 'at_risk') {
+          atRisk += 1;
+        }
+      }
+
+      return {
+        data: {
+          checked: candidateCards.length,
+          updated,
+          atRisk,
+          unchanged,
+          runAt: runAt.toISOString(),
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...backofficeRoles] }),
+      headers: authorizationHeader,
+      body: tierRunRequest,
+      response: {
+        200: tierRunResponse,
+      },
+      detail: {
+        summary: 'Recalcular tiers por ventana temporal',
       },
     },
   )

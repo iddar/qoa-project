@@ -18,6 +18,38 @@ export const campaignEnrollmentModeSchema = t.Union([
   t.Literal('system_universal'),
 ]);
 
+export const tierWindowUnitSchema = t.Union([t.Literal('day'), t.Literal('month'), t.Literal('year')]);
+export const tierQualificationModeSchema = t.Union([t.Literal('any'), t.Literal('all')]);
+export const tierBenefitTypeSchema = t.Union([
+  t.Literal('discount'),
+  t.Literal('reward'),
+  t.Literal('multiplier'),
+  t.Literal('free_product'),
+]);
+
+export const tierBenefitSchema = t.Object({
+  id: t.String(),
+  type: tierBenefitTypeSchema,
+  config: t.Optional(t.String()),
+});
+
+export const campaignTierSchema = t.Object({
+  id: t.String(),
+  campaignId: t.String(),
+  name: t.String(),
+  order: t.Number(),
+  thresholdValue: t.Number(),
+  windowUnit: tierWindowUnitSchema,
+  windowValue: t.Number(),
+  minPurchaseCount: t.Optional(t.Number()),
+  minPurchaseAmount: t.Optional(t.Number()),
+  qualificationMode: tierQualificationModeSchema,
+  graceDays: t.Number(),
+  createdAt: t.String(),
+  updatedAt: t.Optional(t.String()),
+  benefits: t.Array(tierBenefitSchema),
+});
+
 export const campaignSchema = t.Object({
   id: t.String(),
   name: t.String(),
@@ -57,6 +89,7 @@ export const campaignSchema = t.Object({
       }),
     ),
   ),
+  tiers: t.Optional(t.Array(campaignTierSchema)),
 });
 
 export const campaignAuditLogSchema = t.Object({
@@ -207,6 +240,46 @@ export const campaignPolicyUpdateRequest = t.Object({
   active: t.Optional(t.Boolean()),
 });
 
+export const campaignTierCreateRequest = t.Object({
+  name: t.String({ minLength: 2, maxLength: 80 }),
+  order: t.Number({ minimum: 1 }),
+  thresholdValue: t.Number({ minimum: 1 }),
+  windowUnit: t.Optional(tierWindowUnitSchema),
+  windowValue: t.Optional(t.Number({ minimum: 1 })),
+  minPurchaseCount: t.Optional(t.Number({ minimum: 1 })),
+  minPurchaseAmount: t.Optional(t.Number({ minimum: 1 })),
+  qualificationMode: t.Optional(tierQualificationModeSchema),
+  graceDays: t.Optional(t.Number({ minimum: 0, maximum: 90 })),
+  benefits: t.Optional(
+    t.Array(
+      t.Object({
+        type: tierBenefitTypeSchema,
+        config: t.Optional(t.String()),
+      }),
+    ),
+  ),
+});
+
+export const campaignTierUpdateRequest = t.Object({
+  name: t.Optional(t.String({ minLength: 2, maxLength: 80 })),
+  order: t.Optional(t.Number({ minimum: 1 })),
+  thresholdValue: t.Optional(t.Number({ minimum: 1 })),
+  windowUnit: t.Optional(tierWindowUnitSchema),
+  windowValue: t.Optional(t.Number({ minimum: 1 })),
+  minPurchaseCount: t.Optional(t.Number({ minimum: 1 })),
+  minPurchaseAmount: t.Optional(t.Number({ minimum: 1 })),
+  qualificationMode: t.Optional(tierQualificationModeSchema),
+  graceDays: t.Optional(t.Number({ minimum: 0, maximum: 90 })),
+  benefits: t.Optional(
+    t.Array(
+      t.Object({
+        type: tierBenefitTypeSchema,
+        config: t.Optional(t.String()),
+      }),
+    ),
+  ),
+});
+
 export const campaignResponse = t.Object({
   data: campaignSchema,
 });
@@ -227,4 +300,12 @@ export const campaignPolicyResponse = t.Object({
 
 export const campaignPolicyListResponse = t.Object({
   data: t.Array(campaignPolicySchema),
+});
+
+export const campaignTierResponse = t.Object({
+  data: campaignTierSchema,
+});
+
+export const campaignTierListResponse = t.Object({
+  data: t.Array(campaignTierSchema),
 });
