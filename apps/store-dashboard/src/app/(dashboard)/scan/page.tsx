@@ -38,7 +38,7 @@ export default function StoreScanPage() {
 
   const storesQuery = useQuery({
     queryKey: ["stores", tenantId, tenantType],
-    enabled: Boolean(token) && (tenantType !== "store" || !tenantId),
+    enabled: Boolean(token) && tenantType !== "store",
     queryFn: async () => {
       const { data, error } = await api.v1.stores.get({
         query: { limit: "100" },
@@ -51,7 +51,7 @@ export default function StoreScanPage() {
 
   const stores = (storesQuery.data?.data as StoreItem[] | undefined) ?? [];
   const resolvedStoreId = selectedStoreId || stores[0]?.id || "";
-  const activeStoreId = tenantType === "store" && tenantId ? tenantId : resolvedStoreId;
+  const activeStoreId = tenantType === "store" ? (tenantId ?? "") : resolvedStoreId;
 
   const createTransaction = useMutation({
     mutationFn: async () => {

@@ -11,9 +11,11 @@ Dashboard operativo para tienda (tenderos y soporte) construido con Next.js + Re
 
 - `NEXT_PUBLIC_API_URL` (opcional) - URL del backend, por defecto `http://localhost:3000`
 
-## Usuario sugerido (seed local)
+## Usuarios sugeridos (segun seed)
 
-- `admin.local@qoa.local` / `Password123!`
+- Seed `development`: `store.development@qoa.local` / `Password123!`
+- Seed `development` (admin): `admin.development@qoa.local` / `Password123!`
+- Seed `local`: `store.local@qoa.local` / `Password123!`
 
 ## Funcionalidades actuales
 

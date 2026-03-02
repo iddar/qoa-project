@@ -70,7 +70,7 @@ export default function LoginPage() {
           <div>
             <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Dashboard Tienda</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Inicia sesión para continuar.</p>
-            <p className="mt-2 text-xs text-zinc-400">Usuario sugerido: admin.local@qoa.local / Password123!</p>
+            <p className="mt-2 text-xs text-zinc-400">Usuario sugerido (seed development): store.development@qoa.local / Password123!</p>
           </div>
           <form className="space-y-4" onSubmit={handleSubmit}>
             {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">{error}</p>}
