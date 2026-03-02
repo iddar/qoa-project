@@ -90,6 +90,22 @@ const nextStatusAction: Partial<Record<CampaignStatus, { label: string; action: 
   confirmed: { label: "Activar", action: "activate" },
 };
 
+const formatPolicyLabel = (policy: CampaignPolicy) => {
+  if (policy.policyType === "min_amount") {
+    return `Compra mínima de $${policy.value.toLocaleString("es-MX")} por ${policy.period}`;
+  }
+
+  if (policy.policyType === "min_quantity") {
+    return `Compra mínima de ${policy.value} pieza(s) por ${policy.period}`;
+  }
+
+  if (policy.policyType === "max_accumulations") {
+    return `Máximo ${policy.value} acumulaciones por ${policy.period}`;
+  }
+
+  return `Enfriamiento de ${policy.value} unidades por ${policy.period}`;
+};
+
 export default function CampaignDetailPage() {
   const params = useParams<{ campaignId: string }>();
   const campaignId = params.campaignId;
@@ -289,6 +305,10 @@ export default function CampaignDetailPage() {
     return [];
   }, [brandsQuery.data?.data, policyForm.scopeType, productsQuery.data?.data]);
 
+  const campaignStart = campaign?.startsAt ? new Date(campaign.startsAt) : null;
+  const campaignEnd = campaign?.endsAt ? new Date(campaign.endsAt) : null;
+  const daysRemaining = typeof campaign?.daysRemaining === "number" ? campaign.daysRemaining : undefined;
+
   return (
     <div className="max-w-6xl space-y-6">
       <header className="flex items-start justify-between gap-4">
@@ -312,6 +332,31 @@ export default function CampaignDetailPage() {
           </button>
         )}
       </header>
+
+      <section className="grid gap-4 rounded-xl border border-zinc-200 bg-white p-4 md:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <article>
+          <p className="text-xs uppercase tracking-wide text-zinc-500">Inicio</p>
+          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            {campaignStart ? campaignStart.toLocaleDateString("es-MX") : "Sin fecha"}
+          </p>
+        </article>
+        <article>
+          <p className="text-xs uppercase tracking-wide text-zinc-500">Fin</p>
+          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            {campaignEnd ? campaignEnd.toLocaleDateString("es-MX") : "Sin fecha"}
+          </p>
+        </article>
+        <article>
+          <p className="text-xs uppercase tracking-wide text-zinc-500">Estado temporal</p>
+          <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            {daysRemaining === undefined
+              ? "Sin límite"
+              : daysRemaining < 0
+                ? `Finalizada hace ${Math.abs(daysRemaining)} día(s)`
+                : `Restan ${daysRemaining} día(s)`}
+          </p>
+        </article>
+      </section>
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
@@ -387,11 +432,9 @@ export default function CampaignDetailPage() {
                   key={policy.id}
                   className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
                 >
-                  <p className="font-medium text-zinc-800 dark:text-zinc-200">
-                    {policy.policyType} · {policy.scopeType}
-                  </p>
+                  <p className="font-medium text-zinc-800 dark:text-zinc-200">{formatPolicyLabel(policy)}</p>
                   <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
-                    periodo {policy.period} · valor {policy.value}
+                    alcance {policy.scopeType} · periodo {policy.period}
                   </p>
                 </li>
               ))}

@@ -173,6 +173,17 @@ bun run db:seed:test
 
 Cada seed también crea un CPG de prueba llamado `Acme CPG (<entorno>)` y lo vincula al usuario `cpg_admin`.
 
+En `development` y `local`, el seed ahora incluye dataset enriquecido para demos:
+
+- 2 tiendas activas de prueba
+- catálogo ampliado (múltiples marcas y productos)
+- campañas activas adicionales (`opt_in` y `open`)
+- políticas activas por campaña (`min_amount`, `min_quantity`, `max_accumulations`, `cooldown`)
+- recompensas activas por campaña
+- actividad histórica de 30 días (transacciones, acumulaciones y canjes)
+
+`test` conserva un seed ligero para mantener velocidad en CI.
+
 Credenciales de prueba (password compartido: `Password123!`):
 
 | Rol | Email | Acceso |

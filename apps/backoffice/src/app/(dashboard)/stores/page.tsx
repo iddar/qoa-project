@@ -158,10 +158,11 @@ export default function StoresPage() {
               }}
             >
               <div>
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                <label htmlFor="store-name" className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                   Nombre
                 </label>
                 <input
+                  id="store-name"
                   value={form.name}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, name: event.target.value }))
@@ -171,10 +172,11 @@ export default function StoresPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                <label htmlFor="store-type" className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                   Tipo (opcional)
                 </label>
                 <input
+                  id="store-type"
                   value={form.type}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, type: event.target.value }))
@@ -183,10 +185,11 @@ export default function StoresPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                <label htmlFor="store-address" className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                   Dirección (opcional)
                 </label>
                 <input
+                  id="store-address"
                   value={form.address}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, address: event.target.value }))
@@ -195,10 +198,11 @@ export default function StoresPage() {
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
+                <label htmlFor="store-phone" className="text-xs font-medium text-zinc-500 dark:text-zinc-300">
                   Teléfono (opcional)
                 </label>
                 <input
+                  id="store-phone"
                   value={form.phone}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, phone: event.target.value }))

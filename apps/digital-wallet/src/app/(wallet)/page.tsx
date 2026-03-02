@@ -1,19 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { ReactQRCode } from "@lglab/react-qr-code";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { formatDateTime, formatMoney } from "@/lib/format";
 
-type CardItem = {
-  id: string;
+type WalletCampaign = {
   campaignId: string;
-  code: string;
-  status: string;
-  createdAt: string;
+  campaignName: string;
+  enrollmentMode: "open" | "opt_in" | "system_universal";
+  current: number;
 };
 
 type TxItem = {
@@ -22,16 +21,22 @@ type TxItem = {
   createdAt: string;
 };
 
+type RewardItem = {
+  id: string;
+  name: string;
+  cost: number;
+  status: "active" | "inactive";
+};
+
 export default function WalletHomePage() {
   const token = getAccessToken();
-  const [selectedCardId, setSelectedCardId] = useState("");
+  const [isCardModalOpen, setIsCardModalOpen] = useState(false);
 
-  const cardsQuery = useQuery({
-    queryKey: ["wallet-cards"],
+  const walletQuery = useQuery({
+    queryKey: ["wallet-home-summary"],
     enabled: Boolean(token),
     queryFn: async () => {
-      const { data, error } = await api.v1.users.me.cards.get({
-        query: { limit: "100" },
+      const { data, error } = await api.v1.users.me.wallet.get({
         headers: { authorization: `Bearer ${token}` },
       });
       if (error) throw error;
@@ -39,15 +44,13 @@ export default function WalletHomePage() {
     },
   });
 
-  const cards = (cardsQuery.data?.data as CardItem[] | undefined) ?? [];
-  const activeCardId = selectedCardId || cards[0]?.id || "";
-  const activeCard = cards.find((card) => card.id === activeCardId);
+  const cardId = walletQuery.data?.data.card.id ?? "";
 
   const qrQuery = useQuery({
-    queryKey: ["wallet-card-qr", activeCardId],
-    enabled: Boolean(activeCardId) && Boolean(token),
+    queryKey: ["wallet-card-qr", cardId],
+    enabled: Boolean(cardId) && Boolean(token),
     queryFn: async () => {
-      const { data, error } = await api.v1.cards({ cardId: activeCardId }).qr.get({
+      const { data, error } = await api.v1.cards({ cardId }).qr.get({
         headers: { authorization: `Bearer ${token}` },
       });
       if (error) throw error;
@@ -56,13 +59,13 @@ export default function WalletHomePage() {
   });
 
   const txQuery = useQuery({
-    queryKey: ["wallet-card-transactions", activeCardId],
-    enabled: Boolean(activeCardId) && Boolean(token),
+    queryKey: ["wallet-home-transactions", cardId],
+    enabled: Boolean(cardId) && Boolean(token),
     queryFn: async () => {
       const { data, error } = await api.v1.transactions.get({
         query: {
-          cardId: activeCardId,
-          limit: "50",
+          cardId,
+          limit: "20",
         },
         headers: { authorization: `Bearer ${token}` },
       });
@@ -71,15 +74,57 @@ export default function WalletHomePage() {
     },
   });
 
-  const txRows = ((txQuery.data?.data as TxItem[] | undefined) ?? []).slice(0, 5);
+  const campaigns = ((walletQuery.data?.data.campaigns as WalletCampaign[] | undefined) ?? []).filter(
+    (entry) => entry.enrollmentMode !== "system_universal",
+  );
+
+  const rewardQueries = useQueries({
+    queries: campaigns.map((campaign) => ({
+      queryKey: ["wallet-home-rewards", campaign.campaignId],
+      enabled: Boolean(token),
+      queryFn: async () => {
+        const { data, error } = await api.v1.rewards.get({
+          query: {
+            campaignId: campaign.campaignId,
+            limit: "50",
+          },
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (error) throw error;
+        return data;
+      },
+    })),
+  });
+
+  const rows = ((txQuery.data?.data as TxItem[] | undefined) ?? []).slice(0, 5);
   const stats = useMemo(
     () => ({
-      purchases: txRows.length,
-      spent: txRows.reduce((acc, row) => acc + row.totalAmount, 0),
-      avgTicket: txRows.length > 0 ? Math.round(txRows.reduce((acc, row) => acc + row.totalAmount, 0) / txRows.length) : 0,
+      purchases: rows.length,
+      spent: rows.reduce((acc, row) => acc + row.totalAmount, 0),
     }),
-    [txRows],
+    [rows],
   );
+
+  const nextGoal = useMemo(() => {
+    let selected: { name: string; missing: number; progress: number } | null = null;
+
+    campaigns.forEach((campaign, index) => {
+      const rewards = ((rewardQueries[index]?.data?.data as RewardItem[] | undefined) ?? []).filter((entry) => entry.status === "active");
+      rewards.forEach((reward) => {
+        const missing = reward.cost - campaign.current;
+        if (missing <= 0) {
+          return;
+        }
+
+        const progress = Math.min(100, Math.round((campaign.current / reward.cost) * 100));
+        if (!selected || missing < selected.missing) {
+          selected = { name: reward.name, missing, progress };
+        }
+      });
+    });
+
+    return selected;
+  }, [campaigns, rewardQueries]);
 
   const qrValue = qrQuery.data
     ? JSON.stringify({
@@ -90,95 +135,108 @@ export default function WalletHomePage() {
 
   return (
     <div className="space-y-4">
-      <section className="relative overflow-hidden rounded-3xl border border-amber-200/80 bg-gradient-to-br from-amber-200 via-orange-100 to-white p-4 shadow-sm dark:border-zinc-800 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-950">
-        <div className="absolute -right-12 -top-12 h-36 w-36 rounded-full bg-orange-200/60 blur-3xl dark:bg-orange-800/20" />
+      <section className="relative overflow-hidden rounded-3xl border border-amber-300/70 bg-gradient-to-br from-amber-200 via-amber-100 to-amber-300 p-5 shadow-sm dark:border-amber-800/60 dark:from-zinc-900 dark:via-zinc-900 dark:to-zinc-800">
+        <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/40 blur-2xl dark:bg-amber-700/20" />
         <div className="relative z-10">
-          <p className="text-xs uppercase tracking-[0.2em] text-amber-700 dark:text-amber-300">Tarjeta activa</p>
-          <h1 className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">Tu QR de lealtad</h1>
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-amber-800 dark:text-amber-300">Tarjeta de lealtad</p>
+            <p className="mt-2 text-6xl font-extrabold leading-none text-zinc-900 dark:text-zinc-100">{walletQuery.data?.data.totals.current ?? 0}</p>
+            <p className="mt-1 text-4xl font-bold text-zinc-900 dark:text-zinc-100">Mis puntos</p>
+            <p className="mt-6 text-sm text-zinc-700 dark:text-zinc-300">Estado: <b>{walletQuery.data?.data.card.status ?? "active"}</b></p>
+            <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
+              Alta: {walletQuery.data?.data.card.createdAt ? new Date(walletQuery.data.data.card.createdAt).toLocaleDateString("es-MX") : "--"}
+            </p>
 
-          {cards.length > 1 && (
-            <select
-              value={activeCardId}
-              onChange={(event) => setSelectedCardId(event.target.value)}
-              className="mt-3 w-full rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm backdrop-blur dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              {cards.map((card) => (
-                <option key={card.id} value={card.id}>
-                  {card.code} ({card.campaignId.slice(0, 8)}...)
-                </option>
-              ))}
-            </select>
-          )}
-
-          {!activeCard && !cardsQuery.isLoading && (
-            <div className="mt-4 rounded-xl border border-amber-200/80 bg-white/80 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-300">
-              Estamos preparando tu tarjeta universal. Cierra y vuelve a abrir sesión si no aparece en unos segundos.
-            </div>
-          )}
-
-          {cardsQuery.isLoading && (
-            <div className="mt-4 h-56 animate-pulse rounded-2xl bg-white/70 dark:bg-zinc-900/60" />
-          )}
-
-          {activeCard && qrValue && !cardsQuery.isLoading && (
-            <div className="mt-4 grid gap-4">
-              <div className="mx-auto rounded-2xl border border-amber-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-white">
-                <ReactQRCode value={qrValue} size={220} bgColor="#FFFFFF" fgColor="#111111" />
-              </div>
-              <div className="flex items-center justify-between rounded-xl bg-white/80 px-3 py-2 text-xs text-zinc-600 dark:bg-zinc-900/70 dark:text-zinc-300">
-                <span>Estado: {activeCard.status}</span>
-                <span>Alta: {new Date(activeCard.createdAt).toLocaleDateString("es-MX")}</span>
-              </div>
-            </div>
-          )}
+            {qrValue && (
+              <button
+                type="button"
+                onClick={() => setIsCardModalOpen(true)}
+                className="mt-4 inline-flex items-center gap-2 rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm backdrop-blur hover:bg-white dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              >
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-300 bg-white dark:border-zinc-600 dark:bg-zinc-800">
+                  <span className="grid grid-cols-2 gap-[1px]">
+                    <span className="h-[5px] w-[5px] rounded-[2px] bg-zinc-900 dark:bg-zinc-100" />
+                    <span className="h-[5px] w-[5px] rounded-[2px] bg-zinc-900 dark:bg-zinc-100" />
+                    <span className="h-[5px] w-[5px] rounded-[2px] bg-zinc-900 dark:bg-zinc-100" />
+                    <span className="h-[5px] w-[5px] rounded-[2px] bg-zinc-900 dark:bg-zinc-100" />
+                  </span>
+                </span>
+                Ver tarjeta
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
-      <section className="grid grid-cols-3 gap-2">
-        <article className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/70">
-          <p className="text-[11px] text-zinc-500">Compras</p>
-          <p className="mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100">{stats.purchases}</p>
+      {isCardModalOpen && qrValue && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-5" role="dialog" aria-modal="true" aria-label="Tarjeta QR">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl dark:bg-zinc-900">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Tu tarjeta QR</h2>
+              <button
+                type="button"
+                onClick={() => setIsCardModalOpen(false)}
+                className="rounded-lg border border-zinc-200 px-2 py-1 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200"
+              >
+                Cerrar
+              </button>
+            </div>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Muéstrala en caja para registrar tus compras.</p>
+            <div className="mt-4 flex justify-center rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-700">
+              <ReactQRCode value={qrValue} size={220} bgColor="#FFFFFF" fgColor="#111111" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {nextGoal && (
+        <section className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Tu próxima meta</h2>
+          <p className="mt-3 text-sm text-zinc-700 dark:text-zinc-300">{nextGoal.name} ({nextGoal.progress}%) - ¡Casi la tienes!</p>
+          <div className="mt-3 h-3 rounded-full bg-zinc-200 dark:bg-zinc-800">
+            <div className="h-3 rounded-full bg-amber-500" style={{ width: `${nextGoal.progress}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Te faltan {nextGoal.missing} puntos para canjear.</p>
+        </section>
+      )}
+
+      <section className="grid grid-cols-2 gap-3">
+        <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+          <p className="text-[12px] text-zinc-500">Compras</p>
+          <p className="mt-1 text-4xl font-bold text-zinc-900 dark:text-zinc-100">{stats.purchases}</p>
         </article>
-        <article className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/70">
-          <p className="text-[11px] text-zinc-500">Gasto</p>
-          <p className="mt-1 text-sm font-bold text-zinc-900 dark:text-zinc-100">{formatMoney(stats.spent)}</p>
-        </article>
-        <article className="rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/70">
-          <p className="text-[11px] text-zinc-500">Ticket prom.</p>
-          <p className="mt-1 text-sm font-bold text-zinc-900 dark:text-zinc-100">{formatMoney(stats.avgTicket)}</p>
+        <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+          <p className="text-[12px] text-zinc-500">Gasto</p>
+          <p className="mt-1 text-4xl font-bold text-zinc-900 dark:text-zinc-100">{formatMoney(stats.spent)}</p>
         </article>
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Última actividad</h2>
-        {txQuery.isLoading && <p className="mt-2 text-sm text-zinc-500">Cargando actividad...</p>}
-        {!txQuery.isLoading && txRows.length === 0 && <p className="mt-2 text-sm text-zinc-500">Sin movimientos todavía.</p>}
-        {txRows.length > 0 && (
+        <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Actividad reciente</h2>
+        {txQuery.isLoading && <p className="mt-3 text-sm text-zinc-500">Cargando actividad...</p>}
+        {!txQuery.isLoading && rows.length === 0 && <p className="mt-3 text-sm text-zinc-500">Sin movimientos todavía.</p>}
+        {rows.length > 0 && (
           <ul className="mt-3 space-y-2">
-            {txRows.map((tx) => (
-              <li key={tx.id} className="rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800/60">
+            {rows.map((tx) => (
+              <li key={tx.id} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-800/60">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Compra #{tx.id.slice(0, 8)}</p>
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{formatMoney(tx.totalAmount)}</p>
+                  <p className="text-lg font-semibold text-zinc-800 dark:text-zinc-200">Compra #{tx.id.slice(0, 8)}</p>
+                  <p className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">- {formatMoney(tx.totalAmount)}</p>
                 </div>
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{formatDateTime(tx.createdAt)}</p>
+                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{formatDateTime(tx.createdAt)}</p>
               </li>
             ))}
           </ul>
         )}
-      </section>
 
-      <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-900/10">
-        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">¿Quieres probar una compra ahora?</p>
-        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-          Usa el flujo manual con payload para registrar una compra sin escanear QR.
-        </p>
-        <Link
-          href="/purchase"
-          className="mt-3 inline-flex rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-        >
-          Ir a registrar compra
-        </Link>
+        <div className="mt-4 flex items-center gap-2">
+          <Link href="/rewards" className="rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:text-zinc-200">
+            Ver recompensas
+          </Link>
+          <Link href="/purchase" className="rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white dark:bg-zinc-100 dark:text-zinc-900">
+            Registrar compra
+          </Link>
+        </div>
       </section>
     </div>
   );

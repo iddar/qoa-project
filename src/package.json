@@ -17,7 +17,10 @@
     "fmt:check": "oxfmt --check",
     "typecheck": "tsc --noEmit",
     "lint": "bunx oxlint --type-aware -A all -D typescript/no-floating-promises",
-    "lint:fix": "bunx oxlint --fix --type-aware -A all -D typescript/no-floating-promises"
+    "lint:fix": "bunx oxlint --fix --type-aware -A all -D typescript/no-floating-promises",
+    "bench": "bash bench/run.sh",
+    "bench:baseline": "bash bench/run.sh --save-baseline",
+    "bench:compare": "bash bench/run.sh --compare"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.1",

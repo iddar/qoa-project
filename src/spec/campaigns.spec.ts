@@ -245,12 +245,24 @@ describe('Campaigns module', () => {
         name: `Campaign Discover ${crypto.randomUUID().slice(0, 6)}`,
         status: 'active',
         enrollmentMode: 'opt_in',
+        startsAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+        endsAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
       })
       .returning({ id: campaigns.id })) as Array<{ id: string }>;
 
     if (!campaign) {
       throw new Error('Failed to create campaign');
     }
+
+    await db.insert(campaignPolicies).values({
+      campaignId: campaign.id,
+      policyType: 'min_amount',
+      scopeType: 'campaign',
+      period: 'transaction',
+      value: 100,
+      active: true,
+      updatedAt: new Date(),
+    });
 
     const walletHeaders = {
       authorization: 'Bearer dev-token',
@@ -270,7 +282,10 @@ describe('Campaigns module', () => {
     }
 
     expect(discover.status).toBe(200);
-    expect(discover.data.data.some((item: { id: string }) => item.id === campaign.id)).toBe(true);
+    const discoveredCampaign = discover.data.data.find((item: { id: string }) => item.id === campaign.id);
+    expect(discoveredCampaign).toBeTruthy();
+    expect((discoveredCampaign as { daysRemaining?: number }).daysRemaining).toBeGreaterThan(0);
+    expect(((discoveredCampaign as { policySummaries?: Array<{ label: string }> }).policySummaries ?? []).length).toBeGreaterThan(0);
 
     const subscribe = await api.v1.campaigns({ campaignId: campaign.id }).subscribe.post(undefined, {
       headers: walletHeaders,
@@ -298,11 +313,15 @@ describe('Campaigns module', () => {
     }
 
     expect(mine.status).toBe(200);
-    expect(mine.data.data.some((item: { campaignId: string; status: string }) => item.campaignId === campaign.id && item.status === 'subscribed')).toBe(
-      true,
-    );
+    const subscribedCampaign = mine.data.data.find((item: { campaignId: string }) => item.campaignId === campaign.id) as
+      | { status: string; policySummaries?: Array<{ label: string }>; daysRemaining?: number }
+      | undefined;
+    expect(subscribedCampaign?.status).toBe('subscribed');
+    expect((subscribedCampaign?.policySummaries ?? []).length).toBeGreaterThan(0);
+    expect(subscribedCampaign?.daysRemaining).toBeGreaterThan(0);
 
     await db.delete(campaignSubscriptions).where(eq(campaignSubscriptions.userId, walletUser.id));
+    await db.delete(campaignPolicies).where(eq(campaignPolicies.campaignId, campaign.id));
     await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
     await db.delete(users).where(eq(users.id, walletUser.id));
   });

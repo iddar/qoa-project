@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { campaigns, cards, cpgs, stores, transactions, users } from '../db/schema';
+import { accumulations, campaigns, cards, cpgs, stores, transactionItems, transactions, users } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -81,11 +81,33 @@ describe('Reports module', () => {
       })
       .returning({ id: cards.id })) as Array<{ id: string }>;
 
-    await db.insert(transactions).values({
-      userId: user?.id ?? '',
-      storeId: store?.id ?? '',
-      cardId: card?.id,
-      totalAmount: 145,
+    const [transaction] = (await db
+      .insert(transactions)
+      .values({
+        userId: user?.id ?? '',
+        storeId: store?.id ?? '',
+        cardId: card?.id,
+        totalAmount: 145,
+      })
+      .returning({ id: transactions.id })) as Array<{ id: string }>;
+
+    const [item] = (await db
+      .insert(transactionItems)
+      .values({
+        transactionId: transaction?.id ?? '',
+        productId: `sku_${crypto.randomUUID().slice(0, 8)}`,
+        quantity: 1,
+        amount: 145,
+      })
+      .returning({ id: transactionItems.id })) as Array<{ id: string }>;
+
+    await db.insert(accumulations).values({
+      cardId: card?.id ?? '',
+      campaignId: campaign?.id ?? '',
+      amount: 10,
+      balanceAfter: 10,
+      transactionItemId: item?.id ?? '',
+      sourceType: 'transaction_item',
     });
 
     if (!cpg || !campaign || !card || !store || !user) {

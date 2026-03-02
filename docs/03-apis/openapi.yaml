@@ -2564,6 +2564,32 @@ components:
           type: string
           format: date-time
           nullable: true
+        daysRemaining:
+          type: integer
+          nullable: true
+        isExpired:
+          type: boolean
+        policySummaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignPolicySummary'
+
+    CampaignPolicySummary:
+      type: object
+      properties:
+        policyType:
+          type: string
+          enum: [max_accumulations, min_amount, min_quantity, cooldown]
+        scopeType:
+          type: string
+          enum: [campaign, brand, product]
+        period:
+          type: string
+          enum: [transaction, day, week, month, lifetime]
+        value:
+          type: integer
+        label:
+          type: string
 
     CampaignCreate:
       type: object
@@ -2694,6 +2720,21 @@ components:
         subscribedAt:
           type: string
           format: date-time
+        startsAt:
+          type: string
+          format: date-time
+          nullable: true
+        endsAt:
+          type: string
+          format: date-time
+          nullable: true
+        daysRemaining:
+          type: integer
+          nullable: true
+        policySummaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignPolicySummary'
 
     CampaignSubscriptionListResponse:
       type: object

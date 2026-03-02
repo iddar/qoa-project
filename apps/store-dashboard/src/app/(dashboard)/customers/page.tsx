@@ -22,6 +22,7 @@ type CustomerAggregate = {
   visits: number;
   spent: number;
   lastVisit: string;
+  avgTicket: number;
 };
 
 const formatMoney = (value: number) =>
@@ -82,10 +83,12 @@ export default function StoreCustomersPage() {
           visits: 1,
           spent: row.totalAmount,
           lastVisit: row.createdAt,
+          avgTicket: row.totalAmount,
         });
       } else {
         existing.visits += 1;
         existing.spent += row.totalAmount;
+        existing.avgTicket = existing.spent / existing.visits;
         if (new Date(row.createdAt).getTime() > new Date(existing.lastVisit).getTime()) {
           existing.lastVisit = row.createdAt;
         }
@@ -94,6 +97,15 @@ export default function StoreCustomersPage() {
 
     return Array.from(map.values()).sort((a, b) => b.visits - a.visits || b.spent - a.spent);
   }, [transactionsQuery.data?.data]);
+
+  const customerKpis = useMemo(
+    () => ({
+      totalCustomers: customers.length,
+      repeatCustomers: customers.filter((entry) => entry.visits >= 2).length,
+      avgSpendPerCustomer: customers.length > 0 ? Math.round(customers.reduce((sum, entry) => sum + entry.spent, 0) / customers.length) : 0,
+    }),
+    [customers],
+  );
 
   return (
     <div className="space-y-6">
@@ -121,6 +133,21 @@ export default function StoreCustomersPage() {
       )}
 
       <section className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40">
+        <div className="grid grid-cols-3 gap-2 border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+          <article className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+            <p className="text-[11px] text-zinc-500">Clientes activos</p>
+            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{customerKpis.totalCustomers}</p>
+          </article>
+          <article className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+            <p className="text-[11px] text-zinc-500">Recurrentes</p>
+            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{customerKpis.repeatCustomers}</p>
+          </article>
+          <article className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+            <p className="text-[11px] text-zinc-500">Prom. por cliente</p>
+            <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">{formatMoney(customerKpis.avgSpendPerCustomer)}</p>
+          </article>
+        </div>
+
         <header className="border-b border-zinc-100 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           {customers.length} cliente(s) con actividad reciente
         </header>
@@ -132,24 +159,34 @@ export default function StoreCustomersPage() {
         )}
 
         {customers.length > 0 && (
-          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          <>
+            <div className="grid grid-cols-[1.35fr_0.35fr_0.5fr_0.5fr] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <span>Cliente</span>
+              <span>Visitas</span>
+              <span>Consumo</span>
+              <span>Ticket prom.</span>
+            </div>
+            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {customers.map((customer) => (
-              <li key={customer.userId} className="grid grid-cols-[1.4fr_0.8fr_0.8fr] gap-3 px-4 py-3 text-sm">
+              <li key={customer.userId} className="grid grid-cols-[1.35fr_0.35fr_0.5fr_0.5fr] gap-3 px-4 py-3 text-sm">
                 <div>
                   <p className="font-semibold text-zinc-900 dark:text-zinc-100">{customer.userId.slice(0, 12)}...</p>
                   <p className="text-xs text-zinc-400">Card: {customer.cardId ? `${customer.cardId.slice(0, 10)}...` : "sin cardId"}</p>
+                  <p className="mt-1 text-[11px] text-zinc-400">Última visita: {new Date(customer.lastVisit).toLocaleDateString("es-MX")}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-zinc-400">Visitas</p>
                   <p className="font-semibold text-zinc-800 dark:text-zinc-200">{customer.visits}</p>
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-wide text-zinc-400">Consumo</p>
                   <p className="font-semibold text-zinc-800 dark:text-zinc-200">{formatMoney(customer.spent)}</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-zinc-800 dark:text-zinc-200">{formatMoney(customer.avgTicket)}</p>
                 </div>
               </li>
             ))}
-          </ul>
+            </ul>
+          </>
         )}
       </section>
     </div>

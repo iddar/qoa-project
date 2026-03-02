@@ -24,6 +24,13 @@ type FormState = {
   endsAt: string;
 };
 
+type CampaignPerformance = {
+  campaignId: string;
+  transactions: number;
+  salesAmount: number;
+  redemptions: number;
+};
+
 const emptyForm: FormState = {
   name: "",
   description: "",
@@ -59,6 +66,8 @@ export default function CampaignsPage() {
   const token = getAccessToken();
 
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | Campaign["status"]>("all");
 
   const campaignsQuery = useQuery({
     queryKey: ["campaigns", tenantId],
@@ -120,6 +129,22 @@ export default function CampaignsPage() {
 
   const campaigns = (campaignsQuery.data?.data ?? []) as Campaign[];
   const activeCampaigns = campaigns.filter((item) => item.status === "active").length;
+  const performanceMap = new Map(
+    (((summaryQuery.data?.data.campaigns as CampaignPerformance[] | undefined) ?? []).map((entry) => [entry.campaignId, entry])),
+  );
+
+  const visibleCampaigns = campaigns.filter((campaign) => {
+    if (statusFilter !== "all" && campaign.status !== statusFilter) {
+      return false;
+    }
+
+    if (!search.trim()) {
+      return true;
+    }
+
+    const needle = search.trim().toLowerCase();
+    return campaign.name.toLowerCase().includes(needle) || (campaign.description ?? "").toLowerCase().includes(needle);
+  });
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -157,11 +182,40 @@ export default function CampaignsPage() {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <section className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/50">
-          <header className="border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Listado de campañas</h2>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              Selecciona una campaña para editar reglas y visualizar performance.
-            </p>
+          <header className="space-y-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Listado de campañas</h2>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Más contexto operativo para gestionar lifecycle y rendimiento.</p>
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por nombre o descripción"
+                className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+              />
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as "all" | Campaign["status"])}
+                className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                <option value="all">Todos los estados</option>
+                {(Object.keys(statusLabel) as Campaign["status"][]).map((status) => (
+                  <option key={status} value={status}>
+                    {statusLabel[status]}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-[1.3fr_0.45fr_0.65fr_0.45fr_auto] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <span>Campaña</span>
+              <span>Estado</span>
+              <span>Vigencia</span>
+              <span>30d</span>
+              <span className="text-right">Acción</span>
+            </div>
           </header>
 
           {campaignsQuery.isLoading && (
@@ -186,29 +240,35 @@ export default function CampaignsPage() {
 
           {!campaignsQuery.isLoading && campaigns.length > 0 && (
             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
-              {campaigns.map((campaign) => (
+              {visibleCampaigns.map((campaign) => {
+                const performance = performanceMap.get(campaign.id);
+                const periodLabel = `${campaign.startsAt ? new Date(campaign.startsAt).toLocaleDateString("es-MX") : "Sin inicio"} · ${campaign.endsAt ? new Date(campaign.endsAt).toLocaleDateString("es-MX") : "Sin fin"}`;
+
+                return (
                 <li key={campaign.id} className="px-5 py-3">
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="grid grid-cols-[1.3fr_0.45fr_0.65fr_0.45fr_auto] items-start gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        {campaign.name}
-                      </p>
+                      <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign.name}</p>
                       {campaign.description && (
-                        <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
-                          {campaign.description}
-                        </p>
+                        <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{campaign.description}</p>
                       )}
-                      <p className="mt-1 text-[11px] text-zinc-400">
-                        Creada: {new Date(campaign.createdAt).toLocaleDateString("es-MX")}
-                      </p>
+                      <p className="mt-1 text-[11px] text-zinc-400">Creada: {new Date(campaign.createdAt).toLocaleDateString("es-MX")}</p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusClass[campaign.status]}`}
-                      >
+                    <div>
+                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusClass[campaign.status]}`}>
                         {statusLabel[campaign.status]}
                       </span>
+                    </div>
+
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{periodLabel}</div>
+
+                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <p>Tx: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{performance?.transactions ?? 0}</span></p>
+                      <p>Canjes: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{performance?.redemptions ?? 0}</span></p>
+                    </div>
+
+                    <div className="text-right">
                       <Link
                         href={`/campaigns/${campaign.id}`}
                         className="rounded-md border border-zinc-200 px-2.5 py-1 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -218,7 +278,8 @@ export default function CampaignsPage() {
                     </div>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
         </section>
@@ -233,9 +294,10 @@ export default function CampaignsPage() {
                 createCampaign.mutate();
               }}
             >
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="campaign-name" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Nombre
                 <input
+                  id="campaign-name"
                   required
                   minLength={3}
                   value={form.name}
@@ -244,9 +306,10 @@ export default function CampaignsPage() {
                 />
               </label>
 
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="campaign-description" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Descripción
                 <textarea
+                  id="campaign-description"
                   value={form.description}
                   onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
                   className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"

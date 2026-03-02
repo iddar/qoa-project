@@ -1,0 +1,4 @@
+interface:
+  display_name: "Playwright E2E"
+  short_description: "Pruebas E2E web con Playwright y Bun."
+  default_prompt: "Configura Playwright y crea pruebas E2E robustas para flujos críticos."

@@ -34,3 +34,12 @@ Default seed credentials use password `Password123!` and include:
 - `consumer`
 
 Each environment uses isolated emails (`*.development@qoa.local`, `*.local@qoa.local`, `*.test@qoa.local`).
+
+For `development` and `local`, the seed also creates demo activity for UX validation:
+
+- 30-day purchase history
+- campaign subscriptions and multi-campaign accumulation
+- active policy fixtures per campaign (min amount, min quantity, max accumulations, cooldown)
+- active rewards and completed redemptions for KPI/report widgets
+
+`test` keeps a minimal dataset for faster automated runs.

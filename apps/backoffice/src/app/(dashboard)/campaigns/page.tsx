@@ -16,6 +16,8 @@ type CampaignListItem = {
   name: string;
   status: string;
   cpgId?: string;
+  startsAt?: string;
+  endsAt?: string;
 };
 
 type CampaignAuditItem = {
@@ -63,6 +65,22 @@ const actionLabel = (status: string) => {
   if (status === "in_review") return "Confirmar";
   if (status === "confirmed") return "Activar";
   return null;
+};
+
+const policyLabel = (policy: CampaignPolicyItem) => {
+  if (policy.policyType === "min_amount") {
+    return `Compra mínima de $${policy.value.toLocaleString("es-MX")} por ${policy.period}`;
+  }
+
+  if (policy.policyType === "min_quantity") {
+    return `Compra mínima de ${policy.value} pieza(s) por ${policy.period}`;
+  }
+
+  if (policy.policyType === "max_accumulations") {
+    return `Máximo ${policy.value} acumulaciones por ${policy.period}`;
+  }
+
+  return `Enfriamiento de ${policy.value} por ${policy.period}`;
 };
 
 export default function CampaignsPage() {
@@ -306,6 +324,11 @@ export default function CampaignsPage() {
                         <p className="text-xs text-zinc-500 dark:text-zinc-300">
                           Estado: {campaign.status}
                         </p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-300">
+                          Vigencia: {campaign.startsAt ? new Date(campaign.startsAt).toLocaleDateString("es-MX") : "Sin inicio"}
+                          {" · "}
+                          {campaign.endsAt ? new Date(campaign.endsAt).toLocaleDateString("es-MX") : "Sin fin"}
+                        </p>
                         {campaign.cpgId && (
                           <p className="text-xs text-zinc-500 dark:text-zinc-300">
                             CPG: {campaign.cpgId}
@@ -393,11 +416,9 @@ export default function CampaignsPage() {
                       key={policy.id}
                       className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
                     >
-                      <p className="font-medium text-zinc-700 dark:text-zinc-200">
-                        {policy.policyType} · {policy.scopeType}
-                      </p>
+                      <p className="font-medium text-zinc-700 dark:text-zinc-200">{policyLabel(policy)}</p>
                       <p className="text-zinc-500 dark:text-zinc-300">
-                        {policy.period} · valor: {policy.value}
+                        alcance: {policy.scopeType}
                         {policy.scopeId ? ` · scopeId: ${policy.scopeId}` : ""}
                       </p>
                     </li>

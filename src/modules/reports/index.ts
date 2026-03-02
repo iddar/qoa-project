@@ -473,15 +473,20 @@ export const reportsModule = new Elysia({
 
       const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows, campaignsRows] = await Promise.all([
         db.execute(sql`
+          with campaign_tx as (
+            select distinct ti.transaction_id
+            from accumulations a
+            inner join transaction_items ti on ti.id = a.transaction_item_id
+            inner join campaigns cp on cp.id = a.campaign_id
+            where cp.cpg_id = ${params.cpgId}
+              and a.created_at between ${fromIso} and ${toIso}
+          )
           select
             count(*)::int as count,
             coalesce(sum(t.total_amount), 0)::int as amount,
             count(distinct t.card_id)::int as cards
-          from transactions t
-          inner join cards ca on ca.id = t.card_id
-          inner join campaigns cp on cp.id = ca.campaign_id
-          where cp.cpg_id = ${params.cpgId}
-            and t.created_at between ${fromIso} and ${toIso}
+          from campaign_tx ctx
+          inner join transactions t on t.id = ctx.transaction_id
         `) as Promise<KpiTransactionsRow[]>,
         db.execute(sql`
           select
@@ -497,8 +502,8 @@ export const reportsModule = new Elysia({
             count(*)::int as count,
             coalesce(sum(r.cost), 0)::int as cost
           from redemptions r
-          inner join cards ca on ca.id = r.card_id
-          inner join campaigns cp on cp.id = ca.campaign_id
+          inner join rewards rw on rw.id = r.reward_id
+          inner join campaigns cp on cp.id = rw.campaign_id
           where cp.cpg_id = ${params.cpgId}
             and r.created_at between ${fromIso} and ${toIso}
         `) as Promise<KpiRedemptionsRow[]>,
@@ -507,14 +512,18 @@ export const reportsModule = new Elysia({
             select generate_series(${fromDayIso}::date, ${toDayIso}::date, interval '1 day')::date as day
           ),
           tx as (
-            select date_trunc('day', t.created_at)::date as day,
+            select date_trunc('day', a.created_at)::date as day,
                    count(*)::int as transactions,
                    coalesce(sum(t.total_amount), 0)::int as sales_amount
-            from transactions t
-            inner join cards ca on ca.id = t.card_id
-            inner join campaigns cp on cp.id = ca.campaign_id
-            where cp.cpg_id = ${params.cpgId}
-              and t.created_at between ${fromIso} and ${toIso}
+            from (
+              select distinct a.id, a.created_at, ti.transaction_id
+              from accumulations a
+              inner join transaction_items ti on ti.id = a.transaction_item_id
+              inner join campaigns cp on cp.id = a.campaign_id
+              where cp.cpg_id = ${params.cpgId}
+                and a.created_at between ${fromIso} and ${toIso}
+            ) a
+            inner join transactions t on t.id = a.transaction_id
             group by 1
           ),
           acc as (
@@ -530,8 +539,8 @@ export const reportsModule = new Elysia({
             select date_trunc('day', r.created_at)::date as day,
                    count(*)::int as redemptions
             from redemptions r
-            inner join cards ca on ca.id = r.card_id
-            inner join campaigns cp on cp.id = ca.campaign_id
+            inner join rewards rw on rw.id = r.reward_id
+            inner join campaigns cp on cp.id = rw.campaign_id
             where cp.cpg_id = ${params.cpgId}
               and r.created_at between ${fromIso} and ${toIso}
             group by 1
@@ -559,13 +568,18 @@ export const reportsModule = new Elysia({
             coalesce(red.redemptions, 0)::int as redemptions
           from campaigns cp
           left join lateral (
+            with campaign_tx as (
+              select distinct ti.transaction_id
+              from accumulations a
+              inner join transaction_items ti on ti.id = a.transaction_item_id
+              where a.campaign_id = cp.id
+                and a.created_at between ${fromIso} and ${toIso}
+            )
             select
               count(*)::int as transactions,
               coalesce(sum(t.total_amount), 0)::int as sales_amount
-            from transactions t
-            inner join cards ca on ca.id = t.card_id
-            where ca.campaign_id = cp.id
-              and t.created_at between ${fromIso} and ${toIso}
+            from campaign_tx ctx
+            inner join transactions t on t.id = ctx.transaction_id
           ) tx on true
           left join lateral (
             select count(*)::int as accumulations
@@ -576,8 +590,8 @@ export const reportsModule = new Elysia({
           left join lateral (
             select count(*)::int as redemptions
             from redemptions r
-            inner join cards ca on ca.id = r.card_id
-            where ca.campaign_id = cp.id
+            inner join rewards rw on rw.id = r.reward_id
+            where rw.campaign_id = cp.id
               and r.created_at between ${fromIso} and ${toIso}
           ) red on true
           where cp.cpg_id = ${params.cpgId}
@@ -653,14 +667,19 @@ export const reportsModule = new Elysia({
 
       const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows] = await Promise.all([
         db.execute(sql`
+          with campaign_tx as (
+            select distinct ti.transaction_id
+            from accumulations a
+            inner join transaction_items ti on ti.id = a.transaction_item_id
+            where a.campaign_id = ${campaign.id}
+              and a.created_at between ${fromIso} and ${toIso}
+          )
           select
             count(*)::int as count,
             coalesce(sum(t.total_amount), 0)::int as amount,
             count(distinct t.card_id)::int as cards
-          from transactions t
-          inner join cards ca on ca.id = t.card_id
-          where ca.campaign_id = ${campaign.id}
-            and t.created_at between ${fromIso} and ${toIso}
+          from campaign_tx ctx
+          inner join transactions t on t.id = ctx.transaction_id
         `) as Promise<KpiTransactionsRow[]>,
         db.execute(sql`
           select
@@ -675,8 +694,8 @@ export const reportsModule = new Elysia({
             count(*)::int as count,
             coalesce(sum(r.cost), 0)::int as cost
           from redemptions r
-          inner join cards ca on ca.id = r.card_id
-          where ca.campaign_id = ${campaign.id}
+          inner join rewards rw on rw.id = r.reward_id
+          where rw.campaign_id = ${campaign.id}
             and r.created_at between ${fromIso} and ${toIso}
         `) as Promise<KpiRedemptionsRow[]>,
         db.execute(sql`
@@ -684,13 +703,17 @@ export const reportsModule = new Elysia({
             select generate_series(${fromDayIso}::date, ${toDayIso}::date, interval '1 day')::date as day
           ),
           tx as (
-            select date_trunc('day', t.created_at)::date as day,
+            select date_trunc('day', a.created_at)::date as day,
                    count(*)::int as transactions,
                    coalesce(sum(t.total_amount), 0)::int as sales_amount
-            from transactions t
-            inner join cards ca on ca.id = t.card_id
-            where ca.campaign_id = ${campaign.id}
-              and t.created_at between ${fromIso} and ${toIso}
+            from (
+              select distinct a.id, a.created_at, ti.transaction_id
+              from accumulations a
+              inner join transaction_items ti on ti.id = a.transaction_item_id
+              where a.campaign_id = ${campaign.id}
+                and a.created_at between ${fromIso} and ${toIso}
+            ) a
+            inner join transactions t on t.id = a.transaction_id
             group by 1
           ),
           acc as (
@@ -705,8 +728,8 @@ export const reportsModule = new Elysia({
             select date_trunc('day', r.created_at)::date as day,
                    count(*)::int as redemptions
             from redemptions r
-            inner join cards ca on ca.id = r.card_id
-            where ca.campaign_id = ${campaign.id}
+            inner join rewards rw on rw.id = r.reward_id
+            where rw.campaign_id = ${campaign.id}
               and r.created_at between ${fromIso} and ${toIso}
             group by 1
           )
