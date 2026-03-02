@@ -281,4 +281,112 @@ describe('Rewards module', () => {
     await db.delete(cpgs).where(eq(cpgs.id, foreignCpg.id));
     await db.delete(cpgs).where(eq(cpgs.id, ownedCpg.id));
   });
+
+  it('rejects double redemption (ALREADY_REDEEMED)', async () => {
+    const [user] = (await db
+      .insert(users)
+      .values({
+        phone: `+52155${Math.floor(Math.random() * 10_000_000)
+          .toString()
+          .padStart(7, '0')}`,
+        email: `double_redeem_${crypto.randomUUID()}@qoa.test`,
+        role: 'consumer',
+      })
+      .returning({ id: users.id })) as Array<{ id: string }>;
+
+    const [store] = (await db
+      .insert(stores)
+      .values({
+        name: 'Store Double Redeem',
+        code: `sto_dbl_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        type: 'tiendita',
+      })
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+
+    const [campaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign Double Redeem ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    const [card] = (await db
+      .insert(cards)
+      .values({
+        userId: user!.id,
+        campaignId: campaign!.id,
+        storeId: store!.id,
+        code: `card_dbl_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+      })
+      .returning({ id: cards.id })) as Array<{ id: string }>;
+
+    await db.insert(balances).values({
+      cardId: card!.id,
+      current: 50,
+      lifetime: 50,
+      updatedAt: new Date(),
+    });
+
+    await db.insert(campaignBalances).values({
+      cardId: card!.id,
+      campaignId: campaign!.id,
+      current: 50,
+      lifetime: 50,
+      updatedAt: new Date(),
+    });
+
+    const {
+      data: reward,
+      error: createError,
+    } = await api.v1.rewards.post(
+      {
+        campaignId: campaign!.id,
+        name: `Reward Double ${crypto.randomUUID().slice(0, 5)}`,
+        cost: 20,
+        stock: 1,
+        status: 'active',
+      },
+      { headers: adminHeaders },
+    );
+
+    if (createError || !reward) {
+      throw createError?.value || new Error('Failed to create reward');
+    }
+
+    const rewardId = reward.data.id;
+
+    const firstRedemption = await api.v1.rewards({ rewardId }).redeem.post(
+      {
+        cardId: card!.id,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    expect(firstRedemption.status).toBe(200);
+
+    const secondRedemption = await api.v1.rewards({ rewardId }).redeem.post(
+      {
+        cardId: card!.id,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    expect(secondRedemption.status).toBe(409);
+    expect(secondRedemption.error).toBeDefined();
+    const errorValue = secondRedemption.error?.value as { error?: { code?: string } };
+    expect(errorValue?.error?.code).toBe('ALREADY_REDEEMED');
+
+    await db.delete(redemptions).where(eq(redemptions.rewardId, rewardId));
+    await db.delete(campaignBalances).where(eq(campaignBalances.cardId, card!.id));
+    await db.delete(balances).where(eq(balances.cardId, card!.id));
+    await db.delete(cards).where(eq(cards.id, card!.id));
+    await db.delete(rewards).where(eq(rewards.id, rewardId));
+    await db.delete(campaigns).where(eq(campaigns.id, campaign!.id));
+    await db.delete(stores).where(eq(stores.id, store!.id));
+    await db.delete(users).where(eq(users.id, user!.id));
+  });
 });

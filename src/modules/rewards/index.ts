@@ -430,15 +430,6 @@ export const rewardsModule = new Elysia({
         });
       }
 
-      if (reward.stock !== null && reward.stock <= 0) {
-        return status(422, {
-          error: {
-            code: 'REWARD_OUT_OF_STOCK',
-            message: 'No hay stock disponible',
-          },
-        });
-      }
-
       const [card] = (await db
         .select({
           cardId: cards.id,
@@ -464,6 +455,31 @@ export const rewardsModule = new Elysia({
           error: {
             code: 'REWARD_CARD_MISMATCH',
             message: 'La tarjeta no pertenece a la campaña de la recompensa',
+          },
+        });
+      }
+
+      const [existingRedemption] = (await db
+        .select()
+        .from(redemptions)
+        .where(and(eq(redemptions.cardId, card.cardId), eq(redemptions.rewardId, reward.id)))) as Array<{
+        id: string;
+      }>;
+
+      if (existingRedemption) {
+        return status(409, {
+          error: {
+            code: 'ALREADY_REDEEMED',
+            message: 'Esta recompensa ya ha sido canjeada',
+          },
+        });
+      }
+
+      if (reward.stock !== null && reward.stock <= 0) {
+        return status(422, {
+          error: {
+            code: 'REWARD_OUT_OF_STOCK',
+            message: 'No hay stock disponible',
           },
         });
       }
