@@ -7,6 +7,7 @@ import { parseLimit, parseCursor } from '../../app/utils/pagination';
 import { generateCode } from '../../app/utils/generateCode';
 import { db } from '../../db/client';
 import { stores } from '../../db/schema';
+import { generateStoreQrPayload } from '../../services/stores';
 import type { StatusHandler } from '../../types/handlers';
 import { qrResponse, storeCreateRequest, storeListQuery, storeListResponse, storeResponse } from './model';
 
@@ -307,15 +308,7 @@ export const storesModule = new Elysia({
       }
 
       return {
-        data: {
-          code: store.code,
-          payload: {
-            entityType: 'store',
-            entityId: store.id,
-            code: store.code,
-          },
-          expiresAt: undefined,
-        },
+        data: generateStoreQrPayload(store),
       };
     },
     {
