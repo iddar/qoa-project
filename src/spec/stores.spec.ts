@@ -167,4 +167,80 @@ describe('Stores module', () => {
     await db.delete(stores).where(eq(stores.id, storeId));
     await db.delete(users).where(eq(users.id, user.id));
   });
+
+  it('restricts store users to their own tenant store', async () => {
+    const [storeA] = (await db
+      .insert(stores)
+      .values({
+        name: `Store A ${crypto.randomUUID().slice(0, 6)}`,
+        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        type: 'tiendita',
+      })
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+
+    const [storeB] = (await db
+      .insert(stores)
+      .values({
+        name: `Store B ${crypto.randomUUID().slice(0, 6)}`,
+        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        type: 'superette',
+      })
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+
+    if (!storeA || !storeB) {
+      throw new Error('Failed to create stores for tenant-scope test');
+    }
+
+    const password = 'Password123!';
+    const email = `store_scope_${crypto.randomUUID()}@qoa.test`;
+    const [storeUser] = (await db
+      .insert(users)
+      .values({
+        phone: `+52155${Math.floor(Math.random() * 10_000_000)
+          .toString()
+          .padStart(7, '0')}`,
+        email,
+        passwordHash: await Bun.password.hash(password),
+        role: 'store_admin',
+        tenantId: storeA.id,
+        tenantType: 'store',
+      })
+      .returning({ id: users.id })) as Array<{ id: string }>;
+
+    if (!storeUser) {
+      throw new Error('Failed to create store user');
+    }
+
+    const login = await api.v1.auth.login.post({ email, password });
+    if (login.error || !login.data) {
+      throw login.error?.value ?? new Error('Login response missing');
+    }
+
+    const authHeaders = buildAuthHeaders(login.data.data.accessToken);
+
+    const storeList = await api.v1.stores.get({
+      query: { limit: '20' },
+      headers: authHeaders,
+    });
+
+    if (storeList.error || !storeList.data) {
+      throw storeList.error?.value ?? new Error('Store list missing');
+    }
+
+    expect(storeList.status).toBe(200);
+    expect(storeList.data.data.length).toBe(1);
+    expect(storeList.data.data[0]?.id).toBe(storeA.id);
+
+    const forbiddenStore = await api.v1.stores({ storeId: storeB.id }).get({ headers: authHeaders });
+    expect(forbiddenStore.status).toBe(403);
+    expect(forbiddenStore.error).toBeDefined();
+
+    const forbiddenQr = await api.v1.stores({ storeId: storeB.id }).qr.get({ headers: authHeaders });
+    expect(forbiddenQr.status).toBe(403);
+    expect(forbiddenQr.error).toBeDefined();
+
+    await db.delete(users).where(eq(users.id, storeUser.id));
+    await db.delete(stores).where(eq(stores.id, storeB.id));
+    await db.delete(stores).where(eq(stores.id, storeA.id));
+  });
 });

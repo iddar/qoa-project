@@ -2,6 +2,7 @@ import { Elysia } from 'elysia';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm/sql';
 import { authGuard, authPlugin } from '../../app/plugins/auth';
+import type { AuthContext } from '../../app/plugins/auth';
 import { parseLimit, parseCursor } from '../../app/utils/pagination';
 import { generateCode } from '../../app/utils/generateCode';
 import { db } from '../../db/client';
@@ -50,6 +51,7 @@ type StoreParams = {
 };
 
 type StoreListContext = {
+  auth: AuthContext | null;
   query: StoreListQuery;
   status: StatusHandler;
 };
@@ -60,8 +62,29 @@ type StoreCreateContext = {
 };
 
 type StoreParamsContext = {
+  auth: AuthContext | null;
   params: StoreParams;
   status: StatusHandler;
+};
+
+const isStoreOperator = (auth: AuthContext) => {
+  if (auth.type !== 'jwt' && auth.type !== 'dev') {
+    return false;
+  }
+
+  return auth.role === 'store_admin' || auth.role === 'store_staff';
+};
+
+const canAccessStore = (auth: AuthContext, storeId: string) => {
+  if (auth.type === 'jwt' || auth.type === 'dev') {
+    if (!isStoreOperator(auth)) {
+      return true;
+    }
+
+    return auth.tenantType === 'store' && auth.tenantId === storeId;
+  }
+
+  return auth.tenantType === 'store' && auth.tenantId === storeId;
 };
 
 const serializeStore = (store: StoreRow) => ({
@@ -84,7 +107,16 @@ export const storesModule = new Elysia({
   .use(authPlugin)
   .get(
     '/',
-    async ({ query, status }: StoreListContext) => {
+    async ({ auth, query, status }: StoreListContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
       const cursorDate = parseCursor(query.cursor);
       if (query.cursor && !cursorDate) {
         return status(400, {
@@ -97,11 +129,30 @@ export const storesModule = new Elysia({
 
       const limit = parseLimit(query.limit);
       const safeLimit = Math.trunc(limit) + 1;
-      const cursorFilter = cursorDate ? sql`where "stores"."created_at" < ${cursorDate}` : sql``;
+      const filters = [] as ReturnType<typeof sql>[];
+
+      if (cursorDate) {
+        filters.push(sql`"stores"."created_at" < ${cursorDate}`);
+      }
+
+      if (isStoreOperator(auth)) {
+        if (auth.tenantType !== 'store' || !auth.tenantId) {
+          return status(403, {
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Usuario de tienda sin tenant válido',
+            },
+          });
+        }
+
+        filters.push(sql`"stores"."id" = ${auth.tenantId}`);
+      }
+
+      const whereClause = filters.length > 0 ? sql`where ${sql.join(filters, sql` and `)}` : sql``;
       const listQuery = sql`
         select "id", "code", "name", "type", "address", "phone", "status", "created_at"
         from "stores"
-        ${cursorFilter}
+        ${whereClause}
         order by "stores"."created_at" desc, "stores"."id" desc
         limit ${sql.raw(String(safeLimit))}
       `;
@@ -181,7 +232,25 @@ export const storesModule = new Elysia({
   )
   .get(
     '/:storeId',
-    async ({ params, status }: StoreParamsContext) => {
+    async ({ auth, params, status }: StoreParamsContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No puedes acceder a esta tienda',
+          },
+        });
+      }
+
       const [store] = (await db.select().from(stores).where(eq(stores.id, params.storeId))) as StoreRow[];
       if (!store) {
         return status(404, {
@@ -208,7 +277,25 @@ export const storesModule = new Elysia({
   )
   .get(
     '/:storeId/qr',
-    async ({ params, status }: StoreParamsContext) => {
+    async ({ auth, params, status }: StoreParamsContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No puedes acceder a esta tienda',
+          },
+        });
+      }
+
       const [store] = (await db.select().from(stores).where(eq(stores.id, params.storeId))) as StoreRow[];
       if (!store) {
         return status(404, {
