@@ -223,6 +223,69 @@ describe('Campaigns module', () => {
     expect(typeof data.pagination.hasMore).toBe('boolean');
   });
 
+  it('creates and lists campaign tiers with rolling window rules', async () => {
+    const { data: created, error: createError } = await api.v1.campaigns.post(
+      {
+        name: `Campaign tiers ${crypto.randomUUID().slice(0, 8)}`,
+        cpgId: '11111111-1111-4111-8111-111111111111',
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (createError) {
+      throw createError.value;
+    }
+    if (!created) {
+      throw new Error('Campaign create response missing');
+    }
+
+    const campaignId = created.data.id;
+    const { data: tierData, error: tierError, status: tierStatus } = await api.v1.campaigns({ campaignId }).tiers.post(
+      {
+        name: 'Silver',
+        order: 1,
+        thresholdValue: 10,
+        windowUnit: 'day',
+        windowValue: 90,
+        minPurchaseCount: 3,
+        qualificationMode: 'any',
+        graceDays: 7,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (tierError) {
+      throw tierError.value;
+    }
+    if (!tierData) {
+      throw new Error('Tier create response missing');
+    }
+
+    expect(tierStatus).toBe(201);
+    expect(tierData.data.name).toBe('Silver');
+
+    const { data: listData, error: listError, status: listStatus } = await api.v1.campaigns({ campaignId }).tiers.get({
+      headers: adminHeaders,
+    });
+
+    if (listError) {
+      throw listError.value;
+    }
+    if (!listData) {
+      throw new Error('Tier list response missing');
+    }
+
+    expect(listStatus).toBe(200);
+    expect(listData.data.length).toBe(1);
+    expect(listData.data[0]?.windowValue).toBe(90);
+
+    await db.delete(campaigns).where(eq(campaigns.id, campaignId));
+  });
+
   it('supports wallet discovery and subscription flow', async () => {
     const [walletUser] = (await db
       .insert(users)

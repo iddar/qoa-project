@@ -119,6 +119,25 @@ describe('Jobs module', () => {
     expect(listed.status).toBe(200);
     expect(listed.data.data.some((job: { cardId: string }) => job.cardId === card!.id)).toBe(true);
 
+    const tiersRun = await api.v1.jobs.tiers.run.post(
+      {
+        limit: 100,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (tiersRun.error) {
+      throw tiersRun.error.value;
+    }
+    if (!tiersRun.data) {
+      throw new Error('Run tiers response missing');
+    }
+
+    expect(tiersRun.status).toBe(200);
+    expect(tiersRun.data.data.checked).toBeGreaterThanOrEqual(1);
+
     await db.delete(reminderJobs).where(eq(reminderJobs.cardId, card!.id));
     await db.delete(balances).where(eq(balances.cardId, card!.id));
     await db.delete(cards).where(eq(cards.id, card!.id));

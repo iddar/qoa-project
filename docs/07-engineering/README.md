@@ -21,3 +21,7 @@ Esta carpeta contiene los estándares internos de ingeniería, incluyendo git, P
   - `logging-tracing.md`: Correlation ID, logs estructurados, métricas.
   - `decisiones.md`: ADR para elecciones clave (DB, arquitectura, etc.).
 - `plan-desarrollo.md` ya resume etapas, TODOs y entregables de código/tests/API.
+
+## Artefactos implementados
+
+- `tiers-rolling-window.md`: reglas y alcance técnico del sistema de tiers por ventana móvil (MVP).

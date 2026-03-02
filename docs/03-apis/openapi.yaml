@@ -1074,6 +1074,93 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignPolicyResponse'
 
+  /campaigns/{campaignId}/tiers:
+    get:
+      tags: [Campaigns]
+      summary: Listar tiers de campaña
+      operationId: listCampaignTiers
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      responses:
+        '200':
+          description: Lista de tiers de la campaña
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTierListResponse'
+
+    post:
+      tags: [Campaigns]
+      summary: Crear tier de campaña
+      operationId: createCampaignTier
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignTierCreate'
+      responses:
+        '201':
+          description: Tier creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTierResponse'
+
+  /campaigns/{campaignId}/tiers/{tierId}:
+    patch:
+      tags: [Campaigns]
+      summary: Actualizar tier de campaña
+      operationId: updateCampaignTier
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - name: tierId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignTierUpdate'
+      responses:
+        '200':
+          description: Tier actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignTierResponse'
+
+    delete:
+      tags: [Campaigns]
+      summary: Eliminar tier de campaña
+      operationId: deleteCampaignTier
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - name: tierId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Tier eliminado
+
   /campaigns/{campaignId}/code-sets:
     get:
       tags: [Campaigns]
@@ -1561,6 +1648,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReminderRunResponse'
+
+  /jobs/tiers/run:
+    post:
+      tags: [Jobs]
+      summary: Recalcular tiers por ventana
+      operationId: runTierEvaluationJob
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TierRunRequest'
+      responses:
+        '200':
+          description: Resultado de reevaluación de tiers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TierRunResponse'
 
   /jobs/reminders:
     get:
@@ -2168,6 +2275,24 @@ components:
                   type: string
                 code:
                   type: string
+                currentTierId:
+                  type: string
+                  nullable: true
+                tierGraceUntil:
+                  type: string
+                  format: date-time
+                  nullable: true
+                tierLastEvaluatedAt:
+                  type: string
+                  format: date-time
+                  nullable: true
+                tierState:
+                  type: string
+                  enum: [unqualified, qualified, at_risk]
+                currentTier:
+                  allOf:
+                    - $ref: '#/components/schemas/CampaignTier'
+                  nullable: true
                 status:
                   type: string
                 createdAt:
@@ -2416,15 +2541,37 @@ components:
       properties:
         id:
           type: string
+        campaignId:
+          type: string
         name:
           type: string
-        thresholdValue:
-          type: integer
-        thresholdType:
-          type: string
-          enum: [cumulative, per_period, reset_on_redeem]
         order:
           type: integer
+        thresholdValue:
+          type: integer
+        windowUnit:
+          type: string
+          enum: [day, month, year]
+        windowValue:
+          type: integer
+        minPurchaseCount:
+          type: integer
+          nullable: true
+        minPurchaseAmount:
+          type: integer
+          nullable: true
+        qualificationMode:
+          type: string
+          enum: [any, all]
+        graceDays:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
         benefits:
           type: array
           items:
@@ -2433,11 +2580,14 @@ components:
     TierBenefit:
       type: object
       properties:
+        id:
+          type: string
         type:
           type: string
           enum: [discount, reward, multiplier, free_product]
         config:
-          type: object
+          type: string
+          nullable: true
 
     CampaignPolicy:
       type: object
@@ -2821,6 +2971,103 @@ components:
           items:
             $ref: '#/components/schemas/CampaignPolicy'
 
+    CampaignTierCreate:
+      type: object
+      required: [name, order, thresholdValue]
+      properties:
+        name:
+          type: string
+        order:
+          type: integer
+          minimum: 1
+        thresholdValue:
+          type: integer
+          minimum: 1
+        windowUnit:
+          type: string
+          enum: [day, month, year]
+        windowValue:
+          type: integer
+          minimum: 1
+        minPurchaseCount:
+          type: integer
+          minimum: 1
+        minPurchaseAmount:
+          type: integer
+          minimum: 1
+        qualificationMode:
+          type: string
+          enum: [any, all]
+        graceDays:
+          type: integer
+          minimum: 0
+          maximum: 90
+        benefits:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [discount, reward, multiplier, free_product]
+              config:
+                type: string
+
+    CampaignTierUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        order:
+          type: integer
+          minimum: 1
+        thresholdValue:
+          type: integer
+          minimum: 1
+        windowUnit:
+          type: string
+          enum: [day, month, year]
+        windowValue:
+          type: integer
+          minimum: 1
+        minPurchaseCount:
+          type: integer
+          minimum: 1
+        minPurchaseAmount:
+          type: integer
+          minimum: 1
+        qualificationMode:
+          type: string
+          enum: [any, all]
+        graceDays:
+          type: integer
+          minimum: 0
+          maximum: 90
+        benefits:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [discount, reward, multiplier, free_product]
+              config:
+                type: string
+
+    CampaignTierResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignTier'
+
+    CampaignTierListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignTier'
+
     CampaignResponse:
       type: object
       properties:
@@ -3099,6 +3346,14 @@ components:
           description: Código único de la tarjeta
         currentTierId:
           type: string
+          nullable: true
+        tierGraceUntil:
+          type: string
+          format: date-time
+          nullable: true
+        tierLastEvaluatedAt:
+          type: string
+          format: date-time
           nullable: true
         status:
           type: string
@@ -3597,6 +3852,32 @@ components:
             $ref: '#/components/schemas/ReminderJob'
         pagination:
           $ref: '#/components/schemas/Pagination'
+
+    TierRunRequest:
+      type: object
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 500
+
+    TierRunResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            checked:
+              type: integer
+            updated:
+              type: integer
+            atRisk:
+              type: integer
+            unchanged:
+              type: integer
+            runAt:
+              type: string
+              format: date-time
 
     # ===== Reward =====
     Reward:

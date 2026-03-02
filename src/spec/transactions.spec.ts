@@ -10,6 +10,7 @@ import {
   campaignBalances,
   brands,
   campaignPolicies,
+  campaignTiers,
   cards,
   campaignSubscriptions,
   campaigns,
@@ -981,6 +982,93 @@ describe('Transactions module', () => {
     expect(tx.status).toBe(201);
     const campaignAcc = tx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
     expect(campaignAcc.length).toBe(1);
+
+    await cleanupPolicyFixture(fixture);
+  });
+
+  it('evaluates rolling tiers and marks card as at_risk when the window no longer qualifies', async () => {
+    const fixture = await createPolicyFixture();
+
+    const [tier] = (await db
+      .insert(campaignTiers)
+      .values({
+        campaignId: fixture.campaign.id,
+        name: 'Silver',
+        order: 1,
+        thresholdValue: 1,
+        windowUnit: 'day',
+        windowValue: 1,
+        minPurchaseCount: 1,
+        qualificationMode: 'any',
+        graceDays: 7,
+      })
+      .returning({ id: campaignTiers.id })) as Array<{ id: string }>;
+
+    if (!tier) {
+      throw new Error('Failed to create tier');
+    }
+
+    const { error: txError } = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 1,
+            amount: 50,
+          },
+        ],
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (txError) {
+      throw txError.value;
+    }
+
+    const [qualifiedCard] = (await db
+      .select({ currentTierId: cards.currentTierId, tierGraceUntil: cards.tierGraceUntil })
+      .from(cards)
+      .where(eq(cards.id, fixture.card.id))) as Array<{ currentTierId: string | null; tierGraceUntil: Date | null }>;
+
+    expect(qualifiedCard?.currentTierId).toBe(tier.id);
+    expect(qualifiedCard?.tierGraceUntil).toBeNull();
+
+    await db
+      .update(accumulations)
+      .set({ createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) })
+      .where(and(eq(accumulations.cardId, fixture.card.id), eq(accumulations.campaignId, fixture.campaign.id)));
+
+    const { data: runData, error: runError, status: runStatus } = await api.v1.jobs.tiers.run.post(
+      {
+        limit: 100,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (runError) {
+      throw runError.value;
+    }
+    if (!runData) {
+      throw new Error('Tier run response missing');
+    }
+
+    expect(runStatus).toBe(200);
+    expect(runData.data.atRisk).toBeGreaterThanOrEqual(1);
+
+    const [atRiskCard] = (await db
+      .select({ currentTierId: cards.currentTierId, tierGraceUntil: cards.tierGraceUntil })
+      .from(cards)
+      .where(eq(cards.id, fixture.card.id))) as Array<{ currentTierId: string | null; tierGraceUntil: Date | null }>;
+
+    expect(atRiskCard?.currentTierId).toBe(tier.id);
+    expect(atRiskCard?.tierGraceUntil).toBeInstanceOf(Date);
 
     await cleanupPolicyFixture(fixture);
   });
