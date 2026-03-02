@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
@@ -73,15 +73,7 @@ export default function StoreReportsPage() {
 
     return Math.max(4, Math.round((salesAmount / maxSales) * 100));
   };
-  const totals = useMemo(
-    () => ({
-      transactions: last15.reduce((acc, row) => acc + row.transactions, 0),
-      sales: last15.reduce((acc, row) => acc + row.salesAmount, 0),
-      accumulations: last15.reduce((acc, row) => acc + row.accumulations, 0),
-      redemptions: last15.reduce((acc, row) => acc + row.redemptions, 0),
-    }),
-    [last15],
-  );
+  const kpis = summaryQuery.data?.data.kpis;
 
   return (
     <div className="space-y-6">
@@ -110,20 +102,20 @@ export default function StoreReportsPage() {
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-          <p className="text-xs text-zinc-500">Tx (15d)</p>
-          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{totals.transactions}</p>
+          <p className="text-xs text-zinc-500">Transacciones</p>
+          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{kpis?.transactions ?? 0}</p>
         </article>
         <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-          <p className="text-xs text-zinc-500">Ventas (15d)</p>
-          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{formatMoney(totals.sales)}</p>
+          <p className="text-xs text-zinc-500">Ventas</p>
+          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{formatMoney(kpis?.salesAmount ?? 0)}</p>
         </article>
         <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
           <p className="text-xs text-zinc-500">Acumulaciones</p>
-          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{totals.accumulations}</p>
+          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{kpis?.accumulations ?? 0}</p>
         </article>
         <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
           <p className="text-xs text-zinc-500">Canjes</p>
-          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{totals.redemptions}</p>
+          <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{kpis?.redemptions ?? 0}</p>
         </article>
       </section>
 

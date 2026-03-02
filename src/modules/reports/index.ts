@@ -94,6 +94,8 @@ type CampaignAggregateRow = {
   redemptions: number;
 };
 
+const REPORT_TIMEZONE = 'America/Mexico_City';
+
 const countTable = async (table: Record<string, unknown>, condition?: unknown) => {
   const query = db.select({ count: sql<number>`count(*)::int` }).from(table as never);
   const rows = condition ? await query.where(condition as never) : await query;
@@ -344,7 +346,7 @@ export const reportsModule = new Elysia({
         return range.error;
       }
 
-      const { from, to, fromDayIso, toDayIso, fromIso, toIso } = range.value;
+      const { from, to, fromIso, toIso } = range.value;
 
       const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows] = await Promise.all([
         db.execute(sql`
@@ -377,10 +379,14 @@ export const reportsModule = new Elysia({
         `) as Promise<KpiRedemptionsRow[]>,
         db.execute(sql`
           with days as (
-            select generate_series(${fromDayIso}::date, ${toDayIso}::date, interval '1 day')::date as day
+            select generate_series(
+              timezone(${REPORT_TIMEZONE}, ${fromIso}::timestamptz)::date,
+              timezone(${REPORT_TIMEZONE}, ${toIso}::timestamptz)::date,
+              interval '1 day'
+            )::date as day
           ),
           tx as (
-            select date_trunc('day', t.created_at)::date as day,
+            select date_trunc('day', timezone(${REPORT_TIMEZONE}, t.created_at))::date as day,
                    count(*)::int as transactions,
                    coalesce(sum(t.total_amount), 0)::int as sales_amount
             from transactions t
@@ -389,7 +395,7 @@ export const reportsModule = new Elysia({
             group by 1
           ),
           acc as (
-            select date_trunc('day', a.created_at)::date as day,
+            select date_trunc('day', timezone(${REPORT_TIMEZONE}, a.created_at))::date as day,
                    count(*)::int as accumulations
             from accumulations a
             inner join transaction_items ti on ti.id = a.transaction_item_id
@@ -399,7 +405,7 @@ export const reportsModule = new Elysia({
             group by 1
           ),
           red as (
-            select date_trunc('day', r.created_at)::date as day,
+            select date_trunc('day', timezone(${REPORT_TIMEZONE}, r.created_at))::date as day,
                    count(*)::int as redemptions
             from redemptions r
             inner join cards ca on ca.id = r.card_id

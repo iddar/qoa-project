@@ -88,7 +88,6 @@ export default function StoreHomePage() {
   const daily = (summaryQuery.data?.data.daily ?? []) as DailyPoint[];
   const dailyLastWeek = daily.slice(-7);
   const maxTx = Math.max(...dailyLastWeek.map((item) => item.transactions), 1);
-  const maxSales = Math.max(...dailyLastWeek.map((item) => item.salesAmount), 1);
   const storeQrValue = storeQrQuery.data
     ? JSON.stringify({
         code: storeQrQuery.data.data.code,
@@ -162,31 +161,15 @@ export default function StoreHomePage() {
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_380px]">
         <article className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/40">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tendencia 7 días</h2>
-          <p className="mt-1 text-xs text-zinc-500">Comparativo diario de volumen de transacciones y monto de ventas.</p>
-          <div className="mt-3 flex items-center gap-4 text-[11px] text-zinc-500">
-            <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-amber-300/70 dark:bg-amber-500/50" />
-              Transacciones
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-emerald-300/70 dark:bg-emerald-500/50" />
-              Ventas
-            </span>
-          </div>
+          <p className="mt-1 text-xs text-zinc-500">Número de ventas por día, con monto total en cada columna.</p>
           <div className="mt-4 flex h-40 items-end gap-2">
             {dailyLastWeek.length === 0 && <p className="text-xs text-zinc-400">Sin datos aún.</p>}
             {dailyLastWeek.map((point) => (
               <div key={`${String(point.date)}-${point.transactions}`} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
-                <div className="flex h-full w-full items-end gap-1">
-                  <div
-                    className="w-1/2 rounded bg-amber-300/70 dark:bg-amber-500/40"
-                    style={{ height: `${Math.max(8, Math.round((point.transactions / maxTx) * 100))}%` }}
-                  />
-                  <div
-                    className="w-1/2 rounded bg-emerald-300/70 dark:bg-emerald-500/40"
-                    style={{ height: `${Math.max(8, Math.round((point.salesAmount / maxSales) * 100))}%` }}
-                  />
-                </div>
+                <div
+                  className="w-full rounded bg-amber-300/70 dark:bg-amber-500/40"
+                  style={{ height: `${Math.max(8, Math.round((point.transactions / maxTx) * 100))}%` }}
+                />
                 <p className="text-[10px] text-zinc-400">{point.transactions} tx</p>
                 <p className="text-[10px] text-zinc-400">{formatMoney(point.salesAmount)}</p>
                 <p className="text-[10px] text-zinc-400">{toDayLabel(point.date)}</p>

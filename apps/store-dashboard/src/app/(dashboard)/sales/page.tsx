@@ -22,6 +22,23 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+const mxDateFormatter = new Intl.DateTimeFormat("es-MX", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "America/Mexico_City",
+});
+
+const mxTimeFormatter = new Intl.DateTimeFormat("es-MX", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZone: "America/Mexico_City",
+});
+
+const formatMxDate = (value: string | Date) => mxDateFormatter.format(new Date(value));
+const formatMxTime = (value: string | Date) => mxTimeFormatter.format(new Date(value));
+
 const toInputDate = (value: Date) => {
   const year = value.getFullYear();
   const month = String(value.getMonth() + 1).padStart(2, "0");
@@ -138,16 +155,26 @@ export default function StoreSalesPage() {
   const grouped = useMemo(() => {
     const groups = new Map<string, { sales: number; transactions: number }>();
     for (const row of rows) {
-      const date = new Date(row.createdAt);
-      const key = date.toLocaleDateString("es-MX");
+      const key = formatMxDate(row.createdAt);
       const current = groups.get(key) ?? { sales: 0, transactions: 0 };
       current.sales += row.totalAmount;
       current.transactions += 1;
       groups.set(key, current);
     }
 
-    return Array.from(groups.entries()).map(([date, values]) => ({ date, ...values }));
+    return Array.from(groups.entries())
+      .map(([date, values]) => ({ date, ...values }))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
   }, [rows]);
+
+  const columnTotals = useMemo(
+    () => ({
+      transactions: rows.length,
+      sales: rows.reduce((acc, row) => acc + row.totalAmount, 0),
+      units: rows.reduce((acc, row) => acc + row.items.reduce((sum, item) => sum + item.quantity, 0), 0),
+    }),
+    [rows],
+  );
 
   return (
     <div className="space-y-6">
@@ -217,21 +244,7 @@ export default function StoreSalesPage() {
         </article>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Totales por fecha</h2>
-          <p className="mt-1 text-xs text-zinc-500">Rango activo: {label}</p>
-          <ul className="mt-3 space-y-2 text-sm">
-            {grouped.length === 0 && <li className="text-zinc-500">Sin movimientos en el rango.</li>}
-            {grouped.map((row) => (
-              <li key={row.date} className="rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                <p className="font-medium text-zinc-900 dark:text-zinc-100">{row.date}</p>
-                <p className="text-xs text-zinc-500">{row.transactions} tx - {formatMoney(row.sales)}</p>
-              </li>
-            ))}
-          </ul>
-        </article>
-
+      <section className="space-y-4">
         <article className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40">
           <header className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Listado de ventas</h2>
@@ -246,29 +259,49 @@ export default function StoreSalesPage() {
 
           {rows.length > 0 && (
             <>
-              <div className="grid grid-cols-[120px_120px_120px_100px_1fr] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+              <div className="grid grid-cols-[120px_120px_140px_110px_1fr] gap-3 px-4 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
                 <span>Fecha</span>
                 <span>Hora</span>
                 <span>Ticket</span>
-                <span>Items</span>
+                <span>Unidades</span>
                 <span>Productos</span>
               </div>
               <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {rows.map((row) => {
-                  const date = new Date(row.createdAt);
+                  const units = row.items.reduce((sum, item) => sum + item.quantity, 0);
                   return (
-                    <li key={row.id} className="grid grid-cols-[120px_120px_120px_100px_1fr] gap-3 px-4 py-3 text-sm">
-                      <span className="text-zinc-700 dark:text-zinc-300">{date.toLocaleDateString("es-MX")}</span>
-                      <span className="text-zinc-500 dark:text-zinc-400">{date.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <li key={row.id} className="grid grid-cols-[120px_120px_140px_110px_1fr] gap-3 px-4 py-3 text-sm">
+                      <span className="text-zinc-700 dark:text-zinc-300">{formatMxDate(row.createdAt)}</span>
+                      <span className="text-zinc-500 dark:text-zinc-400">{formatMxTime(row.createdAt)}</span>
                       <span className="font-semibold text-zinc-900 dark:text-zinc-100">{formatMoney(row.totalAmount)}</span>
-                      <span className="text-zinc-700 dark:text-zinc-300">{row.items.length}</span>
+                      <span className="text-zinc-700 dark:text-zinc-300">{units}</span>
                       <span className="text-xs text-zinc-500 dark:text-zinc-400">Tx {shortId(row.id)} - {row.items.map((item) => shortId(item.productId)).join(", ")}</span>
                     </li>
                   );
                 })}
               </ul>
+              <footer className="grid grid-cols-[120px_120px_140px_110px_1fr] gap-3 border-t border-zinc-200 bg-zinc-50 px-4 py-3 text-sm dark:border-zinc-800 dark:bg-zinc-900/70">
+                <span className="font-semibold text-zinc-700 dark:text-zinc-300">Totales</span>
+                <span className="text-zinc-500 dark:text-zinc-400">{columnTotals.transactions} ventas</span>
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100">{formatMoney(columnTotals.sales)}</span>
+                <span className="font-semibold text-zinc-900 dark:text-zinc-100">{columnTotals.units}</span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">Total por columnas para el rango seleccionado</span>
+              </footer>
             </>
           )}
+        </article>
+
+        <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Totales por día</h2>
+          <ul className="mt-3 grid gap-2 md:grid-cols-2">
+            {grouped.length === 0 && <li className="text-sm text-zinc-500">Sin movimientos en el rango.</li>}
+            {grouped.map((row) => (
+              <li key={row.date} className="rounded-lg border border-zinc-100 px-3 py-2 text-sm dark:border-zinc-800">
+                <p className="font-medium text-zinc-900 dark:text-zinc-100">{row.date}</p>
+                <p className="text-xs text-zinc-500">{row.transactions} ventas - {formatMoney(row.sales)}</p>
+              </li>
+            ))}
+          </ul>
         </article>
       </section>
     </div>
