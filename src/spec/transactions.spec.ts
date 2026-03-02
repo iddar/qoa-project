@@ -123,6 +123,65 @@ const createProduct = async () => {
   };
 };
 
+const createPolicyFixture = async () => {
+  const user = await createUser();
+  const store = await createStore();
+  const catalog = await createProduct();
+  const [campaign] = (await db
+    .insert(campaigns)
+    .values({
+      name: `Campaign Policy ${crypto.randomUUID().slice(0, 6)}`,
+    })
+    .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+  if (!campaign) {
+    throw new Error('Failed to create policy campaign');
+  }
+
+  const [card] = (await db
+    .insert(cards)
+    .values({
+      userId: user.id,
+      campaignId: campaign.id,
+      storeId: store.id,
+      code: `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+    })
+    .returning({ id: cards.id })) as Array<{ id: string }>;
+
+  if (!card) {
+    throw new Error('Failed to create policy card');
+  }
+
+  return {
+    user,
+    store,
+    catalog,
+    campaign,
+    card,
+  };
+};
+
+const cleanupPolicyFixture = async (fixture: {
+  user: { id: string };
+  store: { id: string };
+  catalog: { cpgId: string; brandId: string; productId: string };
+  campaign: { id: string };
+  card: { id: string };
+}) => {
+  await db.delete(transactions).where(eq(transactions.userId, fixture.user.id));
+  await db.delete(campaignBalances).where(eq(campaignBalances.cardId, fixture.card.id));
+  await db.delete(accumulations).where(eq(accumulations.cardId, fixture.card.id));
+  await db.delete(balances).where(eq(balances.cardId, fixture.card.id));
+  await db.delete(cards).where(eq(cards.id, fixture.card.id));
+  await db.delete(campaignPolicies).where(eq(campaignPolicies.campaignId, fixture.campaign.id));
+  await db.delete(campaigns).where(eq(campaigns.id, fixture.campaign.id));
+  await db.delete(products).where(eq(products.id, fixture.catalog.productId));
+  await db.delete(brands).where(eq(brands.id, fixture.catalog.brandId));
+  await db.delete(cpgs).where(eq(cpgs.id, fixture.catalog.cpgId));
+  await db.delete(stores).where(eq(stores.id, fixture.store.id));
+  await db.delete(users).where(eq(users.id, fixture.user.id));
+};
+
 describe('Transactions module', () => {
   it('creates and retrieves transaction details', async () => {
     const user = await createUser();
@@ -686,6 +745,244 @@ describe('Transactions module', () => {
     await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
+  });
+
+  it('applies min_quantity campaign policy', async () => {
+    const fixture = await createPolicyFixture();
+
+    await db.insert(campaignPolicies).values({
+      campaignId: fixture.campaign.id,
+      policyType: 'min_quantity',
+      scopeType: 'campaign',
+      period: 'transaction',
+      value: 2,
+      active: true,
+      updatedAt: new Date(),
+    });
+
+    const lowQty = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 1,
+            amount: 30,
+          },
+        ],
+      },
+      { headers: adminHeaders },
+    );
+
+    if (lowQty.error || !lowQty.data) {
+      throw lowQty.error?.value ?? new Error('Low quantity tx missing');
+    }
+
+    expect(lowQty.status).toBe(201);
+    const lowQtyCampaignAcc = lowQty.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    expect(lowQtyCampaignAcc.length).toBe(0);
+
+    const validQty = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 2,
+            amount: 30,
+          },
+        ],
+      },
+      { headers: adminHeaders },
+    );
+
+    if (validQty.error || !validQty.data) {
+      throw validQty.error?.value ?? new Error('Valid quantity tx missing');
+    }
+
+    const validQtyCampaignAcc = validQty.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    expect(validQtyCampaignAcc.length).toBe(1);
+
+    await cleanupPolicyFixture(fixture);
+  });
+
+  it('applies cooldown campaign policy', async () => {
+    const fixture = await createPolicyFixture();
+
+    await db.insert(campaignPolicies).values({
+      campaignId: fixture.campaign.id,
+      policyType: 'cooldown',
+      scopeType: 'campaign',
+      period: 'day',
+      value: 24,
+      active: true,
+      updatedAt: new Date(),
+    });
+
+    const firstTx = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 1,
+            amount: 25,
+          },
+        ],
+      },
+      { headers: adminHeaders },
+    );
+
+    if (firstTx.error || !firstTx.data) {
+      throw firstTx.error?.value ?? new Error('First cooldown tx missing');
+    }
+
+    const firstCampaignAcc = firstTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    expect(firstCampaignAcc.length).toBe(1);
+
+    const secondTx = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 1,
+            amount: 25,
+          },
+        ],
+      },
+      { headers: adminHeaders },
+    );
+
+    if (secondTx.error || !secondTx.data) {
+      throw secondTx.error?.value ?? new Error('Second cooldown tx missing');
+    }
+
+    const secondCampaignAcc = secondTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    expect(secondCampaignAcc.length).toBe(0);
+
+    await cleanupPolicyFixture(fixture);
+  });
+
+  it('applies combined min_amount and min_quantity policies', async () => {
+    const fixture = await createPolicyFixture();
+
+    await db.insert(campaignPolicies).values([
+      {
+        campaignId: fixture.campaign.id,
+        policyType: 'min_amount',
+        scopeType: 'campaign',
+        period: 'transaction',
+        value: 100,
+        active: true,
+        updatedAt: new Date(),
+      },
+      {
+        campaignId: fixture.campaign.id,
+        policyType: 'min_quantity',
+        scopeType: 'campaign',
+        period: 'transaction',
+        value: 2,
+        active: true,
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const lowAmountTx = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 2,
+            amount: 30,
+          },
+        ],
+      },
+      { headers: adminHeaders },
+    );
+
+    if (lowAmountTx.error || !lowAmountTx.data) {
+      throw lowAmountTx.error?.value ?? new Error('Low amount tx missing');
+    }
+
+    const lowAmountCampaignAcc = lowAmountTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    expect(lowAmountCampaignAcc.length).toBe(0);
+
+    const validTx = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 2,
+            amount: 60,
+          },
+        ],
+      },
+      { headers: adminHeaders },
+    );
+
+    if (validTx.error || !validTx.data) {
+      throw validTx.error?.value ?? new Error('Valid combined policy tx missing');
+    }
+
+    const validCampaignAcc = validTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    expect(validCampaignAcc.length).toBe(1);
+
+    await cleanupPolicyFixture(fixture);
+  });
+
+  it('ignores inactive campaign policy', async () => {
+    const fixture = await createPolicyFixture();
+
+    await db.insert(campaignPolicies).values({
+      campaignId: fixture.campaign.id,
+      policyType: 'min_quantity',
+      scopeType: 'campaign',
+      period: 'transaction',
+      value: 99,
+      active: false,
+      updatedAt: new Date(),
+    });
+
+    const tx = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 1,
+            amount: 20,
+          },
+        ],
+      },
+      { headers: adminHeaders },
+    );
+
+    if (tx.error || !tx.data) {
+      throw tx.error?.value ?? new Error('Inactive policy tx missing');
+    }
+
+    expect(tx.status).toBe(201);
+    const campaignAcc = tx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    expect(campaignAcc.length).toBe(1);
+
+    await cleanupPolicyFixture(fixture);
   });
 
   it('deduplicates webhook retries using payload hash', async () => {
