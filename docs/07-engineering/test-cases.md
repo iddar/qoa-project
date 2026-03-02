@@ -10,13 +10,19 @@
 
 Los siguientes flujos representan el ciclo de vida principal de la plataforma y están cubiertos por tests E2E automatizados.
 
-| ID | Nombre | Descripción | Archivo |
-|----|--------|-------------|---------|
-| E2E-FLOW-001 | Ciclo completo de plataforma | Backoffice → CPG Portal → Wallet → Store Dashboard | `global/e2e/specs/full-platform-flow.spec.ts` |
-| E2E-FLOW-002 | Propagación Store → Wallet | Tienda registra transacción → Consumidor ve en historial | `global/e2e/specs/store-to-wallet-propagation.spec.ts` |
-| E2E-FLOW-003 | Compra manual desde Wallet | Consumidor suscribe → Registra compra via payload → Ver acumulación | `global/e2e/specs/wallet-manual-purchase-flow.spec.ts` |
+| ID           | Nombre                       | Descripción                                                         | Archivo                                                |     |
+| ------------ | ---------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------ | --- |
+| E2E-FLOW-001 | Ciclo completo de plataforma | Backoffice → CPG Portal → Wallet → Store Dashboard                  | `global/e2e/specs/full-platform-flow.spec.ts`          |     |
+| E2E-FLOW-002 | Propagación Store → Wallet   | Tienda registra transacción → Consumidor ve en historial            | `global/e2e/specs/store-to-wallet-propagation.spec.ts` |     |
+| E2E-FLOW-003 | Compra manual desde Wallet   | Consumidor suscribe → Registra compra via payload → Ver acumulación | `global/e2e/specs/wallet-manual-purchase-flow.spec.ts` |     |
 
 ### E2E-FLOW-001: Ciclo Completo de Plataforma
+
+#### Historia
+
+> María es gerente de marca en una empresa de bebidas. Necesita lanzar una campaña de lealtad para promover sus productos en tiendas de conveniencia. Simultaneously, Juan es un consumidor que quiere participar y acumular puntos por sus compras.
+>
+> Este test verifica que todo el ecosistema funcione en harmony: desde que el admin crea la tienda en el backoffice, pasando por la configuración de campaña en el portal CPG, hasta que Juan puede ver sus transacciones reflejadas en su wallet digital.
 
 **Actors:** Admin Qoa → CPG Manager → Consumidor
 
@@ -46,6 +52,12 @@ Los siguientes flujos representan el ciclo de vida principal de la plataforma y 
 
 ### E2E-FLOW-002: Propagación Store → Wallet
 
+#### Historia
+
+> Ana es tendera en una tiendita de la esquina. Un cliente frecuentelega con sus productos y ella registra la compra usando el código de la tarjeta del cliente. El cliente, sin saberlo, recibe automáticamente la acumulación en su wallet y puede consultarlo después desde su celular.
+>
+> Este test valida que la información fluye correctamente desde el Store Dashboard hasta la Digital Wallet del consumidor, sin necesidad de intervención manual.
+
 **Actors:** Store Dashboard → Digital Wallet
 
 **Precondiciones:**
@@ -67,6 +79,12 @@ Los siguientes flujos representan el ciclo de vida principal de la plataforma y 
 ---
 
 ### E2E-FLOW-003: Compra Manual desde Wallet
+
+#### Historia
+
+> Pedro es un consumidor que no siempre tiene su tarjeta física a la mano. Un día compra en una tienda que no tiene escáner, pero igual quiere acumular sus puntos. Abre su wallet, selecciona la opción de registro manual, ingresa los datos de su compra y listo: sus puntos se acumulan automáticamente.
+>
+> Este test cubre el flujo alternativo donde el propio consumidor registra su compra desde la app cuando el método QR no está disponible.
 
 **Actors:** Consumidor
 
@@ -93,7 +111,9 @@ Los siguientes flujos representan el ciclo de vida principal de la plataforma y 
 
 ## Escenarios de Error Cubiertos
 
-Los siguientes escenarios de error están validados en los specs de integración (`src/spec/*.spec.ts`).
+Los siguientes escenarios de error están validados en los specs de integración (`src/spec/*.spec.ts`). Estos representan las situaciones donde el sistema debe responder de forma adecuada cuando las cosas no salen como se espera.
+
+> Cuando un usuario intenta acceder sin token, o un CPG intenta ver datos de otro, el sistema debe rechazar la petición con el código de error apropiado.
 
 | ID | Escenario | Código de Error | Archivo de Test |
 |----|-----------|------------------|-----------------|
