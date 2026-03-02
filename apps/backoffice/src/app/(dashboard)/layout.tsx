@@ -108,6 +108,22 @@ const navItems = [
   },
 ];
 
+const portalLinks = [
+  {
+    label: "CPG",
+    href: process.env.NEXT_PUBLIC_CPG_PORTAL_URL ?? "http://localhost:3002",
+  },
+  {
+    label: "Stores",
+    href:
+      process.env.NEXT_PUBLIC_STORE_DASHBOARD_URL ?? "http://localhost:3003",
+  },
+  {
+    label: "Wallet",
+    href: process.env.NEXT_PUBLIC_WALLET_URL ?? "http://localhost:3004",
+  },
+];
+
 function ApiStatus() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["health"],
@@ -315,10 +331,23 @@ export default function DashboardLayout({
         </div>
       </aside>
 
-      {/* Main content */}
+        {/* Main content */}
       <div className="flex flex-1 flex-col min-w-0">
         <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6 dark:border-zinc-800 dark:bg-zinc-950">
           <ApiStatus />
+          <div className="flex items-center gap-2 text-xs font-medium">
+            {portalLinks.map((portal) => (
+              <a
+                key={portal.label}
+                href={portal.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-zinc-200 px-2.5 py-1 text-zinc-600 transition-colors hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+              >
+                {portal.label}
+              </a>
+            ))}
+          </div>
         </header>
         <main className="flex-1 p-8">
           {children}
