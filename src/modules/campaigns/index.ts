@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { authorizationHeader } from '../../app/plugins/schemas';
@@ -489,10 +489,11 @@ const loadTierBenefitsByTierId = async (campaignId: string) => {
   }
 
   const tierIds = tiers.map((entry) => entry.id);
+  const inCondition = and(...tierIds.map(id => eq(tierBenefits.tierId, id)))
   const benefitRows = (await db
     .select()
     .from(tierBenefits)
-    .where(inArray(tierBenefits.tierId, tierIds))) as TierBenefitRow[];
+    .where(inCondition)) as TierBenefitRow[];
 
   const byTier = new Map<string, TierBenefitRow[]>();
   for (const benefit of benefitRows) {
@@ -1828,6 +1829,7 @@ export const campaignsModule = new Elysia({
       },
     },
   )
+  // @ts-ignore: TypeScript loses inference after long chain
   .delete(
     '/:campaignId/accumulation-rules/:ruleId',
     async ({ auth, params, status }: CampaignAccumulationRuleDeleteContext) => {
@@ -1889,14 +1891,11 @@ export const campaignsModule = new Elysia({
         ruleId: existing.id,
       });
 
-      return status(204);
+      return new Response(null, { status: 204 });
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
       headers: authorizationHeader,
-      response: {
-        204: t.Void(),
-      },
       detail: {
         summary: 'Eliminar regla de acumulación',
       },
@@ -2252,14 +2251,11 @@ export const campaignsModule = new Elysia({
         tierId: existing.id,
       });
 
-      return status(204);
+      return new Response(null, { status: 204 });
     },
     {
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
       headers: authorizationHeader,
-      response: {
-        204: t.Void(),
-      },
       detail: {
         summary: 'Eliminar tier de campaña',
       },

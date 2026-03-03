@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { accumulations, campaignTiers, cards, tierBenefits, transactionItems } from '../db/schema';
 
@@ -215,7 +215,7 @@ export const evaluateCardTier = async (params: {
       and(
         eq(accumulations.cardId, params.cardId),
         eq(accumulations.campaignId, params.campaignId),
-        gte(accumulations.createdAt, rangeStart),
+        sql`${accumulations.createdAt} >= ${rangeStart}`,
       ),
     )) as Array<{ transactionItemId: string | null; createdAt: Date }>;
 
@@ -231,7 +231,7 @@ export const evaluateCardTier = async (params: {
             quantity: transactionItems.quantity,
           })
           .from(transactionItems)
-          .where(inArray(transactionItems.id, itemIds))) as Array<{
+          .where(and(...itemIds.map(id => eq(transactionItems.id, id))))) as Array<{
           id: string;
           transactionId: string;
           amount: number;
