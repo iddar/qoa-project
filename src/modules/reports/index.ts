@@ -97,7 +97,7 @@ type CampaignAggregateRow = {
 const REPORT_TIMEZONE = 'America/Mexico_City';
 
 const countTable = async (table: Record<string, unknown>, condition?: unknown) => {
-  const query = db.select({ count: sql<number>`count(*)::int` }).from(table as never);
+  const query = db.select({ count: sql<number>`count(*)::int as "count"` }).from(table as never);
   const rows = condition ? await query.where(condition as never) : await query;
   return (rows as Array<{ count: number }>)[0]?.count ?? 0;
 };

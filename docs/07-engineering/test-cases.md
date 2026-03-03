@@ -10,11 +10,11 @@
 
 Los siguientes flujos representan el ciclo de vida principal de la plataforma y cuentan con cobertura automatizada.
 
-| ID | Nombre | Descripción | Archivo |
-|----|--------|-------------|---------|
-| E2E-FLOW-001 | Ciclo completo de plataforma | Backoffice -> CPG Portal -> Wallet -> Store Dashboard | `global/e2e/specs/full-platform-flow.spec.ts` |
-| E2E-FLOW-002 | Propagación Store -> Wallet | La tienda registra una transacción y el consumidor la ve en su historial | `global/e2e/specs/store-to-wallet-propagation.spec.ts` |
-| E2E-FLOW-003 | Compra manual desde Wallet | El consumidor se suscribe y registra una compra mediante payload | `global/e2e/specs/wallet-manual-purchase-flow.spec.ts` |
+| ID           | Nombre                       | Descripción                                                              | Archivo                                                |
+| ------------ | ---------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------ |
+| E2E-FLOW-001 | Ciclo completo de plataforma | Backoffice -> CPG Portal -> Wallet -> Store Dashboard                    | `global/e2e/specs/full-platform-flow.spec.ts`          |
+| E2E-FLOW-002 | Propagación Store -> Wallet  | La tienda registra una transacción y el consumidor la ve en su historial | `global/e2e/specs/store-to-wallet-propagation.spec.ts` |
+| E2E-FLOW-003 | Compra manual desde Wallet   | El consumidor se suscribe y registra una compra mediante payload         | `global/e2e/specs/wallet-manual-purchase-flow.spec.ts` |
 
 ### E2E-FLOW-001: Ciclo Completo de Plataforma
 
