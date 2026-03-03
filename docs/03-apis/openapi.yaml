@@ -4244,6 +4244,8 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/ReportDailyPoint'
+            transactionsWithoutAccumulations:
+              type: integer
 
     StoreReportSummaryResponse:
       type: object

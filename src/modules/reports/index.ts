@@ -7,6 +7,7 @@ import { db } from '../../db/client';
 import {
   brands,
   campaigns,
+  campaignSubscriptions,
   cards,
   cpgs,
   products,
@@ -642,9 +643,14 @@ export const reportsModule = new Elysia({
       }
 
       const [campaign] = (await db
-        .select({ id: campaigns.id, cpgId: campaigns.cpgId })
+        .select({ id: campaigns.id, cpgId: campaigns.cpgId, startsAt: campaigns.startsAt, endsAt: campaigns.endsAt })
         .from(campaigns)
-        .where(eq(campaigns.id, params.campaignId))) as Array<{ id: string; cpgId: string | null }>;
+        .where(eq(campaigns.id, params.campaignId))) as Array<{
+        id: string;
+        cpgId: string | null;
+        startsAt: Date | null;
+        endsAt: Date | null;
+      }>;
 
       if (!campaign) {
         return status(404, {
@@ -664,14 +670,29 @@ export const reportsModule = new Elysia({
         });
       }
 
-      const range = resolveRange(query, status);
+      const now = new Date();
+      const defaultTo = campaign.endsAt && campaign.endsAt.getTime() < now.getTime() ? campaign.endsAt : now;
+      const trailingWindowStart = new Date(defaultTo.getTime() - 29 * 24 * 60 * 60 * 1000);
+      const defaultFrom =
+        campaign.startsAt && campaign.startsAt.getTime() > trailingWindowStart.getTime()
+          ? campaign.startsAt
+          : trailingWindowStart;
+
+      const range = resolveRange(
+        {
+          from: query.from ?? defaultFrom.toISOString(),
+          to: query.to ?? defaultTo.toISOString(),
+        },
+        status,
+      );
       if (range.error) {
         return range.error;
       }
 
       const { from, to, fromDayIso, toDayIso, fromIso, toIso } = range.value;
 
-      const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows] = await Promise.all([
+      const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows, transactionsWithoutAccumulationsRows] =
+        await Promise.all([
         db.execute(sql`
           with campaign_tx as (
             select distinct ti.transaction_id
@@ -751,6 +772,37 @@ export const reportsModule = new Elysia({
           left join red on red.day = days.day
           order by days.day asc
         `) as Promise<DailyRow[]>,
+        db.execute(sql`
+          with candidate_tx as (
+            select distinct t.id
+            from transactions t
+            left join cards ca on ca.id = t.card_id
+            where t.created_at between ${fromIso} and ${toIso}
+              and (
+                ca.campaign_id = ${campaign.id}
+                or exists (
+                  select 1
+                  from campaign_subscriptions cs
+                  where cs.campaign_id = ${campaign.id}
+                    and cs.user_id = t.user_id
+                    and cs.status = 'subscribed'
+                    and coalesce(cs.subscribed_at, cs.created_at) <= t.created_at
+                    and (cs.left_at is null or cs.left_at > t.created_at)
+                )
+              )
+          ),
+          with_points_tx as (
+            select distinct ti.transaction_id
+            from accumulations a
+            inner join transaction_items ti on ti.id = a.transaction_item_id
+            where a.campaign_id = ${campaign.id}
+              and a.created_at between ${fromIso} and ${toIso}
+          )
+          select count(*)::int as count
+          from candidate_tx c
+          left join with_points_tx p on p.transaction_id = c.id
+          where p.transaction_id is null
+        `) as Promise<CountRow[]>,
       ]);
 
       return {
@@ -760,6 +812,7 @@ export const reportsModule = new Elysia({
           to: to.toISOString(),
           kpis: buildKpis(transactionsRows[0], accumulationsRows[0], redemptionsRows[0]),
           daily: dailyRows,
+          transactionsWithoutAccumulations: transactionsWithoutAccumulationsRows[0]?.count ?? 0,
         },
       };
     },

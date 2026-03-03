@@ -172,6 +172,12 @@ const formatPolicyLabel = (policy: CampaignPolicy) => {
   return `Enfriamiento de ${policy.value} unidades por ${policy.period}`;
 };
 
+const enrollmentModeLabel: Record<string, string> = {
+  open: "Abierta",
+  opt_in: "Por suscripcion",
+  system_universal: "Universal del sistema",
+};
+
 export default function CampaignDetailPage() {
   const params = useParams<{ campaignId: string }>();
   const campaignId = params.campaignId;
@@ -474,6 +480,9 @@ export default function CampaignDetailPage() {
   const campaignStart = campaign?.startsAt ? new Date(campaign.startsAt) : null;
   const campaignEnd = campaign?.endsAt ? new Date(campaign.endsAt) : null;
   const daysRemaining = typeof campaign?.daysRemaining === "number" ? campaign.daysRemaining : undefined;
+  const dailyPoints = ((summaryQuery.data?.data.daily ?? []) as DailyPoint[]).slice(-12);
+  const maxTransactions = dailyPoints.reduce((max, point) => Math.max(max, point.transactions), 0) || 1;
+  const maxRedemptions = dailyPoints.reduce((max, point) => Math.max(max, point.redemptions), 0) || 1;
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -524,6 +533,44 @@ export default function CampaignDetailPage() {
         </article>
       </section>
 
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Generales</h2>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Descripcion</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign?.description ?? "-"}</p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Clave</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign?.key ?? "-"}</p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Version</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">v{campaign?.version ?? 1}</p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Modo de inscripcion</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {campaign?.enrollmentMode ? enrollmentModeLabel[campaign.enrollmentMode] ?? campaign.enrollmentMode : "-"}
+            </p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Modo de acumulacion</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {campaign?.accumulationMode === "amount"
+                ? "Por monto"
+                : campaign?.accumulationMode === "count"
+                  ? "Por cantidad"
+                  : "-"}
+            </p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Estado</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign?.status ?? "-"}</p>
+          </article>
+        </div>
+      </section>
+
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Transacciones</p>
@@ -563,28 +610,41 @@ export default function CampaignDetailPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tendencia diaria</h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Volumen de transacciones y canjes en los ultimos 30 dias.
-          </p>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tendencia diaria</h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Volumen de transacciones y canjes en los ultimos 30 dias.
+            </p>
 
-          <div className="mt-4 grid gap-2">
-            {((summaryQuery.data?.data.daily ?? []) as DailyPoint[]).slice(-12).map((point: DailyPoint) => {
-              const txHeight = Math.min(100, point.transactions * 8);
-              const redemptionsHeight = Math.min(100, point.redemptions * 12);
-              return (
-                <div key={`${String(point.date)}-${point.transactions}-${point.redemptions}`} className="grid grid-cols-[64px_1fr_1fr] items-center gap-3 text-xs">
-                  <span className="text-zinc-400">{toDayLabel(point.date)}</span>
-                  <div className="h-2 rounded bg-blue-100 dark:bg-blue-950/40">
-                    <div className="h-full rounded bg-blue-500" style={{ width: `${txHeight}%` }} />
+            <div className="mt-4 grid gap-2">
+              {dailyPoints.map((point: DailyPoint) => {
+                const txHeight = Math.min(100, (point.transactions / maxTransactions) * 100);
+                const redemptionsHeight = Math.min(100, (point.redemptions / maxRedemptions) * 100);
+                return (
+                  <div key={`${String(point.date)}-${point.transactions}-${point.redemptions}`} className="grid grid-cols-[64px_1fr_1fr] items-center gap-3 text-xs">
+                    <span className="text-zinc-400">{toDayLabel(point.date)}</span>
+                    <div className="h-2 rounded bg-blue-100 dark:bg-blue-950/40">
+                      <div className="h-full rounded bg-blue-500" style={{ width: `${txHeight}%` }} />
+                    </div>
+                    <div className="h-2 rounded bg-emerald-100 dark:bg-emerald-950/40">
+                      <div className="h-full rounded bg-emerald-500" style={{ width: `${redemptionsHeight}%` }} />
+                    </div>
                   </div>
-                  <div className="h-2 rounded bg-emerald-100 dark:bg-emerald-950/40">
-                    <div className="h-full rounded bg-emerald-500" style={{ width: `${redemptionsHeight}%` }} />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Comprobacion</h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Transacciones de usuarios/campanas asociadas que no generaron acumulaciones para esta campana.
+            </p>
+            <p className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              {summaryQuery.data?.data.transactionsWithoutAccumulations ?? 0}
+            </p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">transacciones sin puntos</p>
           </div>
         </div>
 
