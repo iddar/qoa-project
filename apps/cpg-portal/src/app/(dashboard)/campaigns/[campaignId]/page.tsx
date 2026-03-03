@@ -20,6 +20,7 @@ type CampaignStatus =
 type PolicyType = "max_accumulations" | "min_amount" | "min_quantity" | "cooldown";
 type ScopeType = "campaign" | "brand" | "product";
 type PeriodType = "transaction" | "day" | "week" | "month" | "lifetime";
+type AccumulationScopeType = "campaign" | "brand" | "product";
 type TierWindowUnit = "day" | "month" | "year";
 type TierQualificationMode = "any" | "all";
 
@@ -60,6 +61,24 @@ type CampaignPolicy = {
   scopeType: ScopeType;
   period: PeriodType;
   value: number;
+};
+
+type CampaignAccumulationRule = {
+  id: string;
+  scopeType: AccumulationScopeType;
+  scopeId?: string;
+  multiplier: number;
+  flatBonus: number;
+  priority: number;
+  active: boolean;
+};
+
+type AccumulationRuleForm = {
+  scopeType: AccumulationScopeType;
+  scopeId: string;
+  multiplier: number;
+  flatBonus: number;
+  priority: number;
 };
 
 type CampaignTier = {
@@ -121,6 +140,14 @@ const emptyTierForm: TierForm = {
   graceDays: 7,
 };
 
+const emptyAccumulationRuleForm: AccumulationRuleForm = {
+  scopeType: "campaign",
+  scopeId: "",
+  multiplier: 1,
+  flatBonus: 0,
+  priority: 100,
+};
+
 const nextStatusAction: Partial<Record<CampaignStatus, { label: string; action: "ready" | "review" | "confirm" | "activate" }>> = {
   draft: { label: "Enviar a revisión", action: "ready" },
   rejected: { label: "Reenviar a revisión", action: "ready" },
@@ -154,6 +181,7 @@ export default function CampaignDetailPage() {
 
   const [policyForm, setPolicyForm] = useState<PolicyForm>(emptyPolicyForm);
   const [tierForm, setTierForm] = useState<TierForm>(emptyTierForm);
+  const [accumulationRuleForm, setAccumulationRuleForm] = useState<AccumulationRuleForm>(emptyAccumulationRuleForm);
 
   const campaignQuery = useQuery({
     queryKey: ["campaign", campaignId],
@@ -210,6 +238,18 @@ export default function CampaignDetailPage() {
     queryKey: ["campaign-tiers", campaignId],
     queryFn: async () => {
       const { data, error } = await api.v1.campaigns({ campaignId }).tiers.get({
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const accumulationRulesQuery = useQuery({
+    queryKey: ["campaign-accumulation-rules", campaignId],
+    queryFn: async () => {
+      const { data, error } = await api.v1.campaigns({ campaignId })["accumulation-rules"].get({
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -364,12 +404,40 @@ export default function CampaignDetailPage() {
     },
   });
 
+  const createAccumulationRuleMutation = useMutation({
+    mutationFn: async () => {
+      const payloadScopeId = accumulationRuleForm.scopeType === "campaign" ? undefined : accumulationRuleForm.scopeId || undefined;
+      const { data, error } = await api.v1.campaigns({ campaignId })["accumulation-rules"].post(
+        {
+          scopeType: accumulationRuleForm.scopeType,
+          scopeId: payloadScopeId,
+          multiplier: accumulationRuleForm.multiplier,
+          flatBonus: accumulationRuleForm.flatBonus,
+          priority: accumulationRuleForm.priority,
+          active: true,
+        },
+        {
+          headers: { authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      setAccumulationRuleForm(emptyAccumulationRuleForm);
+      queryClient.invalidateQueries({ queryKey: ["campaign-accumulation-rules", campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-audit", campaignId] });
+    },
+  });
+
   const campaign = campaignQuery.data?.data;
   const currentStatus = campaign?.status as CampaignStatus | undefined;
   const transitionInfo = currentStatus ? nextStatusAction[currentStatus] : undefined;
 
   const policies = (policiesQuery.data?.data ?? []) as CampaignPolicy[];
   const tiers = (tiersQuery.data?.data ?? []) as CampaignTier[];
+  const accumulationRules = (accumulationRulesQuery.data?.data ?? []) as CampaignAccumulationRule[];
   const auditItems = (auditQuery.data?.data ?? []) as AuditItem[];
   const rewards = (rewardsQuery.data?.data ?? []) as Array<{ status: string; stock?: number }>;
   const activeRewards = rewards.filter((reward) => reward.status === "active").length;
@@ -388,6 +456,20 @@ export default function CampaignDetailPage() {
 
     return [];
   }, [brandsQuery.data?.data, policyForm.scopeType, productsQuery.data?.data]);
+
+  const accumulationScopeOptions = useMemo(() => {
+    if (accumulationRuleForm.scopeType === "brand") {
+      const brands = (brandsQuery.data?.data ?? []) as BrandOption[];
+      return brands.map((item: BrandOption) => ({ id: item.id, label: item.name }));
+    }
+
+    if (accumulationRuleForm.scopeType === "product") {
+      const products = (productsQuery.data?.data ?? []) as ProductOption[];
+      return products.map((item: ProductOption) => ({ id: item.id, label: `${item.name} (${item.sku})` }));
+    }
+
+    return [];
+  }, [accumulationRuleForm.scopeType, brandsQuery.data?.data, productsQuery.data?.data]);
 
   const campaignStart = campaign?.startsAt ? new Date(campaign.startsAt) : null;
   const campaignEnd = campaign?.endsAt ? new Date(campaign.endsAt) : null;
@@ -540,6 +622,23 @@ export default function CampaignDetailPage() {
                     {tier.minPurchaseCount && tier.minPurchaseAmount ? " o " : ""}
                     {tier.minPurchaseAmount ? `$${tier.minPurchaseAmount.toLocaleString("es-MX")}` : ""}
                   </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Reglas de acumulación</h2>
+            <ul className="mt-3 space-y-2">
+              {accumulationRules.length === 0 && (
+                <li className="text-xs text-zinc-500 dark:text-zinc-400">Sin reglas configuradas (usa regla base de campaña).</li>
+              )}
+              {accumulationRules.map((rule: CampaignAccumulationRule) => (
+                <li key={rule.id} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+                  <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                    scope {rule.scopeType} · x{rule.multiplier} + {rule.flatBonus} · prioridad {rule.priority}
+                  </p>
+                  <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">{rule.scopeId ?? "global campaña"}</p>
                 </li>
               ))}
             </ul>
@@ -775,6 +874,108 @@ export default function CampaignDetailPage() {
                 className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
               >
                 {createTierMutation.isPending ? "Guardando..." : "Agregar tier"}
+              </button>
+            </form>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Nueva regla de acumulación</h2>
+            <form
+              className="mt-3 space-y-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                createAccumulationRuleMutation.mutate();
+              }}
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Scope
+                  <select
+                    value={accumulationRuleForm.scopeType}
+                    onChange={(event) =>
+                      setAccumulationRuleForm((prev) => ({
+                        ...prev,
+                        scopeType: event.target.value as AccumulationScopeType,
+                        scopeId: "",
+                      }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    <option value="campaign">campaign</option>
+                    <option value="brand">brand</option>
+                    <option value="product">product</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Prioridad
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={accumulationRuleForm.priority}
+                    onChange={(event) =>
+                      setAccumulationRuleForm((prev) => ({ ...prev, priority: Number(event.target.value) }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+              </div>
+
+              {accumulationRuleForm.scopeType !== "campaign" && (
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  {accumulationRuleForm.scopeType === "brand" ? "Marca" : "Producto"}
+                  <select
+                    required
+                    value={accumulationRuleForm.scopeId}
+                    onChange={(event) =>
+                      setAccumulationRuleForm((prev) => ({ ...prev, scopeId: event.target.value }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    <option value="">Selecciona</option>
+                    {accumulationScopeOptions.map((option: { id: string; label: string }) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Multiplicador
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={accumulationRuleForm.multiplier}
+                    onChange={(event) =>
+                      setAccumulationRuleForm((prev) => ({ ...prev, multiplier: Number(event.target.value) }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Bono fijo
+                  <input
+                    type="number"
+                    min={0}
+                    value={accumulationRuleForm.flatBonus}
+                    onChange={(event) =>
+                      setAccumulationRuleForm((prev) => ({ ...prev, flatBonus: Number(event.target.value) }))
+                    }
+                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  />
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={createAccumulationRuleMutation.isPending}
+                className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {createAccumulationRuleMutation.isPending ? "Guardando..." : "Agregar regla"}
               </button>
             </form>
           </div>

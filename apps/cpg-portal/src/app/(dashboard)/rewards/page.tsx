@@ -12,12 +12,19 @@ type Campaign = {
   status: string;
 };
 
+type CampaignTier = {
+  id: string;
+  name: string;
+  order: number;
+};
+
 type Reward = {
   id: string;
   campaignId: string;
   name: string;
   description?: string;
   cost: number;
+  minTierId?: string;
   stock?: number;
   status: "active" | "inactive";
   createdAt: string;
@@ -28,6 +35,7 @@ type RewardForm = {
   name: string;
   description: string;
   cost: number;
+  minTierId: string;
   stock: number;
   status: "active" | "inactive";
 };
@@ -37,6 +45,7 @@ const initialRewardForm: RewardForm = {
   name: "",
   description: "",
   cost: 10,
+  minTierId: "",
   stock: 10,
   status: "active",
 };
@@ -98,6 +107,20 @@ export default function RewardsPage() {
     },
   });
 
+  const selectedCampaignForTier = form.campaignId || campaignsQuery.data?.data?.[0]?.id;
+  const tiersQuery = useQuery({
+    queryKey: ["campaign-tiers-for-reward", selectedCampaignForTier],
+    enabled: Boolean(selectedCampaignForTier),
+    queryFn: async () => {
+      const { data, error } = await api.v1.campaigns({ campaignId: selectedCampaignForTier as string }).tiers.get({
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const createRewardMutation = useMutation({
     mutationFn: async () => {
       const payloadCampaignId = form.campaignId || campaigns[0]?.id;
@@ -111,6 +134,7 @@ export default function RewardsPage() {
           name: form.name,
           description: form.description || undefined,
           cost: form.cost,
+          minTierId: form.minTierId || undefined,
           stock: form.stock,
           status: form.status,
         },
@@ -130,6 +154,7 @@ export default function RewardsPage() {
 
   const campaigns = (campaignsQuery.data?.data as Campaign[] | undefined) ?? EMPTY_CAMPAIGNS;
   const rewards = (rewardsQuery.data?.data as Reward[] | undefined) ?? EMPTY_REWARDS;
+  const tiers = (tiersQuery.data?.data as CampaignTier[] | undefined) ?? [];
   const formCampaignId = form.campaignId || campaigns[0]?.id || "";
 
   const campaignMap = useMemo(
@@ -210,10 +235,11 @@ export default function RewardsPage() {
                 </select>
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-[1.35fr_0.65fr_0.4fr_0.35fr] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+            <div className="mt-3 grid grid-cols-[1.2fr_0.6fr_0.4fr_0.4fr_0.35fr] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
               <span>Recompensa</span>
               <span>Campana</span>
               <span>Costo</span>
+              <span>Tier mín</span>
               <span>Stock</span>
             </div>
           </header>
@@ -242,7 +268,7 @@ export default function RewardsPage() {
             <ul className="divide-y divide-zinc-100 dark:divide-zinc-800/70">
               {visibleRewards.map((reward) => (
                 <li key={reward.id} className="px-5 py-3">
-                  <div className="grid grid-cols-[1.35fr_0.65fr_0.4fr_0.35fr] items-start gap-2">
+                  <div className="grid grid-cols-[1.2fr_0.6fr_0.4fr_0.4fr_0.35fr] items-start gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{reward.name}</p>
                       {reward.description && (
@@ -264,6 +290,8 @@ export default function RewardsPage() {
                     </div>
 
                     <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">{reward.cost} pts</p>
+
+                    <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">{reward.minTierId ? reward.minTierId.slice(0, 8) : "-"}</p>
 
                     <p
                       className={`text-[11px] font-semibold ${
@@ -357,6 +385,22 @@ export default function RewardsPage() {
                   />
                 </label>
               </div>
+
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Tier mínimo requerido (opcional)
+                <select
+                  value={form.minTierId}
+                  onChange={(event) => setForm((prev) => ({ ...prev, minTierId: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="">Sin requisito de tier</option>
+                  {tiers.map((tier) => (
+                    <option key={tier.id} value={tier.id}>
+                      {tier.order} - {tier.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Estado
