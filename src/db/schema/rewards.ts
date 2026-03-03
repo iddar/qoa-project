@@ -1,5 +1,6 @@
 import { index, integer, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { campaignTiers } from './campaign-tiers';
 import { campaigns } from './campaigns';
 import { cards } from './cards';
 
@@ -32,6 +33,7 @@ export const rewards = pgTable(
     description: text('description'),
     imageUrl: text('image_url'),
     cost: integer('cost').notNull(),
+    minTierId: uuid('min_tier_id').references(() => campaignTiers.id, { onDelete: 'set null' }),
     stock: integer('stock'),
     status: rewardStatus('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

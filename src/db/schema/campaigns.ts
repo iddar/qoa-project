@@ -15,6 +15,7 @@ export const campaignStatus = pgEnum('campaign_status', [
 ]);
 
 export const campaignEnrollmentMode = pgEnum('campaign_enrollment_mode', ['open', 'opt_in', 'system_universal']);
+export const campaignAccumulationMode = pgEnum('campaign_accumulation_mode', ['count', 'amount']);
 
 export const campaignPolicyType = pgEnum('campaign_policy_type', [
   'max_accumulations',
@@ -31,6 +32,12 @@ export const campaignPolicyPeriod = pgEnum('campaign_policy_period', [
   'week',
   'month',
   'lifetime',
+]);
+
+export const campaignAccumulationRuleScopeType = pgEnum('campaign_accumulation_rule_scope_type', [
+  'campaign',
+  'brand',
+  'product',
 ]);
 
 type CampaignsTable = {
@@ -54,6 +61,13 @@ type CampaignPoliciesTable = {
   createdAt: unknown;
 };
 
+type CampaignAccumulationRulesTable = {
+  campaignId: unknown;
+  scopeType: unknown;
+  active: unknown;
+  createdAt: unknown;
+};
+
 export const campaigns = pgTable(
   'campaigns',
   {
@@ -66,6 +80,7 @@ export const campaigns = pgTable(
     cpgId: uuid('cpg_id'),
     status: campaignStatus('status').notNull().default('draft'),
     enrollmentMode: campaignEnrollmentMode('enrollment_mode').notNull().default('opt_in'),
+    accumulationMode: campaignAccumulationMode('accumulation_mode').notNull().default('count'),
     startsAt: timestamp('starts_at', { withTimezone: true }),
     endsAt: timestamp('ends_at', { withTimezone: true }),
     version: integer('version').notNull().default(1),
@@ -131,5 +146,33 @@ export const campaignPolicies = pgTable(
     index('campaign_policies_scope_idx').on(table.scopeType),
     index('campaign_policies_active_idx').on(table.active),
     index('campaign_policies_created_at_idx').on(table.createdAt),
+  ],
+);
+
+export const campaignAccumulationRules = pgTable(
+  'campaign_accumulation_rules',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id, { onDelete: 'cascade' }),
+    scopeType: campaignAccumulationRuleScopeType('scope_type').notNull(),
+    scopeId: uuid('scope_id'),
+    scopeBrandId: uuid('scope_brand_id').references(() => brands.id, { onDelete: 'set null' }),
+    scopeProductId: uuid('scope_product_id').references(() => products.id, { onDelete: 'set null' }),
+    multiplier: integer('multiplier').notNull().default(1),
+    flatBonus: integer('flat_bonus').notNull().default(0),
+    priority: integer('priority').notNull().default(100),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (table: CampaignAccumulationRulesTable) => [
+    index('campaign_accumulation_rules_campaign_idx').on(table.campaignId),
+    index('campaign_accumulation_rules_scope_idx').on(table.scopeType),
+    index('campaign_accumulation_rules_active_idx').on(table.active),
+    index('campaign_accumulation_rules_created_at_idx').on(table.createdAt),
   ],
 );
