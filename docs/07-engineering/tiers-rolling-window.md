@@ -20,3 +20,10 @@ Implementación inicial de tiers end-to-end con foco en constancia:
 
 - Beneficios de tier se exponen en API/Wallet para visualización.
 - No se alteran reglas transaccionales por beneficio aún (fase siguiente).
+
+## Extensiones implementadas
+
+- `campaigns.accumulation_mode` soporta `count` y `amount`.
+- Reglas finas opcionales por alcance (`campaign`, `brand`, `product`) con `multiplier`, `flatBonus`, `priority`.
+- Recompensas pueden exigir un tier mínimo (`rewards.min_tier_id`).
+- En canje, se valida tier actual de la tarjeta contra el tier mínimo requerido.

@@ -9,6 +9,7 @@ import {
   balances,
   campaignBalances,
   brands,
+  campaignAccumulationRules,
   campaignPolicies,
   campaignTiers,
   cards,
@@ -982,6 +983,74 @@ describe('Transactions module', () => {
     expect(tx.status).toBe(201);
     const campaignAcc = tx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
     expect(campaignAcc.length).toBe(1);
+
+    await cleanupPolicyFixture(fixture);
+  });
+
+  it('uses amount accumulation mode and product-level multiplier rules', async () => {
+    const fixture = await createPolicyFixture();
+
+    await db
+      .update(campaigns)
+      .set({ accumulationMode: 'amount', updatedAt: new Date() })
+      .where(eq(campaigns.id, fixture.campaign.id));
+
+    await db.insert(campaignAccumulationRules).values({
+      campaignId: fixture.campaign.id,
+      scopeType: 'campaign',
+      multiplier: 1,
+      flatBonus: 0,
+      priority: 100,
+      active: true,
+      updatedAt: new Date(),
+    });
+
+    await db.insert(campaignAccumulationRules).values({
+      campaignId: fixture.campaign.id,
+      scopeType: 'product',
+      scopeId: fixture.catalog.productId,
+      scopeProductId: fixture.catalog.productId,
+      multiplier: 2,
+      flatBonus: 5,
+      priority: 1,
+      active: true,
+      updatedAt: new Date(),
+    });
+
+    const tx = await api.v1.transactions.post(
+      {
+        userId: fixture.user.id,
+        storeId: fixture.store.id,
+        cardId: fixture.card.id,
+        items: [
+          {
+            productId: fixture.catalog.productId,
+            quantity: 2,
+            amount: 10,
+          },
+        ],
+      },
+      { headers: adminHeaders },
+    );
+
+    if (tx.error || !tx.data) {
+      throw tx.error?.value ?? new Error('Amount accumulation transaction missing');
+    }
+
+    expect(tx.status).toBe(201);
+    const campaignAcc = tx.data.data.accumulations.find((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id) as
+      | { accumulated: number }
+      | undefined;
+    expect(campaignAcc?.accumulated).toBe(45);
+
+    const [campaignBalance] = (await db
+      .select({ current: campaignBalances.current })
+      .from(campaignBalances)
+      .where(and(eq(campaignBalances.cardId, fixture.card.id), eq(campaignBalances.campaignId, fixture.campaign.id)))) as Array<{
+      current: number;
+    }>;
+
+    expect(campaignBalance?.current).toBe(45);
 
     await cleanupPolicyFixture(fixture);
   });

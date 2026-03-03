@@ -1074,6 +1074,93 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignPolicyResponse'
 
+  /campaigns/{campaignId}/accumulation-rules:
+    get:
+      tags: [Campaigns]
+      summary: Listar reglas de acumulación
+      operationId: listCampaignAccumulationRules
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      responses:
+        '200':
+          description: Lista de reglas de acumulación de campaña
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignAccumulationRuleListResponse'
+
+    post:
+      tags: [Campaigns]
+      summary: Crear regla de acumulación
+      operationId: createCampaignAccumulationRule
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignAccumulationRuleCreate'
+      responses:
+        '201':
+          description: Regla de acumulación creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignAccumulationRuleResponse'
+
+  /campaigns/{campaignId}/accumulation-rules/{ruleId}:
+    patch:
+      tags: [Campaigns]
+      summary: Actualizar regla de acumulación
+      operationId: updateCampaignAccumulationRule
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CampaignAccumulationRuleUpdate'
+      responses:
+        '200':
+          description: Regla de acumulación actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignAccumulationRuleResponse'
+
+    delete:
+      tags: [Campaigns]
+      summary: Eliminar regla de acumulación
+      operationId: deleteCampaignAccumulationRule
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/campaignIdParam'
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Regla de acumulación eliminada
+
   /campaigns/{campaignId}/tiers:
     get:
       tags: [Campaigns]
@@ -2688,6 +2775,9 @@ components:
           enum: [draft, ready_for_review, in_review, rejected, confirmed, active, paused, ended]
         enrollmentMode:
           $ref: '#/components/schemas/CampaignEnrollmentMode'
+        accumulationMode:
+          type: string
+          enum: [count, amount]
         validityType:
           type: string
           enum: [indefinite, date_range]
@@ -2743,7 +2833,7 @@ components:
 
     CampaignCreate:
       type: object
-      required: [cpgId, name, accumulationType, captureMode, startsAt]
+      required: [name]
       properties:
         key:
           type: string
@@ -2796,6 +2886,9 @@ components:
           default: indefinite
         enrollmentMode:
           $ref: '#/components/schemas/CampaignEnrollmentMode'
+        accumulationMode:
+          type: string
+          enum: [count, amount]
         startsAt:
           type: string
           format: date-time
@@ -2855,6 +2948,9 @@ components:
           type: boolean
         enrollmentMode:
           $ref: '#/components/schemas/CampaignEnrollmentMode'
+        accumulationMode:
+          type: string
+          enum: [count, amount]
 
     CampaignSubscription:
       type: object
@@ -2970,6 +3066,94 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CampaignPolicy'
+
+    CampaignAccumulationRule:
+      type: object
+      properties:
+        id:
+          type: string
+        campaignId:
+          type: string
+        scopeType:
+          type: string
+          enum: [campaign, brand, product]
+        scopeId:
+          type: string
+          nullable: true
+        multiplier:
+          type: integer
+        flatBonus:
+          type: integer
+        priority:
+          type: integer
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CampaignAccumulationRuleCreate:
+      type: object
+      required: [scopeType]
+      properties:
+        scopeType:
+          type: string
+          enum: [campaign, brand, product]
+        scopeId:
+          type: string
+        multiplier:
+          type: integer
+          minimum: 1
+          maximum: 100
+        flatBonus:
+          type: integer
+          minimum: 0
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        active:
+          type: boolean
+
+    CampaignAccumulationRuleUpdate:
+      type: object
+      properties:
+        scopeType:
+          type: string
+          enum: [campaign, brand, product]
+        scopeId:
+          type: string
+        multiplier:
+          type: integer
+          minimum: 1
+          maximum: 100
+        flatBonus:
+          type: integer
+          minimum: 0
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        active:
+          type: boolean
+
+    CampaignAccumulationRuleResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CampaignAccumulationRule'
+
+    CampaignAccumulationRuleListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignAccumulationRule'
 
     CampaignTierCreate:
       type: object
@@ -3898,6 +4082,9 @@ components:
         cost:
           type: integer
           description: Costo en puntos/estampas
+        minTierId:
+          type: string
+          nullable: true
         stock:
           type: integer
           nullable: true
@@ -3926,6 +4113,9 @@ components:
         cost:
           type: integer
           minimum: 1
+        minTierId:
+          type: string
+          nullable: true
         stock:
           type: integer
           nullable: true
