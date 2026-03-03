@@ -9,6 +9,7 @@ import {
   accumulations,
   balances,
   campaignBalances,
+  campaignAccumulationRules,
   campaignPolicies,
   campaignSubscriptions,
   cards,
@@ -101,6 +102,17 @@ type CampaignPolicyRow = {
   value: number;
   active: boolean;
   createdAt: Date;
+};
+
+type CampaignAccumulationRuleRow = {
+  id: string;
+  campaignId: string;
+  scopeType: 'campaign' | 'brand' | 'product';
+  scopeId: string | null;
+  multiplier: number;
+  flatBonus: number;
+  priority: number;
+  active: boolean;
 };
 
 type ResolvedCatalogItem = {
@@ -274,6 +286,40 @@ const toPeriodStart = (period: CampaignPolicyRow['period'], now: Date) => {
   }
 
   return null;
+};
+
+const resolveAccumulationRule = (
+  item: { productId: string; brandId?: string },
+  rules: CampaignAccumulationRuleRow[],
+) => {
+  const scored = rules
+    .filter((rule) => {
+      if (!rule.active) {
+        return false;
+      }
+      if (rule.scopeType === 'campaign') {
+        return true;
+      }
+      if (rule.scopeType === 'product') {
+        return rule.scopeId === item.productId;
+      }
+      return Boolean(item.brandId && rule.scopeId === item.brandId);
+    })
+    .map((rule) => {
+      const specificity = rule.scopeType === 'product' ? 3 : rule.scopeType === 'brand' ? 2 : 1;
+      return {
+        rule,
+        specificity,
+      };
+    })
+    .sort((a, b) => {
+      if (a.rule.priority !== b.rule.priority) {
+        return a.rule.priority - b.rule.priority;
+      }
+      return b.specificity - a.specificity;
+    });
+
+  return scored[0]?.rule ?? null;
 };
 
 const resolveCatalogItems = async (productRefs: string[]) => {
@@ -546,6 +592,14 @@ const createOrReplayTransaction = async (payload: {
       cardId: resolvedCard.cardId,
       baseCampaignId: resolvedCard.baseCampaignId,
     });
+    const campaignRows = (await db
+      .select({ id: campaigns.id, accumulationMode: campaigns.accumulationMode })
+      .from(campaigns)
+      .where(or(...campaignIds.map((id) => eq(campaigns.id, id))))) as Array<{
+      id: string;
+      accumulationMode: 'count' | 'amount';
+    }>;
+    const campaignById = new Map(campaignRows.map((entry) => [entry.id, entry]));
 
     const campaignBalanceRows = (await db
       .select()
@@ -586,10 +640,28 @@ const createOrReplayTransaction = async (payload: {
     let totalAccumulatedAcrossCampaigns = 0;
 
     for (const campaignId of campaignIds) {
+      const campaignConfig = campaignById.get(campaignId);
+      if (!campaignConfig) {
+        continue;
+      }
+
       const activePolicies = (await db
         .select()
         .from(campaignPolicies)
         .where(and(eq(campaignPolicies.campaignId, campaignId), eq(campaignPolicies.active, true)))) as CampaignPolicyRow[];
+      const accumulationRules = (await db
+        .select({
+          id: campaignAccumulationRules.id,
+          campaignId: campaignAccumulationRules.campaignId,
+          scopeType: campaignAccumulationRules.scopeType,
+          scopeId: campaignAccumulationRules.scopeId,
+          multiplier: campaignAccumulationRules.multiplier,
+          flatBonus: campaignAccumulationRules.flatBonus,
+          priority: campaignAccumulationRules.priority,
+          active: campaignAccumulationRules.active,
+        })
+        .from(campaignAccumulationRules)
+        .where(and(eq(campaignAccumulationRules.campaignId, campaignId), eq(campaignAccumulationRules.active, true)))) as CampaignAccumulationRuleRow[];
 
       const existingCampaignBalance = campaignBalanceById.get(campaignId);
       let currentCampaignBalance = existingCampaignBalance?.current ?? 0;
@@ -746,7 +818,17 @@ const createOrReplayTransaction = async (payload: {
           continue;
         }
 
-        const amount = item.quantity;
+        const baseAmount = campaignConfig.accumulationMode === 'amount' ? item.amount * item.quantity : item.quantity;
+        const matchedRule = resolveAccumulationRule(
+          {
+            productId: item.productId,
+            brandId: itemBrandByProduct.get(item.productId) ?? undefined,
+          },
+          accumulationRules,
+        );
+        const amount = matchedRule
+          ? Math.max(0, Math.round(baseAmount * matchedRule.multiplier + matchedRule.flatBonus))
+          : baseAmount;
         currentCampaignBalance += amount;
         lifetimeCampaignBalance += amount;
         campaignAccumulated += amount;

@@ -10,6 +10,7 @@ export const rewardSchema = t.Object({
   description: t.Optional(t.String()),
   imageUrl: t.Optional(t.String()),
   cost: t.Number(),
+  minTierId: t.Optional(t.String()),
   stock: t.Optional(t.Number()),
   status: rewardStatusSchema,
   createdAt: t.String(),
@@ -22,6 +23,7 @@ export const rewardCreateRequest = t.Object({
   description: t.Optional(t.String()),
   imageUrl: t.Optional(t.String()),
   cost: t.Number({ minimum: 1 }),
+  minTierId: t.Optional(t.String({ format: 'uuid' })),
   stock: t.Optional(t.Number({ minimum: 0 })),
   status: t.Optional(rewardStatusSchema),
 });

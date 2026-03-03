@@ -6,6 +6,7 @@ import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import {
   brands,
+  campaignAccumulationRules,
   campaignAuditLogs,
   campaignPolicies,
   campaignSubscriptions,
@@ -25,6 +26,10 @@ import {
   campaignListResponse,
   campaignNoteRequest,
   campaignPolicyCreateRequest,
+  campaignAccumulationRuleCreateRequest,
+  campaignAccumulationRuleListResponse,
+  campaignAccumulationRuleResponse,
+  campaignAccumulationRuleUpdateRequest,
   campaignPolicyListResponse,
   campaignPolicyResponse,
   campaignPolicyUpdateRequest,
@@ -47,6 +52,7 @@ type CampaignRow = {
   cpgId: string | null;
   status: string;
   enrollmentMode: 'open' | 'opt_in' | 'system_universal';
+  accumulationMode: 'count' | 'amount';
   startsAt: Date | null;
   endsAt: Date | null;
   version: number;
@@ -77,6 +83,21 @@ type CampaignPolicyRow = {
   period: 'transaction' | 'day' | 'week' | 'month' | 'lifetime';
   value: number;
   config: string | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date | null;
+};
+
+type CampaignAccumulationRuleRow = {
+  id: string;
+  campaignId: string;
+  scopeType: 'campaign' | 'brand' | 'product';
+  scopeId: string | null;
+  scopeBrandId: string | null;
+  scopeProductId: string | null;
+  multiplier: number;
+  flatBonus: number;
+  priority: number;
   active: boolean;
   createdAt: Date;
   updatedAt: Date | null;
@@ -133,6 +154,7 @@ type CampaignCreateContext = {
     description?: string;
     cpgId?: string;
     enrollmentMode?: 'open' | 'opt_in' | 'system_universal';
+    accumulationMode?: 'count' | 'amount';
     startsAt?: string;
     endsAt?: string;
   };
@@ -152,6 +174,7 @@ type CampaignUpdateContext = {
     name?: string;
     description?: string;
     enrollmentMode?: 'open' | 'opt_in' | 'system_universal';
+    accumulationMode?: 'count' | 'amount';
     startsAt?: string;
     endsAt?: string;
     status?: string;
@@ -233,6 +256,46 @@ type CampaignPolicyUpdateContext = {
     config?: string;
     active?: boolean;
   };
+  status: StatusHandler;
+};
+
+type CampaignAccumulationRuleListContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string };
+  status: StatusHandler;
+};
+
+type CampaignAccumulationRuleCreateContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string };
+  body: {
+    scopeType: CampaignAccumulationRuleRow['scopeType'];
+    scopeId?: string;
+    multiplier?: number;
+    flatBonus?: number;
+    priority?: number;
+    active?: boolean;
+  };
+  status: StatusHandler;
+};
+
+type CampaignAccumulationRuleUpdateContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string; ruleId: string };
+  body: {
+    scopeType?: CampaignAccumulationRuleRow['scopeType'];
+    scopeId?: string;
+    multiplier?: number;
+    flatBonus?: number;
+    priority?: number;
+    active?: boolean;
+  };
+  status: StatusHandler;
+};
+
+type CampaignAccumulationRuleDeleteContext = {
+  auth: AuthContext | null;
+  params: { campaignId: string; ruleId: string };
   status: StatusHandler;
 };
 
@@ -342,6 +405,7 @@ const serializeCampaign = (
     cpgId: campaign.cpgId ?? undefined,
     status: campaign.status,
     enrollmentMode: campaign.enrollmentMode,
+    accumulationMode: campaign.accumulationMode,
     startsAt: campaign.startsAt ? campaign.startsAt.toISOString() : undefined,
     endsAt: campaign.endsAt ? campaign.endsAt.toISOString() : undefined,
     version: campaign.version,
@@ -399,6 +463,19 @@ const serializeTier = (entry: CampaignTierRow, benefits: TierBenefitRow[] = []) 
     type: benefit.type,
     config: benefit.config ?? undefined,
   })),
+});
+
+const serializeAccumulationRule = (entry: CampaignAccumulationRuleRow) => ({
+  id: entry.id,
+  campaignId: entry.campaignId,
+  scopeType: entry.scopeType,
+  scopeId: entry.scopeId ?? undefined,
+  multiplier: entry.multiplier,
+  flatBonus: entry.flatBonus,
+  priority: entry.priority,
+  active: entry.active,
+  createdAt: entry.createdAt.toISOString(),
+  updatedAt: entry.updatedAt ? entry.updatedAt.toISOString() : undefined,
 });
 
 const loadTierBenefitsByTierId = async (campaignId: string) => {
@@ -630,6 +707,7 @@ export const campaignsModule = new Elysia({
           cpgId: campaigns.cpgId,
           status: campaigns.status,
           enrollmentMode: campaigns.enrollmentMode,
+          accumulationMode: campaigns.accumulationMode,
           startsAt: campaigns.startsAt,
           endsAt: campaigns.endsAt,
           version: campaigns.version,
@@ -1021,6 +1099,7 @@ export const campaignsModule = new Elysia({
           description: body.description ?? null,
           cpgId,
           enrollmentMode: body.enrollmentMode ?? 'opt_in',
+          accumulationMode: body.accumulationMode ?? 'count',
           startsAt,
           endsAt,
           createdBy: resolveActorUserId(auth),
@@ -1180,6 +1259,7 @@ export const campaignsModule = new Elysia({
             name: body.name ?? campaign.name,
             description: body.description ?? campaign.description,
             enrollmentMode: body.enrollmentMode ?? campaign.enrollmentMode,
+            accumulationMode: body.accumulationMode ?? campaign.accumulationMode,
             startsAt,
             endsAt,
           status: body.status ?? campaign.status,
@@ -1485,6 +1565,340 @@ export const campaignsModule = new Elysia({
       },
       detail: {
         summary: 'Actualizar política de campaña',
+      },
+    },
+  )
+  .get(
+    '/:campaignId/accumulation-rules',
+    async ({ auth, params, status }: CampaignAccumulationRuleListContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      const rows = (await db
+        .select()
+        .from(campaignAccumulationRules)
+        .where(eq(campaignAccumulationRules.campaignId, campaign.id))
+        .orderBy(campaignAccumulationRules.priority, desc(campaignAccumulationRules.createdAt))) as CampaignAccumulationRuleRow[];
+
+      return {
+        data: rows.map(serializeAccumulationRule),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authorizationHeader,
+      response: {
+        200: campaignAccumulationRuleListResponse,
+      },
+      detail: {
+        summary: 'Listar reglas de acumulación',
+      },
+    },
+  )
+  .post(
+    '/:campaignId/accumulation-rules',
+    async ({ auth, params, body, status }: CampaignAccumulationRuleCreateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return status(409, {
+          error: {
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar reglas de acumulación',
+          },
+        });
+      }
+
+      const scopeId = body.scopeId ?? null;
+      const scopeError = await ensureScope(campaign, body.scopeType, scopeId, status);
+      if (scopeError) {
+        return scopeError;
+      }
+
+      const [created] = (await db
+        .insert(campaignAccumulationRules)
+        .values({
+          campaignId: campaign.id,
+          scopeType: body.scopeType,
+          scopeId,
+          scopeBrandId: body.scopeType === 'brand' ? scopeId : null,
+          scopeProductId: body.scopeType === 'product' ? scopeId : null,
+          multiplier: body.multiplier ?? 1,
+          flatBonus: body.flatBonus ?? 0,
+          priority: body.priority ?? 100,
+          active: body.active ?? true,
+          updatedAt: new Date(),
+        })
+        .returning()) as CampaignAccumulationRuleRow[];
+
+      if (!created) {
+        return status(500, {
+          error: {
+            code: 'CAMPAIGN_ACCUMULATION_RULE_CREATE_FAILED',
+            message: 'No se pudo crear la regla de acumulación',
+          },
+        });
+      }
+
+      await appendAudit(created.campaignId, 'campaign.accumulation_rule_created', null, auth, {
+        ruleId: created.id,
+        scopeType: created.scopeType,
+      });
+
+      return status(201, {
+        data: serializeAccumulationRule(created),
+      });
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authorizationHeader,
+      body: campaignAccumulationRuleCreateRequest,
+      response: {
+        201: campaignAccumulationRuleResponse,
+      },
+      detail: {
+        summary: 'Crear regla de acumulación',
+      },
+    },
+  )
+  .patch(
+    '/:campaignId/accumulation-rules/:ruleId',
+    async ({ auth, params, body, status }: CampaignAccumulationRuleUpdateContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return status(409, {
+          error: {
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar reglas de acumulación',
+          },
+        });
+      }
+
+      const [existing] = (await db
+        .select()
+        .from(campaignAccumulationRules)
+        .where(
+          and(eq(campaignAccumulationRules.id, params.ruleId), eq(campaignAccumulationRules.campaignId, campaign.id)),
+        )) as CampaignAccumulationRuleRow[];
+
+      if (!existing) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_ACCUMULATION_RULE_NOT_FOUND',
+            message: 'Regla de acumulación no encontrada',
+          },
+        });
+      }
+
+      const nextScopeType = body.scopeType ?? existing.scopeType;
+      const nextScopeId =
+        body.scopeType === 'campaign'
+          ? null
+          : body.scopeId !== undefined
+            ? body.scopeId
+            : existing.scopeType === 'campaign'
+              ? null
+              : existing.scopeId;
+      const scopeError = await ensureScope(campaign, nextScopeType, nextScopeId ?? null, status);
+      if (scopeError) {
+        return scopeError;
+      }
+
+      const [updated] = (await db
+        .update(campaignAccumulationRules)
+        .set({
+          scopeType: nextScopeType,
+          scopeId: nextScopeId ?? null,
+          scopeBrandId: nextScopeType === 'brand' ? (nextScopeId ?? null) : null,
+          scopeProductId: nextScopeType === 'product' ? (nextScopeId ?? null) : null,
+          multiplier: body.multiplier ?? existing.multiplier,
+          flatBonus: body.flatBonus ?? existing.flatBonus,
+          priority: body.priority ?? existing.priority,
+          active: body.active ?? existing.active,
+          updatedAt: new Date(),
+        })
+        .where(eq(campaignAccumulationRules.id, existing.id))
+        .returning()) as CampaignAccumulationRuleRow[];
+
+      if (!updated) {
+        return status(500, {
+          error: {
+            code: 'CAMPAIGN_ACCUMULATION_RULE_UPDATE_FAILED',
+            message: 'No se pudo actualizar la regla de acumulación',
+          },
+        });
+      }
+
+      await appendAudit(updated.campaignId, 'campaign.accumulation_rule_updated', null, auth, {
+        ruleId: updated.id,
+        scopeType: updated.scopeType,
+      });
+
+      return {
+        data: serializeAccumulationRule(updated),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authorizationHeader,
+      body: campaignAccumulationRuleUpdateRequest,
+      response: {
+        200: campaignAccumulationRuleResponse,
+      },
+      detail: {
+        summary: 'Actualizar regla de acumulación',
+      },
+    },
+  )
+  .delete(
+    '/:campaignId/accumulation-rules/:ruleId',
+    async ({ auth, params, status }: CampaignAccumulationRuleDeleteContext) => {
+      if (!auth) {
+        return status(401, {
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
+          },
+        });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, {
+          error: {
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
+          },
+        });
+      }
+
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return status(409, {
+          error: {
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar reglas de acumulación',
+          },
+        });
+      }
+
+      const [existing] = (await db
+        .select({ id: campaignAccumulationRules.id, campaignId: campaignAccumulationRules.campaignId })
+        .from(campaignAccumulationRules)
+        .where(
+          and(eq(campaignAccumulationRules.id, params.ruleId), eq(campaignAccumulationRules.campaignId, campaign.id)),
+        )) as Array<{ id: string; campaignId: string }>;
+
+      if (!existing) {
+        return status(404, {
+          error: {
+            code: 'CAMPAIGN_ACCUMULATION_RULE_NOT_FOUND',
+            message: 'Regla de acumulación no encontrada',
+          },
+        });
+      }
+
+      await db.delete(campaignAccumulationRules).where(eq(campaignAccumulationRules.id, existing.id));
+      await appendAudit(existing.campaignId, 'campaign.accumulation_rule_deleted', null, auth, {
+        ruleId: existing.id,
+      });
+
+      return status(204);
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
+      headers: authorizationHeader,
+      response: {
+        204: t.Void(),
+      },
+      detail: {
+        summary: 'Eliminar regla de acumulación',
       },
     },
   )
