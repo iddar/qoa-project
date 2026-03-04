@@ -3,7 +3,8 @@
     "private": true,
     "workspaces": [
         "src",
-        "apps/*"
+        "apps/*",
+        "packages/*"
     ],
     "scripts": {
         "e2e": "bunx playwright test --config=global/e2e/playwright.config.ts",

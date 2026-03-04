@@ -2,6 +2,7 @@
   "name": "backoffice",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "bun@1.3.8",
   "scripts": {
     "dev": "next dev --port 3001",
     "build": "next build",
@@ -10,8 +11,10 @@
   },
   "dependencies": {
     "@elysiajs/eden": "^1.4.2",
+    "@qoa/auth-client": "workspace:*",
     "@lglab/react-qr-code": "^1.4.9",
     "@qoa/core": "workspace:*",
+    "@qoa/ui": "workspace:*",
     "@tanstack/react-query": "^5",
     "next": "16.1.6",
     "react": "19.2.3",
