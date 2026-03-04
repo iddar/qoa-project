@@ -1,4 +1,4 @@
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, desc, eq, gt } from 'drizzle-orm';
 import { db } from '../db/client';
 import { accumulations, campaignTiers, cards, tierBenefits, transactionItems } from '../db/schema';
 
@@ -195,16 +195,21 @@ export const evaluateCardTier = async (params: {
     };
   }
 
-  const maxWindowTier = tiers.reduce((winner, tier) => {
-    if (!winner) {
-      return tier;
-    }
-    return subtractWindow(now, tier.windowUnit, tier.windowValue) < subtractWindow(now, winner.windowUnit, winner.windowValue)
-      ? tier
-      : winner;
-  }, null as TierRow | null);
+  const maxWindowTier = tiers.reduce(
+    (winner, tier) => {
+      if (!winner) {
+        return tier;
+      }
+      return subtractWindow(now, tier.windowUnit, tier.windowValue) <
+        subtractWindow(now, winner.windowUnit, winner.windowValue)
+        ? tier
+        : winner;
+    },
+    null as TierRow | null,
+  );
 
   const rangeStart = maxWindowTier ? subtractWindow(now, maxWindowTier.windowUnit, maxWindowTier.windowValue) : now;
+  const rangeStartInclusive = new Date(rangeStart.getTime() - 1);
   const accrualRows = (await db
     .select({
       transactionItemId: accumulations.transactionItemId,
@@ -215,11 +220,13 @@ export const evaluateCardTier = async (params: {
       and(
         eq(accumulations.cardId, params.cardId),
         eq(accumulations.campaignId, params.campaignId),
-        gte(accumulations.createdAt, rangeStart),
+        gt(accumulations.createdAt, rangeStartInclusive),
       ),
     )) as Array<{ transactionItemId: string | null; createdAt: Date }>;
 
-  const itemIds = [...new Set(accrualRows.map((entry) => entry.transactionItemId).filter((value): value is string => Boolean(value)))];
+  const itemIds = [
+    ...new Set(accrualRows.map((entry) => entry.transactionItemId).filter((value): value is string => Boolean(value))),
+  ];
   const itemRows =
     itemIds.length === 0
       ? []
@@ -231,15 +238,18 @@ export const evaluateCardTier = async (params: {
             quantity: transactionItems.quantity,
           })
           .from(transactionItems)
-          .where(and(...itemIds.map(id => eq(transactionItems.id, id))))) as Array<{
+          .where(and(...itemIds.map((id) => eq(transactionItems.id, id))))) as Array<{
           id: string;
           transactionId: string;
           amount: number;
           quantity: number;
         }>);
 
-  const itemMetrics = new Map(itemRows.map((entry) => [entry.id, { transactionId: entry.transactionId, amount: entry.amount * entry.quantity }]));
-  const qualifiedTier = tiers.find((tier) => qualifiesTier(tier, resolveWindowMetrics(tier, now, accrualRows, itemMetrics))) ?? null;
+  const itemMetrics = new Map(
+    itemRows.map((entry) => [entry.id, { transactionId: entry.transactionId, amount: entry.amount * entry.quantity }]),
+  );
+  const qualifiedTier =
+    tiers.find((tier) => qualifiesTier(tier, resolveWindowMetrics(tier, now, accrualRows, itemMetrics))) ?? null;
   const previousTier = tiers.find((tier) => tier.id === card.currentTierId) ?? null;
 
   let nextTierId: string | null = card.currentTierId;
@@ -286,7 +296,9 @@ export const evaluateCardTier = async (params: {
     tierState = 'unqualified';
   }
 
-  const changed = nextTierId !== card.currentTierId || (nextGraceUntil?.toISOString() ?? null) !== (card.tierGraceUntil?.toISOString() ?? null);
+  const changed =
+    nextTierId !== card.currentTierId ||
+    (nextGraceUntil?.toISOString() ?? null) !== (card.tierGraceUntil?.toISOString() ?? null);
 
   await db
     .update(cards)
@@ -298,10 +310,7 @@ export const evaluateCardTier = async (params: {
     .where(eq(cards.id, params.cardId));
 
   const tierBenefitsRows = nextTierId
-    ? ((await db
-        .select()
-        .from(tierBenefits)
-        .where(eq(tierBenefits.tierId, nextTierId))) as TierBenefitRow[])
+    ? ((await db.select().from(tierBenefits).where(eq(tierBenefits.tierId, nextTierId))) as TierBenefitRow[])
     : [];
   const currentTier = tiers.find((entry) => entry.id === nextTierId) ?? null;
 
