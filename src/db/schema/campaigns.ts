@@ -1,4 +1,15 @@
-import { boolean, index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { brands, products } from './catalog';
 import { users } from './users';
@@ -90,7 +101,9 @@ export const campaigns = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
   (table: CampaignsTable) => [
-    uniqueIndex('campaigns_key_key').on(table.key).where(sql`${table.key} is not null`),
+    uniqueIndex('campaigns_key_key')
+      .on(table.key)
+      .where(sql`${table.key} is not null`),
     index('campaigns_cpg_idx').on(table.cpgId),
     index('campaigns_status_idx').on(table.status),
     index('campaigns_enrollment_mode_idx').on(table.enrollmentMode),

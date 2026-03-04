@@ -470,7 +470,9 @@ const resolveEligibleCampaignIds = async (payload: { userId: string; cardId: str
   const subscribedRows = (await db
     .select({ campaignId: campaignSubscriptions.campaignId })
     .from(campaignSubscriptions)
-    .where(and(eq(campaignSubscriptions.userId, payload.userId), eq(campaignSubscriptions.status, 'subscribed')))) as Array<{
+    .where(
+      and(eq(campaignSubscriptions.userId, payload.userId), eq(campaignSubscriptions.status, 'subscribed')),
+    )) as Array<{
     campaignId: string;
   }>;
 
@@ -581,7 +583,10 @@ const createOrReplayTransaction = async (payload: {
 
   if (resolvedCard) {
     const now = new Date();
-    const [existingBalance] = (await db.select().from(balances).where(eq(balances.cardId, resolvedCard.cardId))) as Array<{
+    const [existingBalance] = (await db
+      .select()
+      .from(balances)
+      .where(eq(balances.cardId, resolvedCard.cardId))) as Array<{
       id: string;
       current: number;
       lifetime: number;
@@ -648,7 +653,9 @@ const createOrReplayTransaction = async (payload: {
       const activePolicies = (await db
         .select()
         .from(campaignPolicies)
-        .where(and(eq(campaignPolicies.campaignId, campaignId), eq(campaignPolicies.active, true)))) as CampaignPolicyRow[];
+        .where(
+          and(eq(campaignPolicies.campaignId, campaignId), eq(campaignPolicies.active, true)),
+        )) as CampaignPolicyRow[];
       const accumulationRules = (await db
         .select({
           id: campaignAccumulationRules.id,
@@ -661,7 +668,9 @@ const createOrReplayTransaction = async (payload: {
           active: campaignAccumulationRules.active,
         })
         .from(campaignAccumulationRules)
-        .where(and(eq(campaignAccumulationRules.campaignId, campaignId), eq(campaignAccumulationRules.active, true)))) as CampaignAccumulationRuleRow[];
+        .where(
+          and(eq(campaignAccumulationRules.campaignId, campaignId), eq(campaignAccumulationRules.active, true)),
+        )) as CampaignAccumulationRuleRow[];
 
       const existingCampaignBalance = campaignBalanceById.get(campaignId);
       let currentCampaignBalance = existingCampaignBalance?.current ?? 0;

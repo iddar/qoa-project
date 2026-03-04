@@ -328,10 +328,9 @@ export const reportsModule = new Elysia({
         });
       }
 
-      const [store] = (await db
-        .select({ id: stores.id })
-        .from(stores)
-        .where(eq(stores.id, params.storeId))) as Array<{ id: string }>;
+      const [store] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.id, params.storeId))) as Array<{
+        id: string;
+      }>;
 
       if (!store) {
         return status(404, {
@@ -693,7 +692,7 @@ export const reportsModule = new Elysia({
 
       const [transactionsRows, accumulationsRows, redemptionsRows, dailyRows, transactionsWithoutAccumulationsRows] =
         await Promise.all([
-        db.execute(sql`
+          db.execute(sql`
           with campaign_tx as (
             select distinct ti.transaction_id
             from accumulations a
@@ -708,7 +707,7 @@ export const reportsModule = new Elysia({
           from campaign_tx ctx
           inner join transactions t on t.id = ctx.transaction_id
         `) as Promise<KpiTransactionsRow[]>,
-        db.execute(sql`
+          db.execute(sql`
           select
             count(*)::int as count,
             coalesce(sum(a.amount), 0)::int as points
@@ -716,7 +715,7 @@ export const reportsModule = new Elysia({
           where a.campaign_id = ${campaign.id}
             and a.created_at between ${fromIso} and ${toIso}
         `) as Promise<KpiAccumulationsRow[]>,
-        db.execute(sql`
+          db.execute(sql`
           select
             count(*)::int as count,
             coalesce(sum(r.cost), 0)::int as cost
@@ -725,7 +724,7 @@ export const reportsModule = new Elysia({
           where rw.campaign_id = ${campaign.id}
             and r.created_at between ${fromIso} and ${toIso}
         `) as Promise<KpiRedemptionsRow[]>,
-        db.execute(sql`
+          db.execute(sql`
           with days as (
             select generate_series(${fromDayIso}::date, ${toDayIso}::date, interval '1 day')::date as day
           ),
@@ -772,7 +771,7 @@ export const reportsModule = new Elysia({
           left join red on red.day = days.day
           order by days.day asc
         `) as Promise<DailyRow[]>,
-        db.execute(sql`
+          db.execute(sql`
           with candidate_tx as (
             select distinct t.id
             from transactions t
@@ -803,7 +802,7 @@ export const reportsModule = new Elysia({
           left join with_points_tx p on p.transaction_id = c.id
           where p.transaction_id is null
         `) as Promise<CountRow[]>,
-      ]);
+        ]);
 
       return {
         data: {

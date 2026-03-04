@@ -3,7 +3,18 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { balances, campaignBalances, campaignTiers, campaigns, cards, cpgs, redemptions, rewards, stores, users } from '../db/schema';
+import {
+  balances,
+  campaignBalances,
+  campaignTiers,
+  campaigns,
+  cards,
+  cpgs,
+  redemptions,
+  rewards,
+  stores,
+  users,
+} from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -479,10 +490,7 @@ describe('Rewards module', () => {
       updatedAt: new Date(),
     });
 
-    const {
-      data: reward,
-      error: createError,
-    } = await api.v1.rewards.post(
+    const { data: reward, error: createError } = await api.v1.rewards.post(
       {
         campaignId: campaign!.id,
         name: `Reward Double ${crypto.randomUUID().slice(0, 5)}`,

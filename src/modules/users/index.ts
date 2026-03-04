@@ -555,15 +555,15 @@ export const usersModule = new Elysia({
         })
         .from(cards)
         .where(eq(cards.id, cardId))) as Array<{
-          id: string;
-          campaignId: string;
-          code: string;
-          currentTierId: string | null;
-          tierGraceUntil: Date | null;
-          tierLastEvaluatedAt: Date | null;
-          status: string;
-          createdAt: Date;
-        }>;
+        id: string;
+        campaignId: string;
+        code: string;
+        currentTierId: string | null;
+        tierGraceUntil: Date | null;
+        tierLastEvaluatedAt: Date | null;
+        status: string;
+        createdAt: Date;
+      }>;
 
       if (!card) {
         return status(404, {
@@ -603,10 +603,7 @@ export const usersModule = new Elysia({
       }>;
 
       const [currentTier] = card.currentTierId
-        ? ((await db
-            .select()
-            .from(campaignTiers)
-            .where(eq(campaignTiers.id, card.currentTierId))) as Array<{
+        ? ((await db.select().from(campaignTiers).where(eq(campaignTiers.id, card.currentTierId))) as Array<{
             id: string;
             name: string;
             order: number;

@@ -495,15 +495,15 @@ export const rewardsModule = new Elysia({
           : [];
 
         if (!requiredTier || !currentTier || currentTier.order < requiredTier.order) {
-        return status(422, {
-          error: {
-            code: 'REWARD_TIER_REQUIRED',
-            message: requiredTier
-              ? `Esta recompensa requiere nivel ${requiredTier.order}: ${requiredTier.name}`
-              : 'Esta recompensa requiere un tier mínimo',
-          },
-        });
-      }
+          return status(422, {
+            error: {
+              code: 'REWARD_TIER_REQUIRED',
+              message: requiredTier
+                ? `Esta recompensa requiere nivel ${requiredTier.order}: ${requiredTier.name}`
+                : 'Esta recompensa requiere un tier mínimo',
+            },
+          });
+        }
       }
 
       const [existingRedemption] = (await db
@@ -540,7 +540,9 @@ export const rewardsModule = new Elysia({
       const [campaignBalance] = (await db
         .select()
         .from(campaignBalances)
-        .where(and(eq(campaignBalances.cardId, card.cardId), eq(campaignBalances.campaignId, reward.campaignId)))) as Array<{
+        .where(
+          and(eq(campaignBalances.cardId, card.cardId), eq(campaignBalances.campaignId, reward.campaignId)),
+        )) as Array<{
         id: string;
         current: number;
         lifetime: number;

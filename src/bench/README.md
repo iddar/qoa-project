@@ -72,10 +72,10 @@ bun run bench
 
 ## Opciones
 
-| Flag | Descripción |
-|------|-------------|
+| Flag              | Descripción                                                                      |
+| ----------------- | -------------------------------------------------------------------------------- |
 | `--save-baseline` | Guarda el run actual como referencia en `bench/results/baseline-<timestamp>.txt` |
-| `--compare` | Corre el benchmark y compara p50/p99/RPS vs el baseline más reciente |
+| `--compare`       | Corre el benchmark y compara p50/p99/RPS vs el baseline más reciente             |
 
 ```sh
 # Primer run → guardar como baseline
@@ -87,27 +87,27 @@ bun run bench
 
 ## Variables de entorno
 
-| Variable | Default | Descripción |
-|----------|---------|-------------|
-| `BASE_URL` | `http://localhost:3000` | URL base del servidor |
-| `CONCURRENCY` | `10` | Número de workers paralelos |
-| `REQUESTS` | `200` | Total de requests por suite |
-| `HEY_EXTRA_FLAGS` | `` | Flags extra para `hey` (ej. `-disable-keepalive`) |
-| `BENCH_USER_ID` | — | UUID del usuario consumer del seed |
-| `BENCH_STORE_ID` | — | UUID de la tienda del seed |
-| `BENCH_PRODUCT_ID` | — | UUID del producto del seed |
-| `BENCH_CARD_ID` | — | UUID de la tarjeta universal del consumer (opcional) |
+| Variable           | Default                 | Descripción                                          |
+| ------------------ | ----------------------- | ---------------------------------------------------- |
+| `BASE_URL`         | `http://localhost:3000` | URL base del servidor                                |
+| `CONCURRENCY`      | `10`                    | Número de workers paralelos                          |
+| `REQUESTS`         | `200`                   | Total de requests por suite                          |
+| `HEY_EXTRA_FLAGS`  | ``                      | Flags extra para `hey` (ej. `-disable-keepalive`)    |
+| `BENCH_USER_ID`    | —                       | UUID del usuario consumer del seed                   |
+| `BENCH_STORE_ID`   | —                       | UUID de la tienda del seed                           |
+| `BENCH_PRODUCT_ID` | —                       | UUID del producto del seed                           |
+| `BENCH_CARD_ID`    | —                       | UUID de la tarjeta universal del consumer (opcional) |
 
 ## Suites disponibles
 
-| Suite | Endpoint | Qué mide |
-|-------|----------|----------|
-| `health` | `GET /v1/health` | Overhead puro del framework, sin DB |
-| `stores` | `GET /v1/stores?limit=20` | Query simple con auth + paginación |
-| `transactions` | `GET /v1/transactions?limit=20` | Query con filtros + cursor-pagination |
-| `campaigns` | `GET /v1/campaigns?limit=20` | List con tenant-scope |
-| `reports` | `GET /v1/reports/overview` | Query agregada (posibles N+1) |
-| `post_transaction` | `POST /v1/transactions` | Path crítico: escritura en DB + acumulaciones |
+| Suite              | Endpoint                        | Qué mide                                      |
+| ------------------ | ------------------------------- | --------------------------------------------- |
+| `health`           | `GET /v1/health`                | Overhead puro del framework, sin DB           |
+| `stores`           | `GET /v1/stores?limit=20`       | Query simple con auth + paginación            |
+| `transactions`     | `GET /v1/transactions?limit=20` | Query con filtros + cursor-pagination         |
+| `campaigns`        | `GET /v1/campaigns?limit=20`    | List con tenant-scope                         |
+| `reports`          | `GET /v1/reports/overview`      | Query agregada (posibles N+1)                 |
+| `post_transaction` | `POST /v1/transactions`         | Path crítico: escritura en DB + acumulaciones |
 
 ## Interpretar resultados de hey
 
@@ -133,6 +133,7 @@ Status code distribution:
 ```
 
 **Métricas clave a monitorear:**
+
 - **p50 (mediana):** comportamiento típico
 - **p99 (cola):** worst-case que verá ~1% de usuarios
 - **Requests/sec:** throughput total

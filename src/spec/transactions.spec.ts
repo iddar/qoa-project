@@ -251,7 +251,9 @@ describe('Transactions module', () => {
     expect(createStatus).toBe(201);
     expect(created.data.totalAmount).toBe(30);
     expect(created.data.accumulations.length).toBeGreaterThanOrEqual(1);
-    const campaignAccumulation = created.data.accumulations.find((entry: { campaignId: string }) => entry.campaignId === card.campaignId);
+    const campaignAccumulation = created.data.accumulations.find(
+      (entry: { campaignId: string }) => entry.campaignId === card.campaignId,
+    );
     expect(campaignAccumulation?.cardId).toBe(card.id);
     expect(campaignAccumulation?.accumulated).toBe(2);
     expect(campaignAccumulation?.newBalance).toBe(2);
@@ -291,7 +293,9 @@ describe('Transactions module', () => {
     expect(replayStatus).toBe(200);
     expect(replayed.data.id).toBe(txId);
     expect(replayed.data.accumulations.length).toBeGreaterThanOrEqual(1);
-    const replayCampaignAccumulation = replayed.data.accumulations.find((entry: { campaignId: string }) => entry.campaignId === card.campaignId);
+    const replayCampaignAccumulation = replayed.data.accumulations.find(
+      (entry: { campaignId: string }) => entry.campaignId === card.campaignId,
+    );
     expect(replayCampaignAccumulation?.newBalance).toBe(2);
 
     const {
@@ -678,7 +682,9 @@ describe('Transactions module', () => {
 
     expect(firstTx.status).toBe(201);
     expect(firstTx.data.data.accumulations.length).toBeGreaterThanOrEqual(1);
-    const firstCampaignAccRows = firstTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === campaign.id);
+    const firstCampaignAccRows = firstTx.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === campaign.id,
+    );
     expect(firstCampaignAccRows.length).toBe(1);
 
     const secondTx = await api.v1.transactions.post(
@@ -707,7 +713,9 @@ describe('Transactions module', () => {
     }
 
     expect(secondTx.status).toBe(201);
-    const secondCampaignAccRows = secondTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === campaign.id);
+    const secondCampaignAccRows = secondTx.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === campaign.id,
+    );
     expect(secondCampaignAccRows.length).toBe(0);
 
     const [balance] = (await db
@@ -783,7 +791,9 @@ describe('Transactions module', () => {
     }
 
     expect(lowQty.status).toBe(201);
-    const lowQtyCampaignAcc = lowQty.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    const lowQtyCampaignAcc = lowQty.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id,
+    );
     expect(lowQtyCampaignAcc.length).toBe(0);
 
     const validQty = await api.v1.transactions.post(
@@ -806,7 +816,9 @@ describe('Transactions module', () => {
       throw validQty.error?.value ?? new Error('Valid quantity tx missing');
     }
 
-    const validQtyCampaignAcc = validQty.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    const validQtyCampaignAcc = validQty.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id,
+    );
     expect(validQtyCampaignAcc.length).toBe(1);
 
     await cleanupPolicyFixture(fixture);
@@ -845,7 +857,9 @@ describe('Transactions module', () => {
       throw firstTx.error?.value ?? new Error('First cooldown tx missing');
     }
 
-    const firstCampaignAcc = firstTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    const firstCampaignAcc = firstTx.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id,
+    );
     expect(firstCampaignAcc.length).toBe(1);
 
     const secondTx = await api.v1.transactions.post(
@@ -868,7 +882,9 @@ describe('Transactions module', () => {
       throw secondTx.error?.value ?? new Error('Second cooldown tx missing');
     }
 
-    const secondCampaignAcc = secondTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    const secondCampaignAcc = secondTx.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id,
+    );
     expect(secondCampaignAcc.length).toBe(0);
 
     await cleanupPolicyFixture(fixture);
@@ -918,7 +934,9 @@ describe('Transactions module', () => {
       throw lowAmountTx.error?.value ?? new Error('Low amount tx missing');
     }
 
-    const lowAmountCampaignAcc = lowAmountTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    const lowAmountCampaignAcc = lowAmountTx.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id,
+    );
     expect(lowAmountCampaignAcc.length).toBe(0);
 
     const validTx = await api.v1.transactions.post(
@@ -941,7 +959,9 @@ describe('Transactions module', () => {
       throw validTx.error?.value ?? new Error('Valid combined policy tx missing');
     }
 
-    const validCampaignAcc = validTx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    const validCampaignAcc = validTx.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id,
+    );
     expect(validCampaignAcc.length).toBe(1);
 
     await cleanupPolicyFixture(fixture);
@@ -981,7 +1001,9 @@ describe('Transactions module', () => {
     }
 
     expect(tx.status).toBe(201);
-    const campaignAcc = tx.data.data.accumulations.filter((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id);
+    const campaignAcc = tx.data.data.accumulations.filter(
+      (entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id,
+    );
     expect(campaignAcc.length).toBe(1);
 
     await cleanupPolicyFixture(fixture);
@@ -1038,15 +1060,17 @@ describe('Transactions module', () => {
     }
 
     expect(tx.status).toBe(201);
-    const campaignAcc = tx.data.data.accumulations.find((entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id) as
-      | { accumulated: number }
-      | undefined;
+    const campaignAcc = tx.data.data.accumulations.find(
+      (entry: { campaignId: string }) => entry.campaignId === fixture.campaign.id,
+    ) as { accumulated: number } | undefined;
     expect(campaignAcc?.accumulated).toBe(45);
 
     const [campaignBalance] = (await db
       .select({ current: campaignBalances.current })
       .from(campaignBalances)
-      .where(and(eq(campaignBalances.cardId, fixture.card.id), eq(campaignBalances.campaignId, fixture.campaign.id)))) as Array<{
+      .where(
+        and(eq(campaignBalances.cardId, fixture.card.id), eq(campaignBalances.campaignId, fixture.campaign.id)),
+      )) as Array<{
       current: number;
     }>;
 
@@ -1112,7 +1136,11 @@ describe('Transactions module', () => {
       .set({ createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000) })
       .where(and(eq(accumulations.cardId, fixture.card.id), eq(accumulations.campaignId, fixture.campaign.id)));
 
-    const { data: runData, error: runError, status: runStatus } = await api.v1.jobs.tiers.run.post(
+    const {
+      data: runData,
+      error: runError,
+      status: runStatus,
+    } = await api.v1.jobs.tiers.run.post(
       {
         limit: 100,
       },

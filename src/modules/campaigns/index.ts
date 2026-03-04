@@ -489,11 +489,8 @@ const loadTierBenefitsByTierId = async (campaignId: string) => {
   }
 
   const tierIds = tiers.map((entry) => entry.id);
-  const inCondition = and(...tierIds.map(id => eq(tierBenefits.tierId, id)))
-  const benefitRows = (await db
-    .select()
-    .from(tierBenefits)
-    .where(inCondition)) as TierBenefitRow[];
+  const inCondition = and(...tierIds.map((id) => eq(tierBenefits.tierId, id)));
+  const benefitRows = (await db.select().from(tierBenefits).where(inCondition)) as TierBenefitRow[];
 
   const byTier = new Map<string, TierBenefitRow[]>();
   for (const benefit of benefitRows) {
@@ -908,7 +905,9 @@ export const campaignsModule = new Elysia({
       const [existing] = (await db
         .select({ id: campaignSubscriptions.id })
         .from(campaignSubscriptions)
-        .where(and(eq(campaignSubscriptions.userId, auth.userId), eq(campaignSubscriptions.campaignId, campaign.id)))) as Array<{
+        .where(
+          and(eq(campaignSubscriptions.userId, auth.userId), eq(campaignSubscriptions.campaignId, campaign.id)),
+        )) as Array<{
         id: string;
       }>;
 
@@ -1256,13 +1255,13 @@ export const campaignsModule = new Elysia({
 
       const [updated] = (await db
         .update(campaigns)
-          .set({
-            name: body.name ?? campaign.name,
-            description: body.description ?? campaign.description,
-            enrollmentMode: body.enrollmentMode ?? campaign.enrollmentMode,
-            accumulationMode: body.accumulationMode ?? campaign.accumulationMode,
-            startsAt,
-            endsAt,
+        .set({
+          name: body.name ?? campaign.name,
+          description: body.description ?? campaign.description,
+          enrollmentMode: body.enrollmentMode ?? campaign.enrollmentMode,
+          accumulationMode: body.accumulationMode ?? campaign.accumulationMode,
+          startsAt,
+          endsAt,
           status: body.status ?? campaign.status,
           version: campaign.version + 1,
           updatedBy: resolveActorUserId(auth),
@@ -1604,7 +1603,10 @@ export const campaignsModule = new Elysia({
         .select()
         .from(campaignAccumulationRules)
         .where(eq(campaignAccumulationRules.campaignId, campaign.id))
-        .orderBy(campaignAccumulationRules.priority, desc(campaignAccumulationRules.createdAt))) as CampaignAccumulationRuleRow[];
+        .orderBy(
+          campaignAccumulationRules.priority,
+          desc(campaignAccumulationRules.createdAt),
+        )) as CampaignAccumulationRuleRow[];
 
       return {
         data: rows.map(serializeAccumulationRule),
@@ -2040,7 +2042,10 @@ export const campaignsModule = new Elysia({
         );
       }
 
-      const benefits = (await db.select().from(tierBenefits).where(eq(tierBenefits.tierId, created.id))) as TierBenefitRow[];
+      const benefits = (await db
+        .select()
+        .from(tierBenefits)
+        .where(eq(tierBenefits.tierId, created.id))) as TierBenefitRow[];
       await appendAudit(created.campaignId, 'campaign.tier_created', null, auth, {
         tierId: created.id,
         order: created.order,
@@ -2105,7 +2110,9 @@ export const campaignsModule = new Elysia({
       const [existing] = (await db
         .select()
         .from(campaignTiers)
-        .where(and(eq(campaignTiers.id, params.tierId), eq(campaignTiers.campaignId, campaign.id)))) as CampaignTierRow[];
+        .where(
+          and(eq(campaignTiers.id, params.tierId), eq(campaignTiers.campaignId, campaign.id)),
+        )) as CampaignTierRow[];
 
       if (!existing) {
         return status(404, {
@@ -2167,7 +2174,10 @@ export const campaignsModule = new Elysia({
         }
       }
 
-      const benefits = (await db.select().from(tierBenefits).where(eq(tierBenefits.tierId, updated.id))) as TierBenefitRow[];
+      const benefits = (await db
+        .select()
+        .from(tierBenefits)
+        .where(eq(tierBenefits.tierId, updated.id))) as TierBenefitRow[];
       await appendAudit(updated.campaignId, 'campaign.tier_updated', null, auth, {
         tierId: updated.id,
         order: updated.order,

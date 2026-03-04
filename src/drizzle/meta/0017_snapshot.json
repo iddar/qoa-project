@@ -435,12 +435,8 @@
           "name": "refresh_tokens_user_id_users_id_fk",
           "tableFrom": "refresh_tokens",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -707,12 +703,8 @@
           "name": "cards_user_id_users_id_fk",
           "tableFrom": "cards",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -720,12 +712,8 @@
           "name": "cards_store_id_stores_id_fk",
           "tableFrom": "cards",
           "tableTo": "stores",
-          "columnsFrom": [
-            "store_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["store_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -733,12 +721,8 @@
           "name": "cards_current_tier_id_campaign_tiers_id_fk",
           "tableFrom": "cards",
           "tableTo": "campaign_tiers",
-          "columnsFrom": [
-            "current_tier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["current_tier_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -900,12 +884,8 @@
           "name": "campaign_accumulation_rules_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_accumulation_rules",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -913,12 +893,8 @@
           "name": "campaign_accumulation_rules_scope_brand_id_brands_id_fk",
           "tableFrom": "campaign_accumulation_rules",
           "tableTo": "brands",
-          "columnsFrom": [
-            "scope_brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scope_brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -926,12 +902,8 @@
           "name": "campaign_accumulation_rules_scope_product_id_products_id_fk",
           "tableFrom": "campaign_accumulation_rules",
           "tableTo": "products",
-          "columnsFrom": [
-            "scope_product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scope_product_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1028,12 +1000,8 @@
           "name": "campaign_audit_logs_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_audit_logs",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1041,12 +1009,8 @@
           "name": "campaign_audit_logs_actor_user_id_users_id_fk",
           "tableFrom": "campaign_audit_logs",
           "tableTo": "users",
-          "columnsFrom": [
-            "actor_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["actor_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1228,12 +1192,8 @@
           "name": "campaign_policies_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_policies",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1241,12 +1201,8 @@
           "name": "campaign_policies_scope_brand_id_brands_id_fk",
           "tableFrom": "campaign_policies",
           "tableTo": "brands",
-          "columnsFrom": [
-            "scope_brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scope_brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1254,12 +1210,8 @@
           "name": "campaign_policies_scope_product_id_products_id_fk",
           "tableFrom": "campaign_policies",
           "tableTo": "products",
-          "columnsFrom": [
-            "scope_product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["scope_product_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1457,12 +1409,8 @@
           "name": "campaigns_created_by_users_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "users",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1470,12 +1418,8 @@
           "name": "campaigns_updated_by_users_id_fk",
           "tableFrom": "campaigns",
           "tableTo": "users",
-          "columnsFrom": [
-            "updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["updated_by"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1635,12 +1579,8 @@
           "name": "campaign_tiers_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_tiers",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1732,12 +1672,8 @@
           "name": "tier_benefits_tier_id_campaign_tiers_id_fk",
           "tableFrom": "tier_benefits",
           "tableTo": "campaign_tiers",
-          "columnsFrom": [
-            "tier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tier_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1899,12 +1835,8 @@
           "name": "campaign_subscriptions_user_id_users_id_fk",
           "tableFrom": "campaign_subscriptions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1912,12 +1844,8 @@
           "name": "campaign_subscriptions_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_subscriptions",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1994,12 +1922,8 @@
           "name": "transaction_items_transaction_id_transactions_id_fk",
           "tableFrom": "transaction_items",
           "tableTo": "transactions",
-          "columnsFrom": [
-            "transaction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["transaction_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2149,12 +2073,8 @@
           "name": "transactions_user_id_users_id_fk",
           "tableFrom": "transactions",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2162,12 +2082,8 @@
           "name": "transactions_store_id_stores_id_fk",
           "tableFrom": "transactions",
           "tableTo": "stores",
-          "columnsFrom": [
-            "store_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["store_id"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
@@ -2175,12 +2091,8 @@
           "name": "transactions_card_id_cards_id_fk",
           "tableFrom": "transactions",
           "tableTo": "cards",
-          "columnsFrom": [
-            "card_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["card_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2339,12 +2251,8 @@
           "name": "webhook_receipts_transaction_id_transactions_id_fk",
           "tableFrom": "webhook_receipts",
           "tableTo": "transactions",
-          "columnsFrom": [
-            "transaction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["transaction_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2464,12 +2372,8 @@
           "name": "brands_cpg_id_cpgs_id_fk",
           "tableFrom": "brands",
           "tableTo": "cpgs",
-          "columnsFrom": [
-            "cpg_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["cpg_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2646,12 +2550,8 @@
           "name": "products_brand_id_brands_id_fk",
           "tableFrom": "products",
           "tableTo": "brands",
-          "columnsFrom": [
-            "brand_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["brand_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2806,12 +2706,8 @@
           "name": "accumulations_transaction_item_id_transaction_items_id_fk",
           "tableFrom": "accumulations",
           "tableTo": "transaction_items",
-          "columnsFrom": [
-            "transaction_item_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["transaction_item_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2819,12 +2715,8 @@
           "name": "accumulations_card_id_cards_id_fk",
           "tableFrom": "accumulations",
           "tableTo": "cards",
-          "columnsFrom": [
-            "card_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["card_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2832,12 +2724,8 @@
           "name": "accumulations_campaign_id_campaigns_id_fk",
           "tableFrom": "accumulations",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2909,12 +2797,8 @@
           "name": "balances_card_id_cards_id_fk",
           "tableFrom": "balances",
           "tableTo": "cards",
-          "columnsFrom": [
-            "card_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["card_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3028,12 +2912,8 @@
           "name": "campaign_balances_card_id_cards_id_fk",
           "tableFrom": "campaign_balances",
           "tableTo": "cards",
-          "columnsFrom": [
-            "card_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["card_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3041,12 +2921,8 @@
           "name": "campaign_balances_campaign_id_campaigns_id_fk",
           "tableFrom": "campaign_balances",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3175,12 +3051,8 @@
           "name": "redemptions_card_id_cards_id_fk",
           "tableFrom": "redemptions",
           "tableTo": "cards",
-          "columnsFrom": [
-            "card_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["card_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3188,12 +3060,8 @@
           "name": "redemptions_reward_id_rewards_id_fk",
           "tableFrom": "redemptions",
           "tableTo": "rewards",
-          "columnsFrom": [
-            "reward_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["reward_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3331,12 +3199,8 @@
           "name": "rewards_campaign_id_campaigns_id_fk",
           "tableFrom": "rewards",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3344,12 +3208,8 @@
           "name": "rewards_min_tier_id_campaign_tiers_id_fk",
           "tableFrom": "rewards",
           "tableTo": "campaign_tiers",
-          "columnsFrom": [
-            "min_tier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["min_tier_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -3696,12 +3556,8 @@
           "name": "reminder_jobs_card_id_cards_id_fk",
           "tableFrom": "reminder_jobs",
           "tableTo": "cards",
-          "columnsFrom": [
-            "card_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["card_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -3709,12 +3565,8 @@
           "name": "reminder_jobs_campaign_id_campaigns_id_fk",
           "tableFrom": "reminder_jobs",
           "tableTo": "campaigns",
-          "columnsFrom": [
-            "campaign_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -3887,263 +3739,147 @@
     "public.user_role": {
       "name": "user_role",
       "schema": "public",
-      "values": [
-        "consumer",
-        "customer",
-        "store_staff",
-        "store_admin",
-        "cpg_admin",
-        "qoa_support",
-        "qoa_admin"
-      ]
+      "values": ["consumer", "customer", "store_staff", "store_admin", "cpg_admin", "qoa_support", "qoa_admin"]
     },
     "public.user_status": {
       "name": "user_status",
       "schema": "public",
-      "values": [
-        "active",
-        "suspended"
-      ]
+      "values": ["active", "suspended"]
     },
     "public.tenant_type": {
       "name": "tenant_type",
       "schema": "public",
-      "values": [
-        "cpg",
-        "store"
-      ]
+      "values": ["cpg", "store"]
     },
     "public.store_status": {
       "name": "store_status",
       "schema": "public",
-      "values": [
-        "active",
-        "inactive"
-      ]
+      "values": ["active", "inactive"]
     },
     "public.card_status": {
       "name": "card_status",
       "schema": "public",
-      "values": [
-        "active",
-        "inactive"
-      ]
+      "values": ["active", "inactive"]
     },
     "public.campaign_accumulation_mode": {
       "name": "campaign_accumulation_mode",
       "schema": "public",
-      "values": [
-        "count",
-        "amount"
-      ]
+      "values": ["count", "amount"]
     },
     "public.campaign_accumulation_rule_scope_type": {
       "name": "campaign_accumulation_rule_scope_type",
       "schema": "public",
-      "values": [
-        "campaign",
-        "brand",
-        "product"
-      ]
+      "values": ["campaign", "brand", "product"]
     },
     "public.campaign_enrollment_mode": {
       "name": "campaign_enrollment_mode",
       "schema": "public",
-      "values": [
-        "open",
-        "opt_in",
-        "system_universal"
-      ]
+      "values": ["open", "opt_in", "system_universal"]
     },
     "public.campaign_policy_period": {
       "name": "campaign_policy_period",
       "schema": "public",
-      "values": [
-        "transaction",
-        "day",
-        "week",
-        "month",
-        "lifetime"
-      ]
+      "values": ["transaction", "day", "week", "month", "lifetime"]
     },
     "public.campaign_policy_scope_type": {
       "name": "campaign_policy_scope_type",
       "schema": "public",
-      "values": [
-        "campaign",
-        "brand",
-        "product"
-      ]
+      "values": ["campaign", "brand", "product"]
     },
     "public.campaign_policy_type": {
       "name": "campaign_policy_type",
       "schema": "public",
-      "values": [
-        "max_accumulations",
-        "min_amount",
-        "min_quantity",
-        "cooldown"
-      ]
+      "values": ["max_accumulations", "min_amount", "min_quantity", "cooldown"]
     },
     "public.campaign_status": {
       "name": "campaign_status",
       "schema": "public",
-      "values": [
-        "draft",
-        "ready_for_review",
-        "in_review",
-        "rejected",
-        "confirmed",
-        "active",
-        "paused",
-        "ended"
-      ]
+      "values": ["draft", "ready_for_review", "in_review", "rejected", "confirmed", "active", "paused", "ended"]
     },
     "public.tier_benefit_type": {
       "name": "tier_benefit_type",
       "schema": "public",
-      "values": [
-        "discount",
-        "reward",
-        "multiplier",
-        "free_product"
-      ]
+      "values": ["discount", "reward", "multiplier", "free_product"]
     },
     "public.tier_qualification_mode": {
       "name": "tier_qualification_mode",
       "schema": "public",
-      "values": [
-        "any",
-        "all"
-      ]
+      "values": ["any", "all"]
     },
     "public.tier_window_unit": {
       "name": "tier_window_unit",
       "schema": "public",
-      "values": [
-        "day",
-        "month",
-        "year"
-      ]
+      "values": ["day", "month", "year"]
     },
     "public.campaign_subscription_status": {
       "name": "campaign_subscription_status",
       "schema": "public",
-      "values": [
-        "invited",
-        "subscribed",
-        "left"
-      ]
+      "values": ["invited", "subscribed", "left"]
     },
     "public.brand_status": {
       "name": "brand_status",
       "schema": "public",
-      "values": [
-        "active",
-        "inactive"
-      ]
+      "values": ["active", "inactive"]
     },
     "public.cpg_status": {
       "name": "cpg_status",
       "schema": "public",
-      "values": [
-        "active",
-        "inactive"
-      ]
+      "values": ["active", "inactive"]
     },
     "public.product_status": {
       "name": "product_status",
       "schema": "public",
-      "values": [
-        "active",
-        "inactive"
-      ]
+      "values": ["active", "inactive"]
     },
     "public.accumulation_source_type": {
       "name": "accumulation_source_type",
       "schema": "public",
-      "values": [
-        "transaction_item",
-        "code_capture"
-      ]
+      "values": ["transaction_item", "code_capture"]
     },
     "public.redemption_status": {
       "name": "redemption_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "completed",
-        "cancelled"
-      ]
+      "values": ["pending", "completed", "cancelled"]
     },
     "public.reward_status": {
       "name": "reward_status",
       "schema": "public",
-      "values": [
-        "active",
-        "inactive"
-      ]
+      "values": ["active", "inactive"]
     },
     "public.alert_notification_channel": {
       "name": "alert_notification_channel",
       "schema": "public",
-      "values": [
-        "email"
-      ]
+      "values": ["email"]
     },
     "public.alert_notification_status": {
       "name": "alert_notification_status",
       "schema": "public",
-      "values": [
-        "mocked",
-        "failed"
-      ]
+      "values": ["mocked", "failed"]
     },
     "public.alert_severity": {
       "name": "alert_severity",
       "schema": "public",
-      "values": [
-        "low",
-        "medium",
-        "high",
-        "critical"
-      ]
+      "values": ["low", "medium", "high", "critical"]
     },
     "public.reminder_job_channel": {
       "name": "reminder_job_channel",
       "schema": "public",
-      "values": [
-        "whatsapp"
-      ]
+      "values": ["whatsapp"]
     },
     "public.reminder_job_status": {
       "name": "reminder_job_status",
       "schema": "public",
-      "values": [
-        "queued",
-        "processing",
-        "completed",
-        "failed",
-        "cancelled"
-      ]
+      "values": ["queued", "processing", "completed", "failed", "cancelled"]
     },
     "public.whatsapp_direction": {
       "name": "whatsapp_direction",
       "schema": "public",
-      "values": [
-        "inbound",
-        "outbound"
-      ]
+      "values": ["inbound", "outbound"]
     },
     "public.whatsapp_message_status": {
       "name": "whatsapp_message_status",
       "schema": "public",
-      "values": [
-        "received",
-        "processed",
-        "error",
-        "replayed"
-      ]
+      "values": ["received", "processed", "error", "replayed"]
     }
   },
   "schemas": {},

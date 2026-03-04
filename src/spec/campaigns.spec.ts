@@ -242,7 +242,11 @@ describe('Campaigns module', () => {
     }
 
     const campaignId = created.data.id;
-    const { data: tierData, error: tierError, status: tierStatus } = await api.v1.campaigns({ campaignId }).tiers.post(
+    const {
+      data: tierData,
+      error: tierError,
+      status: tierStatus,
+    } = await api.v1.campaigns({ campaignId }).tiers.post(
       {
         name: 'Silver',
         order: 1,
@@ -268,7 +272,11 @@ describe('Campaigns module', () => {
     expect(tierStatus).toBe(201);
     expect(tierData.data.name).toBe('Silver');
 
-    const { data: listData, error: listError, status: listStatus } = await api.v1.campaigns({ campaignId }).tiers.get({
+    const {
+      data: listData,
+      error: listError,
+      status: listStatus,
+    } = await api.v1.campaigns({ campaignId }).tiers.get({
       headers: adminHeaders,
     });
 
@@ -306,9 +314,11 @@ describe('Campaigns module', () => {
     }
 
     const campaignId = created.data.id;
-    const { data: ruleData, error: ruleError, status: ruleStatus } = await api.v1.campaigns({ campaignId })[
-      'accumulation-rules'
-    ].post(
+    const {
+      data: ruleData,
+      error: ruleError,
+      status: ruleStatus,
+    } = await api.v1.campaigns({ campaignId })['accumulation-rules'].post(
       {
         scopeType: 'campaign',
         multiplier: 2,
@@ -330,9 +340,11 @@ describe('Campaigns module', () => {
     expect(ruleStatus).toBe(201);
     expect(ruleData.data.multiplier).toBe(2);
 
-    const { data: listed, error: listError, status: listStatus } = await api.v1.campaigns({ campaignId })[
-      'accumulation-rules'
-    ].get({
+    const {
+      data: listed,
+      error: listError,
+      status: listStatus,
+    } = await api.v1.campaigns({ campaignId })['accumulation-rules'].get({
       headers: adminHeaders,
     });
 
@@ -413,7 +425,9 @@ describe('Campaigns module', () => {
     const discoveredCampaign = discover.data.data.find((item: { id: string }) => item.id === campaign.id);
     expect(discoveredCampaign).toBeTruthy();
     expect((discoveredCampaign as { daysRemaining?: number }).daysRemaining).toBeGreaterThan(0);
-    expect(((discoveredCampaign as { policySummaries?: Array<{ label: string }> }).policySummaries ?? []).length).toBeGreaterThan(0);
+    expect(
+      ((discoveredCampaign as { policySummaries?: Array<{ label: string }> }).policySummaries ?? []).length,
+    ).toBeGreaterThan(0);
 
     const subscribe = await api.v1.campaigns({ campaignId: campaign.id }).subscribe.post(undefined, {
       headers: walletHeaders,
