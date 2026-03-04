@@ -130,17 +130,23 @@ La meta es asegurar que, cuando una acción no es válida, la API responda con e
 
 ---
 
-## Escenarios No Cubiertos (Gap Analysis)
+## Escenarios Pendientes (Gap Analysis)
 
-Estos escenarios aún no tienen cobertura automatizada y se mantienen como pendientes del roadmap de calidad.
+Estos escenarios siguen pendientes de cierre total en el roadmap de calidad.
+Algunos ya cuentan con cobertura parcial de integración, pero aún requieren cobertura E2E y/o endurecimiento operativo.
+
+Estado actual (mar-2026): **10 escenarios pendientes** priorizados.
+
+> Alcance actual del roadmap: por ahora se excluyen escenarios nuevos de MFA y pruebas de carga.
+> Nota: la numeración de IDs inicia en `GAP-002` por continuidad histórica del documento.
 
 ### Alta prioridad
 
 | ID | Escenario | Código esperado | Razón del gap |
 |----|-----------|-----------------|---------------|
-| GAP-002 | Rate limiting | `RATE_LIMITED` | Requiere infraestructura de throttling para pruebas deterministas |
-| GAP-003 | Transacciones duplicadas | Idempotency | Falta validar comportamiento ante retries de webhook |
-| GAP-004 | Firma de webhook inválida | `INVALID_WEBHOOK_SIGNATURE` | Falta escenario E2E negativo completo |
+| GAP-002 | Rate limiting | `RATE_LIMITED` | Cobertura de integración disponible; falta cobertura E2E de punta a punta |
+| GAP-003 | Transacciones duplicadas | Idempotency | Falta cobertura E2E de retries de webhook (integración API ya cubierta) |
+| GAP-004 | Firma de webhook inválida | `INVALID_WEBHOOK_SIGNATURE` | Falta cobertura E2E negativa completa (integración API ya cubierta) |
 
 ### Media prioridad
 
