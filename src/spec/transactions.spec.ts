@@ -1286,6 +1286,114 @@ describe('Transactions module', () => {
     await db.delete(users).where(eq(users.id, user.id));
   });
 
+  it('rate limits webhook bursts and allows retry after window reset', async () => {
+    const previousMax = process.env.WEBHOOK_RATE_LIMIT_MAX;
+    const previousWindow = process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS;
+
+    process.env.WEBHOOK_RATE_LIMIT_MAX = '1';
+    process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS = '50';
+
+    const user = await createUser();
+    const store = await createStore();
+    const catalog = await createProduct();
+
+    const firstPayload = {
+      source: 'tconecta',
+      externalEventId: `evt_${crypto.randomUUID()}`,
+      userId: user.id,
+      storeId: store.id,
+      items: [
+        {
+          productId: catalog.productId,
+          quantity: 1,
+          amount: 20,
+        },
+      ],
+    };
+
+    const secondPayload = {
+      ...firstPayload,
+      externalEventId: `evt_${crypto.randomUUID()}`,
+    };
+
+    const thirdPayload = {
+      ...firstPayload,
+      externalEventId: `evt_${crypto.randomUUID()}`,
+    };
+
+    try {
+      const firstResponse = await api.v1.transactions.webhook.post(firstPayload, {
+        headers: {
+          ...adminHeaders,
+          'x-webhook-signature': webhookSignature(firstPayload),
+        },
+      });
+
+      if (firstResponse.error) {
+        throw firstResponse.error.value;
+      }
+      if (!firstResponse.data) {
+        throw new Error('First webhook response missing');
+      }
+
+      expect(firstResponse.status).toBe(201);
+
+      const secondResponse = await api.v1.transactions.webhook.post(secondPayload, {
+        headers: {
+          ...adminHeaders,
+          'x-webhook-signature': webhookSignature(secondPayload),
+        },
+      });
+
+      if (!secondResponse.error) {
+        throw new Error('Expected rate limit error on second webhook');
+      }
+
+      expect(secondResponse.status).toBe(429);
+      expect(secondResponse.error.value.error.code).toBe('RATE_LIMITED');
+
+      await Bun.sleep(70);
+
+      const thirdResponse = await api.v1.transactions.webhook.post(thirdPayload, {
+        headers: {
+          ...adminHeaders,
+          'x-webhook-signature': webhookSignature(thirdPayload),
+        },
+      });
+
+      if (thirdResponse.error) {
+        throw thirdResponse.error.value;
+      }
+      if (!thirdResponse.data) {
+        throw new Error('Third webhook response missing');
+      }
+
+      expect(thirdResponse.status).toBe(201);
+    } finally {
+      if (previousMax) {
+        process.env.WEBHOOK_RATE_LIMIT_MAX = previousMax;
+      } else {
+        delete process.env.WEBHOOK_RATE_LIMIT_MAX;
+      }
+
+      if (previousWindow) {
+        process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS = previousWindow;
+      } else {
+        delete process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS;
+      }
+
+      await db.delete(webhookReceipts).where(eq(webhookReceipts.externalEventId, firstPayload.externalEventId));
+      await db.delete(webhookReceipts).where(eq(webhookReceipts.externalEventId, secondPayload.externalEventId));
+      await db.delete(webhookReceipts).where(eq(webhookReceipts.externalEventId, thirdPayload.externalEventId));
+      await db.delete(transactions).where(eq(transactions.userId, user.id));
+      await db.delete(products).where(eq(products.id, catalog.productId));
+      await db.delete(brands).where(eq(brands.id, catalog.brandId));
+      await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
+      await db.delete(stores).where(eq(stores.id, store.id));
+      await db.delete(users).where(eq(users.id, user.id));
+    }
+  });
+
   it('returns webhook receipts and metrics', async () => {
     const {
       data: receipts,

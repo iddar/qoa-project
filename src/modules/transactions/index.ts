@@ -968,6 +968,60 @@ const signatureMatches = (provided: string | undefined, expected: string) => {
   return timingSafeEqual(expectedBuffer, providedBuffer);
 };
 
+const webhookRateLimitState = new Map<string, { count: number; windowStartMs: number }>();
+
+const parsePositiveInt = (value: string | undefined, fallback: number) => {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+};
+
+const resolveWebhookRateLimitConfig = () => {
+  const maxRequests = parsePositiveInt(process.env.WEBHOOK_RATE_LIMIT_MAX, 60);
+  const windowMs = parsePositiveInt(process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS, 60_000);
+  return {
+    maxRequests,
+    windowMs,
+  };
+};
+
+const consumeWebhookRateLimit = (key: string, nowMs = Date.now()) => {
+  const { maxRequests, windowMs } = resolveWebhookRateLimitConfig();
+  const existing = webhookRateLimitState.get(key);
+
+  if (!existing || nowMs - existing.windowStartMs >= windowMs) {
+    webhookRateLimitState.set(key, {
+      count: 1,
+      windowStartMs: nowMs,
+    });
+    return {
+      limited: false,
+      retryAfterSeconds: 0,
+    };
+  }
+
+  if (existing.count >= maxRequests) {
+    return {
+      limited: true,
+      retryAfterSeconds: Math.max(1, Math.ceil((windowMs - (nowMs - existing.windowStartMs)) / 1000)),
+    };
+  }
+
+  existing.count += 1;
+  webhookRateLimitState.set(key, existing);
+  return {
+    limited: false,
+    retryAfterSeconds: 0,
+  };
+};
+
 const toWebhookReceiptPayload = (receipt: WebhookReceiptRow) => ({
   id: receipt.id,
   source: receipt.source,
@@ -1079,6 +1133,17 @@ export const transactionsModule = new Elysia({
             },
           });
         }
+      }
+
+      const rateLimitKey = `${body.source}:${body.storeId}`;
+      const rateLimit = consumeWebhookRateLimit(rateLimitKey);
+      if (rateLimit.limited) {
+        return status(429, {
+          error: {
+            code: 'RATE_LIMITED',
+            message: `Demasiadas solicitudes de webhook. Intenta de nuevo en ${rateLimit.retryAfterSeconds}s`,
+          },
+        });
       }
 
       const hash = createWebhookHash(body);

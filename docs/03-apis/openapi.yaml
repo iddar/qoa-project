@@ -1545,6 +1545,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionWebhookResponse'
+        '201':
+          description: Evento procesado por primera vez
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionWebhookResponse'
+        '401':
+          description: Firma de webhook inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Límite de solicitudes de webhook excedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /transactions/webhook-receipts:
     get:
@@ -1603,12 +1621,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionWebhookMetricsResponse'
-        '201':
-          description: Evento procesado por primera vez
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionWebhookResponse'
 
   # ==================== ALERTS ====================
   /alerts:
