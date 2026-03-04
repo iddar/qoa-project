@@ -10,6 +10,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@qoa/api-client": "workspace:*",
     "@elysiajs/eden": "^1.4.2",
     "@qoa/auth-client": "workspace:*",
     "@qoa/core": "workspace:*",
