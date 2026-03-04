@@ -1291,7 +1291,7 @@ describe('Transactions module', () => {
     const previousWindow = process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS;
 
     process.env.WEBHOOK_RATE_LIMIT_MAX = '1';
-    process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS = '50';
+    process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS = '5000';
 
     const user = await createUser();
     const store = await createStore();
@@ -1352,7 +1352,8 @@ describe('Transactions module', () => {
       expect(secondResponse.status).toBe(429);
       expect(secondResponse.error.value.error.code).toBe('RATE_LIMITED');
 
-      await Bun.sleep(70);
+      process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS = '1';
+      await new Promise((resolve) => setTimeout(resolve, 5));
 
       const thirdResponse = await api.v1.transactions.webhook.post(thirdPayload, {
         headers: {
