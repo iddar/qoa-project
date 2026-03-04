@@ -24,7 +24,7 @@ export const READ_ONLY_ROLES: Role[] = ['qoa_support'];
 /**
  * Verifica si el contexto de auth es de tipo usuario (JWT o dev)
  */
-const isUserAuth = (auth: AuthContext): auth is Extract<AuthContext, { type: 'jwt' | 'dev' }> => {
+export const isUserAuth = (auth: AuthContext): auth is Extract<AuthContext, { type: 'jwt' | 'dev' }> => {
   return auth.type === 'jwt' || auth.type === 'dev';
 };
 

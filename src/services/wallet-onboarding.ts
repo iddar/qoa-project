@@ -7,6 +7,26 @@ export const UNIVERSAL_CAMPAIGN_KEY = 'qoa_universal_wallet';
 
 const generateCardCode = () => generateCode('card', 18);
 
+const ensureSubscription = async (userId: string, campaignId: string): Promise<void> => {
+  const [existing] = (await db
+    .select({ id: campaignSubscriptions.id })
+    .from(campaignSubscriptions)
+    .where(
+      and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, campaignId)),
+    )) as Array<{ id: string }>;
+
+  if (!existing) {
+    await db.insert(campaignSubscriptions).values({
+      userId,
+      campaignId,
+      status: 'subscribed',
+      subscribedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+};
+
 export const ensureUniversalCampaign = async () => {
   const [existing] = (await db
     .select({ id: campaigns.id, status: campaigns.status })
@@ -58,26 +78,7 @@ export const ensureUserUniversalWalletCard = async (userId: string) => {
     .limit(1)) as Array<{ id: string; campaignId: string }>;
 
   if (existingCard) {
-    const [existingSubscription] = (await db
-      .select({ id: campaignSubscriptions.id })
-      .from(campaignSubscriptions)
-      .where(
-        and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, universalCampaignId)),
-      )) as Array<{
-      id: string;
-    }>;
-
-    if (!existingSubscription) {
-      await db.insert(campaignSubscriptions).values({
-        userId,
-        campaignId: universalCampaignId,
-        status: 'subscribed',
-        subscribedAt: new Date(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-    }
-
+    await ensureSubscription(userId, universalCampaignId);
     return {
       cardId: existingCard.id,
       campaignId: universalCampaignId,
@@ -99,25 +100,7 @@ export const ensureUserUniversalWalletCard = async (userId: string) => {
     throw new Error('UNIVERSAL_CARD_CREATE_FAILED');
   }
 
-  const [existingSubscription] = (await db
-    .select({ id: campaignSubscriptions.id })
-    .from(campaignSubscriptions)
-    .where(
-      and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, universalCampaignId)),
-    )) as Array<{
-    id: string;
-  }>;
-
-  if (!existingSubscription) {
-    await db.insert(campaignSubscriptions).values({
-      userId,
-      campaignId: universalCampaignId,
-      status: 'subscribed',
-      subscribedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-  }
+  await ensureSubscription(userId, universalCampaignId);
 
   return {
     cardId: createdCard.id,
