@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte } from 'drizzle-orm';
 import { db } from '../db/client';
 import { accumulations, campaignTiers, cards, tierBenefits, transactionItems } from '../db/schema';
 
@@ -215,7 +215,7 @@ export const evaluateCardTier = async (params: {
       and(
         eq(accumulations.cardId, params.cardId),
         eq(accumulations.campaignId, params.campaignId),
-        sql`${accumulations.createdAt} >= ${rangeStart}`,
+        gte(accumulations.createdAt, rangeStart),
       ),
     )) as Array<{ transactionItemId: string | null; createdAt: Date }>;
 
