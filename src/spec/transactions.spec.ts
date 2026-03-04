@@ -1352,15 +1352,31 @@ describe('Transactions module', () => {
       expect(secondResponse.status).toBe(429);
       expect(secondResponse.error.value.error.code).toBe('RATE_LIMITED');
 
-      process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS = '1';
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      process.env.WEBHOOK_RATE_LIMIT_WINDOW_MS = '20';
 
-      const thirdResponse = await api.v1.transactions.webhook.post(thirdPayload, {
-        headers: {
-          ...adminHeaders,
-          'x-webhook-signature': webhookSignature(thirdPayload),
-        },
-      });
+      const thirdResponse = await (async () => {
+        const maxAttempts = 8;
+        for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+          const response = await api.v1.transactions.webhook.post(thirdPayload, {
+            headers: {
+              ...adminHeaders,
+              'x-webhook-signature': webhookSignature(thirdPayload),
+            },
+          });
+
+          if (!response.error) {
+            return response;
+          }
+
+          if (response.status !== 429) {
+            throw response.error.value;
+          }
+
+          await new Promise((resolve) => setTimeout(resolve, 15));
+        }
+
+        throw new Error('Expected webhook to be accepted after rate limit window reset');
+      })();
 
       if (thirdResponse.error) {
         throw thirdResponse.error.value;
