@@ -12,6 +12,7 @@ type Campaign = {
   name: string;
   description?: string;
   status: "draft" | "ready_for_review" | "in_review" | "rejected" | "confirmed" | "active" | "paused" | "ended";
+  accumulationMode: "count" | "amount";
   startsAt?: string;
   endsAt?: string;
   createdAt: string;
@@ -22,6 +23,7 @@ type FormState = {
   description: string;
   startsAt: string;
   endsAt: string;
+  accumulationMode: "count" | "amount";
 };
 
 type CampaignPerformance = {
@@ -36,6 +38,7 @@ const emptyForm: FormState = {
   description: "",
   startsAt: "",
   endsAt: "",
+  accumulationMode: "count",
 };
 
 const statusLabel: Record<Campaign["status"], string> = {
@@ -111,6 +114,7 @@ export default function CampaignsPage() {
           cpgId: tenantId,
           startsAt: form.startsAt || undefined,
           endsAt: form.endsAt || undefined,
+          accumulationMode: form.accumulationMode,
         },
         {
           headers: { authorization: `Bearer ${token}` },
@@ -209,9 +213,10 @@ export default function CampaignsPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-[1.3fr_0.45fr_0.65fr_0.45fr_auto] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+            <div className="grid grid-cols-[1.25fr_0.45fr_0.45fr_0.55fr_0.45fr_auto] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
               <span>Campaña</span>
               <span>Estado</span>
+              <span>Modo</span>
               <span>Vigencia</span>
               <span>30d</span>
               <span className="text-right">Acción</span>
@@ -246,7 +251,7 @@ export default function CampaignsPage() {
 
                 return (
                 <li key={campaign.id} className="px-5 py-3">
-                  <div className="grid grid-cols-[1.3fr_0.45fr_0.65fr_0.45fr_auto] items-start gap-2">
+                  <div className="grid grid-cols-[1.25fr_0.45fr_0.45fr_0.55fr_0.45fr_auto] items-start gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign.name}</p>
                       {campaign.description && (
@@ -260,6 +265,8 @@ export default function CampaignsPage() {
                         {statusLabel[campaign.status]}
                       </span>
                     </div>
+
+                    <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">{campaign.accumulationMode}</p>
 
                     <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{periodLabel}</div>
 
@@ -336,6 +343,23 @@ export default function CampaignsPage() {
                   />
                 </label>
               </div>
+
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Modo de acumulación
+                <select
+                  value={form.accumulationMode}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      accumulationMode: event.target.value as "count" | "amount",
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="count">count (compras/unidades)</option>
+                  <option value="amount">amount (monto)</option>
+                </select>
+              </label>
 
               <button
                 type="submit"

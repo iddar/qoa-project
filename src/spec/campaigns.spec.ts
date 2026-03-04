@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { campaignPolicies, campaignSubscriptions, campaigns, users } from '../db/schema';
+import { campaignAccumulationRules, campaignPolicies, campaignSubscriptions, campaigns, users } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -242,7 +242,11 @@ describe('Campaigns module', () => {
     }
 
     const campaignId = created.data.id;
-    const { data: tierData, error: tierError, status: tierStatus } = await api.v1.campaigns({ campaignId }).tiers.post(
+    const {
+      data: tierData,
+      error: tierError,
+      status: tierStatus,
+    } = await api.v1.campaigns({ campaignId }).tiers.post(
       {
         name: 'Silver',
         order: 1,
@@ -268,7 +272,11 @@ describe('Campaigns module', () => {
     expect(tierStatus).toBe(201);
     expect(tierData.data.name).toBe('Silver');
 
-    const { data: listData, error: listError, status: listStatus } = await api.v1.campaigns({ campaignId }).tiers.get({
+    const {
+      data: listData,
+      error: listError,
+      status: listStatus,
+    } = await api.v1.campaigns({ campaignId }).tiers.get({
       headers: adminHeaders,
     });
 
@@ -283,6 +291,75 @@ describe('Campaigns module', () => {
     expect(listData.data.length).toBe(1);
     expect(listData.data[0]?.windowValue).toBe(90);
 
+    await db.delete(campaigns).where(eq(campaigns.id, campaignId));
+  });
+
+  it('creates and lists accumulation rules by campaign', async () => {
+    const { data: created, error: createError } = await api.v1.campaigns.post(
+      {
+        name: `Campaign accumulation ${crypto.randomUUID().slice(0, 8)}`,
+        cpgId: '11111111-1111-4111-8111-111111111111',
+        accumulationMode: 'amount',
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (createError) {
+      throw createError.value;
+    }
+    if (!created) {
+      throw new Error('Campaign create response missing');
+    }
+
+    const campaignId = created.data.id;
+    const {
+      data: ruleData,
+      error: ruleError,
+      status: ruleStatus,
+    } = await api.v1.campaigns({ campaignId })['accumulation-rules'].post(
+      {
+        scopeType: 'campaign',
+        multiplier: 2,
+        flatBonus: 5,
+        priority: 10,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (ruleError) {
+      throw ruleError.value;
+    }
+    if (!ruleData) {
+      throw new Error('Accumulation rule create response missing');
+    }
+
+    expect(ruleStatus).toBe(201);
+    expect(ruleData.data.multiplier).toBe(2);
+
+    const {
+      data: listed,
+      error: listError,
+      status: listStatus,
+    } = await api.v1.campaigns({ campaignId })['accumulation-rules'].get({
+      headers: adminHeaders,
+    });
+
+    if (listError) {
+      throw listError.value;
+    }
+    if (!listed) {
+      throw new Error('Accumulation rules list response missing');
+    }
+
+    expect(listStatus).toBe(200);
+    expect(listed.data.length).toBe(1);
+    expect(listed.data[0]?.flatBonus).toBe(5);
+
+    await db.delete(campaignAccumulationRules).where(eq(campaignAccumulationRules.campaignId, campaignId));
     await db.delete(campaigns).where(eq(campaigns.id, campaignId));
   });
 
@@ -348,7 +425,9 @@ describe('Campaigns module', () => {
     const discoveredCampaign = discover.data.data.find((item: { id: string }) => item.id === campaign.id);
     expect(discoveredCampaign).toBeTruthy();
     expect((discoveredCampaign as { daysRemaining?: number }).daysRemaining).toBeGreaterThan(0);
-    expect(((discoveredCampaign as { policySummaries?: Array<{ label: string }> }).policySummaries ?? []).length).toBeGreaterThan(0);
+    expect(
+      ((discoveredCampaign as { policySummaries?: Array<{ label: string }> }).policySummaries ?? []).length,
+    ).toBeGreaterThan(0);
 
     const subscribe = await api.v1.campaigns({ campaignId: campaign.id }).subscribe.post(undefined, {
       headers: walletHeaders,

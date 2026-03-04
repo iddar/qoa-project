@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
@@ -20,6 +20,7 @@ type CampaignStatus =
 type PolicyType = "max_accumulations" | "min_amount" | "min_quantity" | "cooldown";
 type ScopeType = "campaign" | "brand" | "product";
 type PeriodType = "transaction" | "day" | "week" | "month" | "lifetime";
+type AccumulationScopeType = "campaign" | "brand" | "product";
 type TierWindowUnit = "day" | "month" | "year";
 type TierQualificationMode = "any" | "all";
 
@@ -60,6 +61,24 @@ type CampaignPolicy = {
   scopeType: ScopeType;
   period: PeriodType;
   value: number;
+};
+
+type CampaignAccumulationRule = {
+  id: string;
+  scopeType: AccumulationScopeType;
+  scopeId?: string;
+  multiplier: number;
+  flatBonus: number;
+  priority: number;
+  active: boolean;
+};
+
+type AccumulationRuleForm = {
+  scopeType: AccumulationScopeType;
+  scopeId: string;
+  multiplier: number;
+  flatBonus: number;
+  priority: number;
 };
 
 type CampaignTier = {
@@ -121,6 +140,14 @@ const emptyTierForm: TierForm = {
   graceDays: 7,
 };
 
+const emptyAccumulationRuleForm: AccumulationRuleForm = {
+  scopeType: "campaign",
+  scopeId: "",
+  multiplier: 1,
+  flatBonus: 0,
+  priority: 100,
+};
+
 const nextStatusAction: Partial<Record<CampaignStatus, { label: string; action: "ready" | "review" | "confirm" | "activate" }>> = {
   draft: { label: "Enviar a revisión", action: "ready" },
   rejected: { label: "Reenviar a revisión", action: "ready" },
@@ -145,6 +172,32 @@ const formatPolicyLabel = (policy: CampaignPolicy) => {
   return `Enfriamiento de ${policy.value} unidades por ${policy.period}`;
 };
 
+const enrollmentModeLabel: Record<string, string> = {
+  open: "Abierta",
+  opt_in: "Por suscripcion",
+  system_universal: "Universal del sistema",
+};
+
+function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-xl rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-zinc-200 px-2 py-1 text-xs text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            Cerrar
+          </button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 export default function CampaignDetailPage() {
   const params = useParams<{ campaignId: string }>();
   const campaignId = params.campaignId;
@@ -154,6 +207,25 @@ export default function CampaignDetailPage() {
 
   const [policyForm, setPolicyForm] = useState<PolicyForm>(emptyPolicyForm);
   const [tierForm, setTierForm] = useState<TierForm>(emptyTierForm);
+  const [accumulationRuleForm, setAccumulationRuleForm] = useState<AccumulationRuleForm>(emptyAccumulationRuleForm);
+  const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
+  const [isTierModalOpen, setIsTierModalOpen] = useState(false);
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+
+  const closePolicyModal = () => {
+    setPolicyForm(emptyPolicyForm);
+    setIsPolicyModalOpen(false);
+  };
+
+  const closeTierModal = () => {
+    setTierForm(emptyTierForm);
+    setIsTierModalOpen(false);
+  };
+
+  const closeRuleModal = () => {
+    setAccumulationRuleForm(emptyAccumulationRuleForm);
+    setIsRuleModalOpen(false);
+  };
 
   const campaignQuery = useQuery({
     queryKey: ["campaign", campaignId],
@@ -210,6 +282,18 @@ export default function CampaignDetailPage() {
     queryKey: ["campaign-tiers", campaignId],
     queryFn: async () => {
       const { data, error } = await api.v1.campaigns({ campaignId }).tiers.get({
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const accumulationRulesQuery = useQuery({
+    queryKey: ["campaign-accumulation-rules", campaignId],
+    queryFn: async () => {
+      const { data, error } = await api.v1.campaigns({ campaignId })["accumulation-rules"].get({
         headers: { authorization: `Bearer ${token}` },
       });
 
@@ -328,6 +412,7 @@ export default function CampaignDetailPage() {
     },
     onSuccess: () => {
       setPolicyForm(emptyPolicyForm);
+      setIsPolicyModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ["campaign-policies", campaignId] });
       queryClient.invalidateQueries({ queryKey: ["campaign-audit", campaignId] });
     },
@@ -358,8 +443,37 @@ export default function CampaignDetailPage() {
     },
     onSuccess: () => {
       setTierForm(emptyTierForm);
+      setIsTierModalOpen(false);
       queryClient.invalidateQueries({ queryKey: ["campaign-tiers", campaignId] });
       queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      queryClient.invalidateQueries({ queryKey: ["campaign-audit", campaignId] });
+    },
+  });
+
+  const createAccumulationRuleMutation = useMutation({
+    mutationFn: async () => {
+      const payloadScopeId = accumulationRuleForm.scopeType === "campaign" ? undefined : accumulationRuleForm.scopeId || undefined;
+      const { data, error } = await api.v1.campaigns({ campaignId })["accumulation-rules"].post(
+        {
+          scopeType: accumulationRuleForm.scopeType,
+          scopeId: payloadScopeId,
+          multiplier: accumulationRuleForm.multiplier,
+          flatBonus: accumulationRuleForm.flatBonus,
+          priority: accumulationRuleForm.priority,
+          active: true,
+        },
+        {
+          headers: { authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      setAccumulationRuleForm(emptyAccumulationRuleForm);
+      setIsRuleModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["campaign-accumulation-rules", campaignId] });
       queryClient.invalidateQueries({ queryKey: ["campaign-audit", campaignId] });
     },
   });
@@ -370,6 +484,7 @@ export default function CampaignDetailPage() {
 
   const policies = (policiesQuery.data?.data ?? []) as CampaignPolicy[];
   const tiers = (tiersQuery.data?.data ?? []) as CampaignTier[];
+  const accumulationRules = (accumulationRulesQuery.data?.data ?? []) as CampaignAccumulationRule[];
   const auditItems = (auditQuery.data?.data ?? []) as AuditItem[];
   const rewards = (rewardsQuery.data?.data ?? []) as Array<{ status: string; stock?: number }>;
   const activeRewards = rewards.filter((reward) => reward.status === "active").length;
@@ -389,9 +504,26 @@ export default function CampaignDetailPage() {
     return [];
   }, [brandsQuery.data?.data, policyForm.scopeType, productsQuery.data?.data]);
 
+  const accumulationScopeOptions = useMemo(() => {
+    if (accumulationRuleForm.scopeType === "brand") {
+      const brands = (brandsQuery.data?.data ?? []) as BrandOption[];
+      return brands.map((item: BrandOption) => ({ id: item.id, label: item.name }));
+    }
+
+    if (accumulationRuleForm.scopeType === "product") {
+      const products = (productsQuery.data?.data ?? []) as ProductOption[];
+      return products.map((item: ProductOption) => ({ id: item.id, label: `${item.name} (${item.sku})` }));
+    }
+
+    return [];
+  }, [accumulationRuleForm.scopeType, brandsQuery.data?.data, productsQuery.data?.data]);
+
   const campaignStart = campaign?.startsAt ? new Date(campaign.startsAt) : null;
   const campaignEnd = campaign?.endsAt ? new Date(campaign.endsAt) : null;
   const daysRemaining = typeof campaign?.daysRemaining === "number" ? campaign.daysRemaining : undefined;
+  const dailyPoints = ((summaryQuery.data?.data.daily ?? []) as DailyPoint[]).slice(-12);
+  const maxTransactions = dailyPoints.reduce((max, point) => Math.max(max, point.transactions), 0) || 1;
+  const maxRedemptions = dailyPoints.reduce((max, point) => Math.max(max, point.redemptions), 0) || 1;
 
   return (
     <div className="max-w-6xl space-y-6">
@@ -442,6 +574,44 @@ export default function CampaignDetailPage() {
         </article>
       </section>
 
+      <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Generales</h2>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Descripcion</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign?.description ?? "-"}</p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Clave</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign?.key ?? "-"}</p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Version</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">v{campaign?.version ?? 1}</p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Modo de inscripcion</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {campaign?.enrollmentMode ? enrollmentModeLabel[campaign.enrollmentMode] ?? campaign.enrollmentMode : "-"}
+            </p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Modo de acumulacion</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              {campaign?.accumulationMode === "amount"
+                ? "Por monto"
+                : campaign?.accumulationMode === "count"
+                  ? "Por cantidad"
+                  : "-"}
+            </p>
+          </article>
+          <article>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Estado</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign?.status ?? "-"}</p>
+          </article>
+        </div>
+      </section>
+
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">Transacciones</p>
@@ -481,34 +651,57 @@ export default function CampaignDetailPage() {
       </section>
 
       <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tendencia diaria</h2>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Volumen de transacciones y canjes en los ultimos 30 dias.
-          </p>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tendencia diaria</h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Volumen de transacciones y canjes en los ultimos 30 dias.
+            </p>
 
-          <div className="mt-4 grid gap-2">
-            {((summaryQuery.data?.data.daily ?? []) as DailyPoint[]).slice(-12).map((point: DailyPoint) => {
-              const txHeight = Math.min(100, point.transactions * 8);
-              const redemptionsHeight = Math.min(100, point.redemptions * 12);
-              return (
-                <div key={`${String(point.date)}-${point.transactions}-${point.redemptions}`} className="grid grid-cols-[64px_1fr_1fr] items-center gap-3 text-xs">
-                  <span className="text-zinc-400">{toDayLabel(point.date)}</span>
-                  <div className="h-2 rounded bg-blue-100 dark:bg-blue-950/40">
-                    <div className="h-full rounded bg-blue-500" style={{ width: `${txHeight}%` }} />
+            <div className="mt-4 grid gap-2">
+              {dailyPoints.map((point: DailyPoint) => {
+                const txHeight = Math.min(100, (point.transactions / maxTransactions) * 100);
+                const redemptionsHeight = Math.min(100, (point.redemptions / maxRedemptions) * 100);
+                return (
+                  <div key={`${String(point.date)}-${point.transactions}-${point.redemptions}`} className="grid grid-cols-[64px_1fr_1fr] items-center gap-3 text-xs">
+                    <span className="text-zinc-400">{toDayLabel(point.date)}</span>
+                    <div className="h-2 rounded bg-blue-100 dark:bg-blue-950/40">
+                      <div className="h-full rounded bg-blue-500" style={{ width: `${txHeight}%` }} />
+                    </div>
+                    <div className="h-2 rounded bg-emerald-100 dark:bg-emerald-950/40">
+                      <div className="h-full rounded bg-emerald-500" style={{ width: `${redemptionsHeight}%` }} />
+                    </div>
                   </div>
-                  <div className="h-2 rounded bg-emerald-100 dark:bg-emerald-950/40">
-                    <div className="h-full rounded bg-emerald-500" style={{ width: `${redemptionsHeight}%` }} />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Comprobacion</h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              Transacciones de usuarios/campanas asociadas que no generaron acumulaciones para esta campana.
+            </p>
+            <p className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+              {summaryQuery.data?.data.transactionsWithoutAccumulations ?? 0}
+            </p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">transacciones sin puntos</p>
           </div>
         </div>
 
         <div className="space-y-4">
           <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Politicas activas</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Politicas activas</h2>
+              <button
+                type="button"
+                onClick={() => setIsPolicyModalOpen(true)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                aria-label="Agregar politica"
+              >
+                +
+              </button>
+            </div>
             <ul className="mt-3 space-y-2">
               {policies.length === 0 && <li className="text-xs text-zinc-500 dark:text-zinc-400">Sin politicas.</li>}
               {policies.map((policy: CampaignPolicy) => (
@@ -526,7 +719,17 @@ export default function CampaignDetailPage() {
           </div>
 
           <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tiers por ventana</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Tiers por ventana</h2>
+              <button
+                type="button"
+                onClick={() => setIsTierModalOpen(true)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                aria-label="Agregar tier"
+              >
+                +
+              </button>
+            </div>
             <ul className="mt-3 space-y-2">
               {tiers.length === 0 && <li className="text-xs text-zinc-500 dark:text-zinc-400">Sin tiers configurados.</li>}
               {tiers.map((tier: CampaignTier) => (
@@ -546,240 +749,399 @@ export default function CampaignDetailPage() {
           </div>
 
           <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Nueva politica</h2>
-            <form
-              className="mt-3 space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                createPolicyMutation.mutate();
-              }}
-            >
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Tipo
-                  <select
-                    value={policyForm.policyType}
-                    onChange={(event) =>
-                      setPolicyForm((prev) => ({ ...prev, policyType: event.target.value as PolicyType }))
-                    }
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  >
-                    <option value="max_accumulations">max_accumulations</option>
-                    <option value="min_amount">min_amount</option>
-                    <option value="min_quantity">min_quantity</option>
-                    <option value="cooldown">cooldown</option>
-                  </select>
-                </label>
-
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Scope
-                  <select
-                    value={policyForm.scopeType}
-                    onChange={(event) =>
-                      setPolicyForm((prev) => ({
-                        ...prev,
-                        scopeType: event.target.value as ScopeType,
-                        scopeId: "",
-                      }))
-                    }
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  >
-                    <option value="campaign">campaign</option>
-                    <option value="brand">brand</option>
-                    <option value="product">product</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Periodo
-                  <select
-                    value={policyForm.period}
-                    onChange={(event) =>
-                      setPolicyForm((prev) => ({ ...prev, period: event.target.value as PeriodType }))
-                    }
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  >
-                    <option value="transaction">transaction</option>
-                    <option value="day">day</option>
-                    <option value="week">week</option>
-                    <option value="month">month</option>
-                    <option value="lifetime">lifetime</option>
-                  </select>
-                </label>
-
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Valor
-                  <input
-                    type="number"
-                    min={1}
-                    value={policyForm.value}
-                    onChange={(event) =>
-                      setPolicyForm((prev) => ({ ...prev, value: Number(event.target.value) }))
-                    }
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </label>
-              </div>
-
-              {policyForm.scopeType !== "campaign" && (
-                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  {policyForm.scopeType === "brand" ? "Marca" : "Producto"}
-                  <select
-                    required
-                    value={policyForm.scopeId}
-                    onChange={(event) => setPolicyForm((prev) => ({ ...prev, scopeId: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  >
-                    <option value="">Selecciona</option>
-                    {scopeOptions.map((option: { id: string; label: string }) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Reglas de acumulación</h2>
+              <button
+                type="button"
+                onClick={() => setIsRuleModalOpen(true)}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                aria-label="Agregar regla"
+              >
+                +
+              </button>
+            </div>
+            <ul className="mt-3 space-y-2">
+              {accumulationRules.length === 0 && (
+                <li className="text-xs text-zinc-500 dark:text-zinc-400">Sin reglas configuradas (usa regla base de campaña).</li>
               )}
-
-              <button
-                type="submit"
-                disabled={createPolicyMutation.isPending}
-                className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {createPolicyMutation.isPending ? "Guardando..." : "Agregar politica"}
-              </button>
-            </form>
-          </div>
-
-          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Nuevo tier</h2>
-            <form
-              className="mt-3 space-y-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                createTierMutation.mutate();
-              }}
-            >
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                Nombre
-                <input
-                  required
-                  value={tierForm.name}
-                  onChange={(event) => setTierForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Orden
-                  <input
-                    type="number"
-                    min={1}
-                    value={tierForm.order}
-                    onChange={(event) => setTierForm((prev) => ({ ...prev, order: Number(event.target.value) }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </label>
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Threshold
-                  <input
-                    type="number"
-                    min={1}
-                    value={tierForm.thresholdValue}
-                    onChange={(event) => setTierForm((prev) => ({ ...prev, thresholdValue: Number(event.target.value) }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Ventana
-                  <select
-                    value={tierForm.windowUnit}
-                    onChange={(event) => setTierForm((prev) => ({ ...prev, windowUnit: event.target.value as TierWindowUnit }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  >
-                    <option value="day">day</option>
-                    <option value="month">month</option>
-                    <option value="year">year</option>
-                  </select>
-                </label>
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Valor ventana
-                  <input
-                    type="number"
-                    min={1}
-                    value={tierForm.windowValue}
-                    onChange={(event) => setTierForm((prev) => ({ ...prev, windowValue: Number(event.target.value) }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Min compras
-                  <input
-                    type="number"
-                    min={0}
-                    value={tierForm.minPurchaseCount}
-                    onChange={(event) => setTierForm((prev) => ({ ...prev, minPurchaseCount: Number(event.target.value) }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </label>
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Min monto
-                  <input
-                    type="number"
-                    min={0}
-                    value={tierForm.minPurchaseAmount}
-                    onChange={(event) => setTierForm((prev) => ({ ...prev, minPurchaseAmount: Number(event.target.value) }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Modo
-                  <select
-                    value={tierForm.qualificationMode}
-                    onChange={(event) =>
-                      setTierForm((prev) => ({ ...prev, qualificationMode: event.target.value as TierQualificationMode }))
-                    }
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  >
-                    <option value="any">any</option>
-                    <option value="all">all</option>
-                  </select>
-                </label>
-                <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Dias de gracia
-                  <input
-                    type="number"
-                    min={0}
-                    max={90}
-                    value={tierForm.graceDays}
-                    onChange={(event) => setTierForm((prev) => ({ ...prev, graceDays: Number(event.target.value) }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                  />
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                disabled={createTierMutation.isPending}
-                className="w-full rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-              >
-                {createTierMutation.isPending ? "Guardando..." : "Agregar tier"}
-              </button>
-            </form>
+              {accumulationRules.map((rule: CampaignAccumulationRule) => (
+                <li key={rule.id} className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900">
+                  <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                    scope {rule.scopeType} · x{rule.multiplier} + {rule.flatBonus} · prioridad {rule.priority}
+                  </p>
+                  <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">{rule.scopeId ?? "global campaña"}</p>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
       </section>
+
+      {isPolicyModalOpen && (
+        <Modal title="Nueva politica" onClose={closePolicyModal}>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              createPolicyMutation.mutate();
+            }}
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Tipo
+                <select
+                  value={policyForm.policyType}
+                  onChange={(event) =>
+                    setPolicyForm((prev) => ({ ...prev, policyType: event.target.value as PolicyType }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="max_accumulations">max_accumulations</option>
+                  <option value="min_amount">min_amount</option>
+                  <option value="min_quantity">min_quantity</option>
+                  <option value="cooldown">cooldown</option>
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Scope
+                <select
+                  value={policyForm.scopeType}
+                  onChange={(event) =>
+                    setPolicyForm((prev) => ({
+                      ...prev,
+                      scopeType: event.target.value as ScopeType,
+                      scopeId: "",
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="campaign">campaign</option>
+                  <option value="brand">brand</option>
+                  <option value="product">product</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Periodo
+                <select
+                  value={policyForm.period}
+                  onChange={(event) =>
+                    setPolicyForm((prev) => ({ ...prev, period: event.target.value as PeriodType }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="transaction">transaction</option>
+                  <option value="day">day</option>
+                  <option value="week">week</option>
+                  <option value="month">month</option>
+                  <option value="lifetime">lifetime</option>
+                </select>
+              </label>
+
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Valor
+                <input
+                  type="number"
+                  min={1}
+                  value={policyForm.value}
+                  onChange={(event) =>
+                    setPolicyForm((prev) => ({ ...prev, value: Number(event.target.value) }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            </div>
+
+            {policyForm.scopeType !== "campaign" && (
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                {policyForm.scopeType === "brand" ? "Marca" : "Producto"}
+                <select
+                  required
+                  value={policyForm.scopeId}
+                  onChange={(event) => setPolicyForm((prev) => ({ ...prev, scopeId: event.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="">Selecciona</option>
+                  {scopeOptions.map((option: { id: string; label: string }) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closePolicyModal}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={createPolicyMutation.isPending}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {createPolicyMutation.isPending ? "Guardando..." : "Agregar politica"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {isTierModalOpen && (
+        <Modal title="Nuevo tier" onClose={closeTierModal}>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              createTierMutation.mutate();
+            }}
+          >
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              Nombre
+              <input
+                required
+                value={tierForm.name}
+                onChange={(event) => setTierForm((prev) => ({ ...prev, name: event.target.value }))}
+                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+              />
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Orden
+                <input
+                  type="number"
+                  min={1}
+                  value={tierForm.order}
+                  onChange={(event) => setTierForm((prev) => ({ ...prev, order: Number(event.target.value) }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Threshold
+                <input
+                  type="number"
+                  min={1}
+                  value={tierForm.thresholdValue}
+                  onChange={(event) => setTierForm((prev) => ({ ...prev, thresholdValue: Number(event.target.value) }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Ventana
+                <select
+                  value={tierForm.windowUnit}
+                  onChange={(event) => setTierForm((prev) => ({ ...prev, windowUnit: event.target.value as TierWindowUnit }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="day">day</option>
+                  <option value="month">month</option>
+                  <option value="year">year</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Valor ventana
+                <input
+                  type="number"
+                  min={1}
+                  value={tierForm.windowValue}
+                  onChange={(event) => setTierForm((prev) => ({ ...prev, windowValue: Number(event.target.value) }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Min compras
+                <input
+                  type="number"
+                  min={0}
+                  value={tierForm.minPurchaseCount}
+                  onChange={(event) => setTierForm((prev) => ({ ...prev, minPurchaseCount: Number(event.target.value) }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Min monto
+                <input
+                  type="number"
+                  min={0}
+                  value={tierForm.minPurchaseAmount}
+                  onChange={(event) => setTierForm((prev) => ({ ...prev, minPurchaseAmount: Number(event.target.value) }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Modo
+                <select
+                  value={tierForm.qualificationMode}
+                  onChange={(event) =>
+                    setTierForm((prev) => ({ ...prev, qualificationMode: event.target.value as TierQualificationMode }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="any">any</option>
+                  <option value="all">all</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Dias de gracia
+                <input
+                  type="number"
+                  min={0}
+                  max={90}
+                  value={tierForm.graceDays}
+                  onChange={(event) => setTierForm((prev) => ({ ...prev, graceDays: Number(event.target.value) }))}
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeTierModal}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={createTierMutation.isPending}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {createTierMutation.isPending ? "Guardando..." : "Agregar tier"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {isRuleModalOpen && (
+        <Modal title="Nueva regla de acumulacion" onClose={closeRuleModal}>
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              createAccumulationRuleMutation.mutate();
+            }}
+          >
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Scope
+                <select
+                  value={accumulationRuleForm.scopeType}
+                  onChange={(event) =>
+                    setAccumulationRuleForm((prev) => ({
+                      ...prev,
+                      scopeType: event.target.value as AccumulationScopeType,
+                      scopeId: "",
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="campaign">campaign</option>
+                  <option value="brand">brand</option>
+                  <option value="product">product</option>
+                </select>
+              </label>
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Prioridad
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={accumulationRuleForm.priority}
+                  onChange={(event) =>
+                    setAccumulationRuleForm((prev) => ({ ...prev, priority: Number(event.target.value) }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            </div>
+
+            {accumulationRuleForm.scopeType !== "campaign" && (
+              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                {accumulationRuleForm.scopeType === "brand" ? "Marca" : "Producto"}
+                <select
+                  required
+                  value={accumulationRuleForm.scopeId}
+                  onChange={(event) =>
+                    setAccumulationRuleForm((prev) => ({ ...prev, scopeId: event.target.value }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  <option value="">Selecciona</option>
+                  {accumulationScopeOptions.map((option: { id: string; label: string }) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Multiplicador
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={accumulationRuleForm.multiplier}
+                  onChange={(event) =>
+                    setAccumulationRuleForm((prev) => ({ ...prev, multiplier: Number(event.target.value) }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                Bono fijo
+                <input
+                  type="number"
+                  min={0}
+                  value={accumulationRuleForm.flatBonus}
+                  onChange={(event) =>
+                    setAccumulationRuleForm((prev) => ({ ...prev, flatBonus: Number(event.target.value) }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={closeRuleModal}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={createAccumulationRuleMutation.isPending}
+                className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              >
+                {createAccumulationRuleMutation.isPending ? "Guardando..." : "Agregar regla"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Auditoria</h2>

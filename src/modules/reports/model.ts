@@ -70,6 +70,7 @@ export const campaignReportSummaryResponse = t.Object({
     to: t.String(),
     kpis: reportKpis,
     daily: t.Array(reportDailyPoint),
+    transactionsWithoutAccumulations: t.Number(),
   }),
 });
 

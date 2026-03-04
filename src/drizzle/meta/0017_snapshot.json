@@ -1,6 +1,6 @@
 {
-  "id": "482af16f-8c7f-4258-b4e5-451e1a4fe0bf",
-  "prevId": "0690444a-42f7-40b6-921b-984fbe2a1e51",
+  "id": "e2840364-3307-44bb-9c79-5845cf745a91",
+  "prevId": "0d1cac48-3894-4053-8ed0-aa78fec1ba8f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -575,6 +575,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "tier_grace_until": {
+          "name": "tier_grace_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tier_last_evaluated_at": {
+          "name": "tier_last_evaluated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "card_status",
@@ -701,6 +713,196 @@
           "tableFrom": "cards",
           "tableTo": "stores",
           "columnsFrom": ["store_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "cards_current_tier_id_campaign_tiers_id_fk": {
+          "name": "cards_current_tier_id_campaign_tiers_id_fk",
+          "tableFrom": "cards",
+          "tableTo": "campaign_tiers",
+          "columnsFrom": ["current_tier_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.campaign_accumulation_rules": {
+      "name": "campaign_accumulation_rules",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope_type": {
+          "name": "scope_type",
+          "type": "campaign_accumulation_rule_scope_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "scope_id": {
+          "name": "scope_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope_brand_id": {
+          "name": "scope_brand_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "scope_product_id": {
+          "name": "scope_product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "multiplier": {
+          "name": "multiplier",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "flat_bonus": {
+          "name": "flat_bonus",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "priority": {
+          "name": "priority",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 100
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "campaign_accumulation_rules_campaign_idx": {
+          "name": "campaign_accumulation_rules_campaign_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaign_accumulation_rules_scope_idx": {
+          "name": "campaign_accumulation_rules_scope_idx",
+          "columns": [
+            {
+              "expression": "scope_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaign_accumulation_rules_active_idx": {
+          "name": "campaign_accumulation_rules_active_idx",
+          "columns": [
+            {
+              "expression": "active",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaign_accumulation_rules_created_at_idx": {
+          "name": "campaign_accumulation_rules_created_at_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "campaign_accumulation_rules_campaign_id_campaigns_id_fk": {
+          "name": "campaign_accumulation_rules_campaign_id_campaigns_id_fk",
+          "tableFrom": "campaign_accumulation_rules",
+          "tableTo": "campaigns",
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "campaign_accumulation_rules_scope_brand_id_brands_id_fk": {
+          "name": "campaign_accumulation_rules_scope_brand_id_brands_id_fk",
+          "tableFrom": "campaign_accumulation_rules",
+          "tableTo": "brands",
+          "columnsFrom": ["scope_brand_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "campaign_accumulation_rules_scope_product_id_products_id_fk": {
+          "name": "campaign_accumulation_rules_scope_product_id_products_id_fk",
+          "tableFrom": "campaign_accumulation_rules",
+          "tableTo": "products",
+          "columnsFrom": ["scope_product_id"],
           "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
@@ -1071,6 +1273,14 @@
           "notNull": true,
           "default": "'opt_in'"
         },
+        "accumulation_mode": {
+          "name": "accumulation_mode",
+          "type": "campaign_accumulation_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'count'"
+        },
         "starts_at": {
           "name": "starts_at",
           "type": "timestamp with time zone",
@@ -1211,6 +1421,260 @@
           "columnsFrom": ["updated_by"],
           "columnsTo": ["id"],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.campaign_tiers": {
+      "name": "campaign_tiers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "order": {
+          "name": "order",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "threshold_value": {
+          "name": "threshold_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "window_unit": {
+          "name": "window_unit",
+          "type": "tier_window_unit",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'day'"
+        },
+        "window_value": {
+          "name": "window_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 90
+        },
+        "min_purchase_count": {
+          "name": "min_purchase_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "min_purchase_amount": {
+          "name": "min_purchase_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "qualification_mode": {
+          "name": "qualification_mode",
+          "type": "tier_qualification_mode",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'any'"
+        },
+        "grace_days": {
+          "name": "grace_days",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 7
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "campaign_tiers_campaign_order_key": {
+          "name": "campaign_tiers_campaign_order_key",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "order",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaign_tiers_campaign_idx": {
+          "name": "campaign_tiers_campaign_idx",
+          "columns": [
+            {
+              "expression": "campaign_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "campaign_tiers_threshold_idx": {
+          "name": "campaign_tiers_threshold_idx",
+          "columns": [
+            {
+              "expression": "threshold_value",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "campaign_tiers_campaign_id_campaigns_id_fk": {
+          "name": "campaign_tiers_campaign_id_campaigns_id_fk",
+          "tableFrom": "campaign_tiers",
+          "tableTo": "campaigns",
+          "columnsFrom": ["campaign_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.tier_benefits": {
+      "name": "tier_benefits",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "tier_id": {
+          "name": "tier_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "tier_benefit_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "config": {
+          "name": "config",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "tier_benefits_tier_idx": {
+          "name": "tier_benefits_tier_idx",
+          "columns": [
+            {
+              "expression": "tier_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "tier_benefits_type_idx": {
+          "name": "tier_benefits_type_idx",
+          "columns": [
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "tier_benefits_tier_id_campaign_tiers_id_fk": {
+          "name": "tier_benefits_tier_id_campaign_tiers_id_fk",
+          "tableFrom": "tier_benefits",
+          "tableTo": "campaign_tiers",
+          "columnsFrom": ["tier_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -2649,6 +3113,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "min_tier_id": {
+          "name": "min_tier_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "stock": {
           "name": "stock",
           "type": "integer",
@@ -2732,6 +3202,15 @@
           "columnsFrom": ["campaign_id"],
           "columnsTo": ["id"],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "rewards_min_tier_id_campaign_tiers_id_fk": {
+          "name": "rewards_min_tier_id_campaign_tiers_id_fk",
+          "tableFrom": "rewards",
+          "tableTo": "campaign_tiers",
+          "columnsFrom": ["min_tier_id"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -3282,6 +3761,16 @@
       "schema": "public",
       "values": ["active", "inactive"]
     },
+    "public.campaign_accumulation_mode": {
+      "name": "campaign_accumulation_mode",
+      "schema": "public",
+      "values": ["count", "amount"]
+    },
+    "public.campaign_accumulation_rule_scope_type": {
+      "name": "campaign_accumulation_rule_scope_type",
+      "schema": "public",
+      "values": ["campaign", "brand", "product"]
+    },
     "public.campaign_enrollment_mode": {
       "name": "campaign_enrollment_mode",
       "schema": "public",
@@ -3306,6 +3795,21 @@
       "name": "campaign_status",
       "schema": "public",
       "values": ["draft", "ready_for_review", "in_review", "rejected", "confirmed", "active", "paused", "ended"]
+    },
+    "public.tier_benefit_type": {
+      "name": "tier_benefit_type",
+      "schema": "public",
+      "values": ["discount", "reward", "multiplier", "free_product"]
+    },
+    "public.tier_qualification_mode": {
+      "name": "tier_qualification_mode",
+      "schema": "public",
+      "values": ["any", "all"]
+    },
+    "public.tier_window_unit": {
+      "name": "tier_window_unit",
+      "schema": "public",
+      "values": ["day", "month", "year"]
     },
     "public.campaign_subscription_status": {
       "name": "campaign_subscription_status",

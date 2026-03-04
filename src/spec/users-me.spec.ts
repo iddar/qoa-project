@@ -159,10 +159,9 @@ describe('Users me endpoint', () => {
     expect(data.data.card.id).toBeTruthy();
     expect(data.data.card.code).toContain('card_');
 
-    const [card] = (await db
-      .select({ id: cards.id })
-      .from(cards)
-      .where(eq(cards.id, data.data.card.id))) as Array<{ id: string }>;
+    const [card] = (await db.select({ id: cards.id }).from(cards).where(eq(cards.id, data.data.card.id))) as Array<{
+      id: string;
+    }>;
     expect(card?.id).toBe(data.data.card.id);
 
     await deleteUser(user.id);

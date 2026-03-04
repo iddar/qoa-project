@@ -5,7 +5,7 @@ import { allUserRoles } from '../../app/plugins/roles';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { balances, campaignBalances, campaigns, cards, redemptions, rewards } from '../../db/schema';
+import { balances, campaignBalances, campaigns, campaignTiers, cards, redemptions, rewards } from '../../db/schema';
 import { evaluateCardTier } from '../../services/tier-engine';
 import type { StatusHandler } from '../../types/handlers';
 import {
@@ -27,6 +27,7 @@ type RewardRow = {
   description: string | null;
   imageUrl: string | null;
   cost: number;
+  minTierId: string | null;
   stock: number | null;
   status: 'active' | 'inactive';
   createdAt: Date;
@@ -64,6 +65,7 @@ type RewardCreateContext = {
     description?: string;
     imageUrl?: string;
     cost: number;
+    minTierId?: string;
     stock?: number;
     status?: 'active' | 'inactive';
   };
@@ -90,6 +92,7 @@ const serializeReward = (reward: RewardRow) => ({
   description: reward.description ?? undefined,
   imageUrl: reward.imageUrl ?? undefined,
   cost: reward.cost,
+  minTierId: reward.minTierId ?? undefined,
   stock: reward.stock ?? undefined,
   status: reward.status,
   createdAt: reward.createdAt.toISOString(),
@@ -294,6 +297,22 @@ export const rewardsModule = new Elysia({
         return scopeError;
       }
 
+      if (body.minTierId) {
+        const [tier] = (await db
+          .select({ id: campaignTiers.id, campaignId: campaignTiers.campaignId })
+          .from(campaignTiers)
+          .where(eq(campaignTiers.id, body.minTierId))) as Array<{ id: string; campaignId: string }>;
+
+        if (!tier || tier.campaignId !== body.campaignId) {
+          return status(422, {
+            error: {
+              code: 'REWARD_MIN_TIER_INVALID',
+              message: 'El tier mínimo no pertenece a la campaña seleccionada',
+            },
+          });
+        }
+      }
+
       const [created] = (await db
         .insert(rewards)
         .values({
@@ -302,6 +321,7 @@ export const rewardsModule = new Elysia({
           description: body.description ?? null,
           imageUrl: body.imageUrl ?? null,
           cost: body.cost,
+          minTierId: body.minTierId ?? null,
           stock: body.stock ?? null,
           status: body.status ?? 'active',
           updatedAt: new Date(),
@@ -435,11 +455,13 @@ export const rewardsModule = new Elysia({
         .select({
           cardId: cards.id,
           campaignId: cards.campaignId,
+          currentTierId: cards.currentTierId,
         })
         .from(cards)
         .where(eq(cards.id, body.cardId))) as Array<{
         cardId: string;
         campaignId: string;
+        currentTierId: string | null;
       }>;
 
       if (!card) {
@@ -458,6 +480,30 @@ export const rewardsModule = new Elysia({
             message: 'La tarjeta no pertenece a la campaña de la recompensa',
           },
         });
+      }
+
+      if (reward.minTierId) {
+        const [requiredTier] = (await db
+          .select({ id: campaignTiers.id, name: campaignTiers.name, order: campaignTiers.order })
+          .from(campaignTiers)
+          .where(eq(campaignTiers.id, reward.minTierId))) as Array<{ id: string; name: string; order: number }>;
+        const [currentTier] = card.currentTierId
+          ? ((await db
+              .select({ id: campaignTiers.id, order: campaignTiers.order })
+              .from(campaignTiers)
+              .where(eq(campaignTiers.id, card.currentTierId))) as Array<{ id: string; order: number }>)
+          : [];
+
+        if (!requiredTier || !currentTier || currentTier.order < requiredTier.order) {
+          return status(422, {
+            error: {
+              code: 'REWARD_TIER_REQUIRED',
+              message: requiredTier
+                ? `Esta recompensa requiere nivel ${requiredTier.order}: ${requiredTier.name}`
+                : 'Esta recompensa requiere un tier mínimo',
+            },
+          });
+        }
       }
 
       const [existingRedemption] = (await db
@@ -494,7 +540,9 @@ export const rewardsModule = new Elysia({
       const [campaignBalance] = (await db
         .select()
         .from(campaignBalances)
-        .where(and(eq(campaignBalances.cardId, card.cardId), eq(campaignBalances.campaignId, reward.campaignId)))) as Array<{
+        .where(
+          and(eq(campaignBalances.cardId, card.cardId), eq(campaignBalances.campaignId, reward.campaignId)),
+        )) as Array<{
         id: string;
         current: number;
         lifetime: number;

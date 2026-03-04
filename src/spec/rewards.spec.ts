@@ -3,7 +3,18 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { balances, campaignBalances, campaigns, cards, cpgs, redemptions, rewards, stores, users } from '../db/schema';
+import {
+  balances,
+  campaignBalances,
+  campaignTiers,
+  campaigns,
+  cards,
+  cpgs,
+  redemptions,
+  rewards,
+  stores,
+  users,
+} from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -153,6 +164,150 @@ describe('Rewards module', () => {
     await db.delete(balances).where(eq(balances.cardId, card!.id));
     await db.delete(cards).where(eq(cards.id, card!.id));
     await db.delete(rewards).where(eq(rewards.id, rewardId));
+    await db.delete(campaigns).where(eq(campaigns.id, campaign!.id));
+    await db.delete(stores).where(eq(stores.id, store!.id));
+    await db.delete(users).where(eq(users.id, user!.id));
+  });
+
+  it('enforces minimum tier requirement on reward redemption', async () => {
+    const [user] = (await db
+      .insert(users)
+      .values({
+        phone: `+52155${Math.floor(Math.random() * 10_000_000)
+          .toString()
+          .padStart(7, '0')}`,
+        email: `rewards_tier_${crypto.randomUUID()}@qoa.test`,
+        role: 'consumer',
+      })
+      .returning({ id: users.id })) as Array<{ id: string }>;
+
+    const [store] = (await db
+      .insert(stores)
+      .values({
+        name: 'Store Reward Tier',
+        code: `sto_tier_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        type: 'tiendita',
+      })
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+
+    const [campaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign Reward Tier ${crypto.randomUUID().slice(0, 6)}`,
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    const [silver] = (await db
+      .insert(campaignTiers)
+      .values({
+        campaignId: campaign!.id,
+        name: 'Silver',
+        order: 1,
+        thresholdValue: 10,
+        minPurchaseCount: 1,
+      })
+      .returning({ id: campaignTiers.id })) as Array<{ id: string }>;
+
+    const [gold] = (await db
+      .insert(campaignTiers)
+      .values({
+        campaignId: campaign!.id,
+        name: 'Gold',
+        order: 2,
+        thresholdValue: 20,
+        minPurchaseCount: 2,
+      })
+      .returning({ id: campaignTiers.id })) as Array<{ id: string }>;
+
+    const [card] = (await db
+      .insert(cards)
+      .values({
+        userId: user!.id,
+        campaignId: campaign!.id,
+        storeId: store!.id,
+        code: `card_tier_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        currentTierId: silver!.id,
+      })
+      .returning({ id: cards.id })) as Array<{ id: string }>;
+
+    await db.insert(balances).values({
+      cardId: card!.id,
+      current: 100,
+      lifetime: 100,
+      updatedAt: new Date(),
+    });
+
+    await db.insert(campaignBalances).values({
+      cardId: card!.id,
+      campaignId: campaign!.id,
+      current: 100,
+      lifetime: 100,
+      updatedAt: new Date(),
+    });
+
+    const { data: rewardData, error: rewardError } = await api.v1.rewards.post(
+      {
+        campaignId: campaign!.id,
+        name: `Reward Gold ${crypto.randomUUID().slice(0, 5)}`,
+        cost: 20,
+        stock: 3,
+        minTierId: gold!.id,
+        status: 'active',
+      },
+      { headers: adminHeaders },
+    );
+
+    if (rewardError) {
+      throw rewardError.value;
+    }
+    if (!rewardData) {
+      throw new Error('Reward create with min tier missing');
+    }
+
+    const rewardId = rewardData.data.id;
+    const blockedRedeem = await api.v1.rewards({ rewardId }).redeem.post(
+      {
+        cardId: card!.id,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (!blockedRedeem.error) {
+      throw new Error('Expected tier restriction on reward redemption');
+    }
+
+    expect(blockedRedeem.status).toBe(422);
+    expect(blockedRedeem.error.value.error.code).toBe('REWARD_TIER_REQUIRED');
+
+    await db.update(cards).set({ currentTierId: gold!.id, updatedAt: new Date() }).where(eq(cards.id, card!.id));
+
+    const allowedRedeem = await api.v1.rewards({ rewardId }).redeem.post(
+      {
+        cardId: card!.id,
+      },
+      {
+        headers: adminHeaders,
+      },
+    );
+
+    if (allowedRedeem.error) {
+      throw allowedRedeem.error.value;
+    }
+    if (!allowedRedeem.data) {
+      throw new Error('Expected successful redeem after tier update');
+    }
+
+    expect(allowedRedeem.status).toBe(200);
+    expect(allowedRedeem.data.data.card.currentBalance).toBe(80);
+
+    await db.delete(redemptions).where(eq(redemptions.rewardId, rewardId));
+    await db.delete(campaignBalances).where(eq(campaignBalances.cardId, card!.id));
+    await db.delete(balances).where(eq(balances.cardId, card!.id));
+    await db.delete(cards).where(eq(cards.id, card!.id));
+    await db.delete(rewards).where(eq(rewards.id, rewardId));
+    await db.delete(campaignTiers).where(eq(campaignTiers.campaignId, campaign!.id));
     await db.delete(campaigns).where(eq(campaigns.id, campaign!.id));
     await db.delete(stores).where(eq(stores.id, store!.id));
     await db.delete(users).where(eq(users.id, user!.id));
@@ -335,10 +490,7 @@ describe('Rewards module', () => {
       updatedAt: new Date(),
     });
 
-    const {
-      data: reward,
-      error: createError,
-    } = await api.v1.rewards.post(
+    const { data: reward, error: createError } = await api.v1.rewards.post(
       {
         campaignId: campaign!.id,
         name: `Reward Double ${crypto.randomUUID().slice(0, 5)}`,

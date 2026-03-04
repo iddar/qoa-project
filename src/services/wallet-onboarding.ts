@@ -61,7 +61,9 @@ export const ensureUserUniversalWalletCard = async (userId: string) => {
     const [existingSubscription] = (await db
       .select({ id: campaignSubscriptions.id })
       .from(campaignSubscriptions)
-      .where(and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, universalCampaignId)))) as Array<{
+      .where(
+        and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, universalCampaignId)),
+      )) as Array<{
       id: string;
     }>;
 
@@ -100,7 +102,9 @@ export const ensureUserUniversalWalletCard = async (userId: string) => {
   const [existingSubscription] = (await db
     .select({ id: campaignSubscriptions.id })
     .from(campaignSubscriptions)
-    .where(and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, universalCampaignId)))) as Array<{
+    .where(
+      and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, universalCampaignId)),
+    )) as Array<{
     id: string;
   }>;
 

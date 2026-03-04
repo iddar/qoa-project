@@ -25,6 +25,8 @@ type CardRow = {
   createdAt: Date;
 };
 
+export type { CardRow };
+
 type CardCreateBody = {
   userId: string;
   campaignId: string;

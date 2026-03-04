@@ -99,7 +99,11 @@ const upsertSeedBrand = async (scope: string, cpgId: string): Promise<string> =>
 const upsertSeedProduct = async (scope: string, brandId: string): Promise<string> => {
   const sku = `SEED-${scope.toUpperCase()}-001`;
 
-  const [existing] = (await db.select({ id: products.id }).from(products).where(eq(products.sku, sku)).limit(1)) as Array<{
+  const [existing] = (await db
+    .select({ id: products.id })
+    .from(products)
+    .where(eq(products.sku, sku))
+    .limit(1)) as Array<{
     id: string;
   }>;
 
@@ -132,7 +136,11 @@ const upsertSeedProduct = async (scope: string, brandId: string): Promise<string
 const upsertSeedCampaign = async (scope: string, cpgId: string): Promise<string> => {
   const key = `qoa_seed_reto_${scope}`;
 
-  const [existing] = (await db.select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.key, key)).limit(1)) as Array<{
+  const [existing] = (await db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(eq(campaigns.key, key))
+    .limit(1)) as Array<{
     id: string;
   }>;
 
@@ -213,7 +221,11 @@ const upsertStoreByCode = async (payload: {
   address: string;
   phone: string;
 }): Promise<string> => {
-  const [existing] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.code, payload.code)).limit(1)) as Array<{
+  const [existing] = (await db
+    .select({ id: stores.id })
+    .from(stores)
+    .where(eq(stores.code, payload.code))
+    .limit(1)) as Array<{
     id: string;
   }>;
 
@@ -272,7 +284,11 @@ const upsertBrandByName = async (cpgId: string, name: string): Promise<string> =
 };
 
 const upsertProductBySku = async (brandId: string, sku: string, name: string): Promise<string> => {
-  const [existing] = (await db.select({ id: products.id }).from(products).where(eq(products.sku, sku)).limit(1)) as Array<{
+  const [existing] = (await db
+    .select({ id: products.id })
+    .from(products)
+    .where(eq(products.sku, sku))
+    .limit(1)) as Array<{
     id: string;
   }>;
 
@@ -310,7 +326,11 @@ const upsertCampaignByKey = async (payload: {
   enrollmentMode: 'open' | 'opt_in' | 'system_universal';
   status: string;
 }): Promise<string> => {
-  const [existing] = (await db.select({ id: campaigns.id }).from(campaigns).where(eq(campaigns.key, payload.key)).limit(1)) as Array<{
+  const [existing] = (await db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(eq(campaigns.key, payload.key))
+    .limit(1)) as Array<{
     id: string;
   }>;
 
@@ -515,7 +535,9 @@ const addPoints = async (payload: {
   const [existingCampaignBalance] = (await db
     .select({ id: campaignBalances.id })
     .from(campaignBalances)
-    .where(and(eq(campaignBalances.cardId, payload.cardId), eq(campaignBalances.campaignId, payload.campaignId)))) as Array<{
+    .where(
+      and(eq(campaignBalances.cardId, payload.cardId), eq(campaignBalances.campaignId, payload.campaignId)),
+    )) as Array<{
     id: string;
   }>;
 
@@ -595,9 +617,17 @@ const seedDemoActivity = async (payload: {
   };
 
   const campaignRows = (await db
-    .select({ campaignId: campaignBalances.campaignId, current: campaignBalances.current, lifetime: campaignBalances.lifetime })
+    .select({
+      campaignId: campaignBalances.campaignId,
+      current: campaignBalances.current,
+      lifetime: campaignBalances.lifetime,
+    })
     .from(campaignBalances)
-    .where(eq(campaignBalances.cardId, payload.consumerCardId))) as Array<{ campaignId: string; current: number; lifetime: number }>;
+    .where(eq(campaignBalances.cardId, payload.consumerCardId))) as Array<{
+    campaignId: string;
+    current: number;
+    lifetime: number;
+  }>;
   const campaignState = new Map<string, { current: number; lifetime: number }>();
   for (const row of campaignRows) {
     campaignState.set(row.campaignId, {
