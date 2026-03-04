@@ -25,3 +25,5 @@ Esta carpeta contiene los estándares internos de ingeniería, incluyendo git, P
 ## Artefactos implementados
 
 - `tiers-rolling-window.md`: reglas y alcance técnico del sistema de tiers por ventana móvil (MVP).
+- `test-cases.md`: cobertura E2E/integración, gap analysis y matriz de cobertura.
+- `iteracion-1-gaps-alta-prioridad.md`: plan de ejecución para GAP-002, GAP-003 y GAP-004.
