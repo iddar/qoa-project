@@ -204,7 +204,7 @@ export default function StoresPage() {
 
     return (
         <div className="space-y-6 pb-8">
-            <section className="overflow-hidden rounded-[32px] border border-cyan-100 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_35%),linear-gradient(135deg,_#082f49_0%,_#0f172a_58%,_#111827_100%)] p-6 text-white shadow-[0_30px_80px_-40px_rgba(8,47,73,0.85)]">
+            <section className="overflow-hidden rounded-xl border border-cyan-100 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_35%),linear-gradient(135deg,_#082f49_0%,_#0f172a_58%,_#111827_100%)] p-6 text-white shadow-[0_30px_80px_-40px_rgba(8,47,73,0.85)]">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                     <div className="max-w-3xl">
                         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-200/80">
@@ -262,7 +262,7 @@ export default function StoresPage() {
             </section>
 
             <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.9fr)]">
-                <div className="overflow-hidden rounded-[30px] border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+                <div className="flex h-full min-h-[680px] flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
                     <div className="flex flex-col gap-4 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
@@ -280,7 +280,7 @@ export default function StoresPage() {
                             className="w-full rounded-full border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm outline-none transition focus:border-cyan-500 focus:bg-white md:max-w-xs dark:border-zinc-700 dark:bg-zinc-950 dark:focus:bg-zinc-900"
                         />
                     </div>
-                    <div className="p-4">
+                    <div className="flex-1 p-4">
                         <StoresMap
                             stores={geoStores}
                             selectedStoreId={selectedStore?.storeId}
@@ -290,7 +290,7 @@ export default function StoresPage() {
                 </div>
 
                 <aside className="space-y-6">
-                    <section className="rounded-[30px] border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+                    <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
                         <p className="text-xs font-semibold uppercase tracking-[0.26em] text-zinc-400">
                             Store dossier
                         </p>
@@ -363,7 +363,7 @@ export default function StoresPage() {
                         )}
                     </section>
 
-                    <section className="rounded-[30px] border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+                    <section className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
                         <p className="text-xs font-semibold uppercase tracking-[0.26em] text-zinc-400">
                             Última actividad
                         </p>
@@ -398,7 +398,7 @@ export default function StoresPage() {
                 </aside>
             </section>
 
-            <section className="rounded-[30px] border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+            <section className="rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
                 <div className="flex flex-col gap-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800 md:flex-row md:items-center md:justify-between">
                     <div>
                         <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
@@ -482,7 +482,7 @@ export default function StoresPage() {
 
             {addModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
-                    <div className="w-full max-w-2xl rounded-[28px] border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
+                    <div className="w-full max-w-2xl rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
                         <div className="flex items-start justify-between gap-4">
                             <div>
                                 <h3 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
@@ -577,7 +577,7 @@ export default function StoresPage() {
 
 function MetricCard({ label, value, hint }: { label: string; value: string; hint: string }) {
     return (
-        <div className="rounded-[28px] border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-zinc-400">
                 {label}
             </p>

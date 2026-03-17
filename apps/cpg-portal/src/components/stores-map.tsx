@@ -45,6 +45,13 @@ export function StoresMap({ stores, selectedStoreId, onSelectStore }: StoresMapP
                 zoomControl: false,
                 scrollWheelZoom: true,
             });
+            const resizeMap = () => map.invalidateSize({ animate: false });
+            const frameId = requestAnimationFrame(resizeMap);
+            const resizeObserver = new ResizeObserver(() => {
+                resizeMap();
+            });
+
+            resizeObserver.observe(containerRef.current);
 
             L.control.zoom({ position: "bottomright" }).addTo(map);
             L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -104,6 +111,8 @@ export function StoresMap({ stores, selectedStoreId, onSelectStore }: StoresMapP
             }
 
             cleanup = () => {
+                cancelAnimationFrame(frameId);
+                resizeObserver.disconnect();
                 for (const marker of markers) {
                     marker.remove();
                 }
@@ -117,5 +126,5 @@ export function StoresMap({ stores, selectedStoreId, onSelectStore }: StoresMapP
         };
     }, [stores, selectedStoreId, onSelectStore]);
 
-    return <div ref={containerRef} className="h-[420px] w-full rounded-[28px]" />;
+    return <div ref={containerRef} className="h-full min-h-[520px] w-full rounded-xl" />;
 }
