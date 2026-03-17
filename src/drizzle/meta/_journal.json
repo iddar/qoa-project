@@ -127,6 +127,13 @@
       "when": 1772498726161,
       "tag": "0017_round_xorn",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1773774243650,
+      "tag": "0018_sparkling_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

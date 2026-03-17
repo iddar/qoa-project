@@ -2442,9 +2442,53 @@ components:
         address:
           type: string
           nullable: true
+          description: Dirección en texto libre (legacy)
         phone:
           type: string
           nullable: true
+        street:
+          type: string
+          nullable: true
+          description: Calle
+        exteriorNumber:
+          type: string
+          nullable: true
+          description: Número exterior
+        interiorNumber:
+          type: string
+          nullable: true
+          description: Número interior
+        neighborhood:
+          type: string
+          nullable: true
+          description: Colonia
+        city:
+          type: string
+          nullable: true
+          description: Ciudad / Municipio
+        state:
+          type: string
+          nullable: true
+          description: Estado
+        postalCode:
+          type: string
+          nullable: true
+          description: Código postal
+        country:
+          type: string
+          nullable: true
+          description: País (ISO 3166-1 alpha-3)
+          default: MEX
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          description: Latitud (WGS 84)
+        longitude:
+          type: number
+          format: double
+          nullable: true
+          description: Longitud (WGS 84)
         status:
           type: string
           enum: [active, inactive]
@@ -2464,8 +2508,50 @@ components:
           nullable: true
         address:
           type: string
+          description: Dirección en texto libre (legacy)
         phone:
           type: string
+        street:
+          type: string
+          maxLength: 255
+          description: Calle
+        exteriorNumber:
+          type: string
+          maxLength: 20
+          description: Número exterior
+        interiorNumber:
+          type: string
+          maxLength: 20
+          description: Número interior
+        neighborhood:
+          type: string
+          maxLength: 150
+          description: Colonia
+        city:
+          type: string
+          maxLength: 150
+          description: Ciudad / Municipio
+        state:
+          type: string
+          maxLength: 100
+          description: Estado
+        postalCode:
+          type: string
+          maxLength: 10
+          description: Código postal
+        country:
+          type: string
+          maxLength: 3
+          description: País (ISO 3166-1 alpha-3)
+          default: MEX
+        latitude:
+          type: number
+          format: double
+          description: Latitud (WGS 84)
+        longitude:
+          type: number
+          format: double
+          description: Longitud (WGS 84)
 
     StoreResponse:
       type: object

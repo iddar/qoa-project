@@ -32,8 +32,83 @@ type SeedUser = {
 
 const DEFAULT_PASSWORD = 'Password123!';
 
+// ── Direcciones realistas CDMX / Estado de México ───────────────────────────
+type SeedStoreAddress = {
+  street: string;
+  exteriorNumber: string;
+  interiorNumber: string | null;
+  neighborhood: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  latitude: string;
+  longitude: string;
+  type: string;
+};
+
+const SEED_STORE_ADDRESSES: SeedStoreAddress[] = [
+  // ── CDMX ──
+  { street: 'Av. Insurgentes Sur', exteriorNumber: '1602', interiorNumber: null, neighborhood: 'Crédito Constructor', city: 'Benito Juárez', state: 'Ciudad de México', postalCode: '03940', country: 'MEX', latitude: '19.3720100', longitude: '-99.1774200', type: 'tiendita' },
+  { street: 'Calz. de Tlalpan', exteriorNumber: '1234', interiorNumber: 'A', neighborhood: 'Portales Sur', city: 'Benito Juárez', state: 'Ciudad de México', postalCode: '03portal', country: 'MEX', latitude: '19.3590500', longitude: '-99.1430800', type: 'minisuper' },
+  { street: 'Eje Central Lázaro Cárdenas', exteriorNumber: '245', interiorNumber: null, neighborhood: 'Doctores', city: 'Cuauhtémoc', state: 'Ciudad de México', postalCode: '06720', country: 'MEX', latitude: '19.4195300', longitude: '-99.1440600', type: 'tiendita' },
+  { street: 'Av. Revolución', exteriorNumber: '780', interiorNumber: null, neighborhood: 'San Ángel', city: 'Álvaro Obregón', state: 'Ciudad de México', postalCode: '01000', country: 'MEX', latitude: '19.3465100', longitude: '-99.1897500', type: 'superette' },
+  { street: 'Av. Universidad', exteriorNumber: '1200', interiorNumber: 'B', neighborhood: 'Del Valle Centro', city: 'Benito Juárez', state: 'Ciudad de México', postalCode: '03100', country: 'MEX', latitude: '19.3779200', longitude: '-99.1700300', type: 'minisuper' },
+  { street: 'Calz. de los Misterios', exteriorNumber: '62', interiorNumber: null, neighborhood: 'Tepeyac Insurgentes', city: 'Gustavo A. Madero', state: 'Ciudad de México', postalCode: '07020', country: 'MEX', latitude: '19.4855700', longitude: '-99.1173400', type: 'tiendita' },
+  { street: 'Av. Coyoacán', exteriorNumber: '1520', interiorNumber: null, neighborhood: 'Del Valle Sur', city: 'Benito Juárez', state: 'Ciudad de México', postalCode: '03104', country: 'MEX', latitude: '19.3710600', longitude: '-99.1607200', type: 'tiendita' },
+  { street: 'Av. Chapultepec', exteriorNumber: '400', interiorNumber: '3', neighborhood: 'Roma Norte', city: 'Cuauhtémoc', state: 'Ciudad de México', postalCode: '06700', country: 'MEX', latitude: '19.4170200', longitude: '-99.1605800', type: 'minisuper' },
+  { street: 'Calle Madero', exteriorNumber: '17', interiorNumber: null, neighborhood: 'Centro Histórico', city: 'Cuauhtémoc', state: 'Ciudad de México', postalCode: '06000', country: 'MEX', latitude: '19.4333600', longitude: '-99.1389100', type: 'tiendita' },
+  { street: 'Av. Patriotismo', exteriorNumber: '820', interiorNumber: null, neighborhood: 'Mixcoac', city: 'Benito Juárez', state: 'Ciudad de México', postalCode: '03910', country: 'MEX', latitude: '19.3735400', longitude: '-99.1855700', type: 'superette' },
+  { street: 'Periférico Sur', exteriorNumber: '4690', interiorNumber: null, neighborhood: 'Pedregal de Carrasco', city: 'Coyoacán', state: 'Ciudad de México', postalCode: '04700', country: 'MEX', latitude: '19.3087200', longitude: '-99.1971500', type: 'cadena' },
+  { street: 'Av. Taxqueña', exteriorNumber: '1500', interiorNumber: null, neighborhood: 'Paseos de Taxqueña', city: 'Coyoacán', state: 'Ciudad de México', postalCode: '04250', country: 'MEX', latitude: '19.3440100', longitude: '-99.1410700', type: 'tiendita' },
+  { street: 'Av. Tláhuac', exteriorNumber: '3855', interiorNumber: null, neighborhood: 'Santa Cecilia', city: 'Tláhuac', state: 'Ciudad de México', postalCode: '13010', country: 'MEX', latitude: '19.2840300', longitude: '-99.0040500', type: 'tiendita' },
+  { street: 'Calz. Ignacio Zaragoza', exteriorNumber: '2010', interiorNumber: null, neighborhood: 'Juan Escutia', city: 'Iztapalapa', state: 'Ciudad de México', postalCode: '09100', country: 'MEX', latitude: '19.4065200', longitude: '-99.0440800', type: 'minisuper' },
+  { street: 'Av. Oceanía', exteriorNumber: '340', interiorNumber: 'L-5', neighborhood: 'Romero Rubio', city: 'Venustiano Carranza', state: 'Ciudad de México', postalCode: '15400', country: 'MEX', latitude: '19.4410300', longitude: '-99.0935600', type: 'tiendita' },
+  { street: 'Av. Canal de Miramontes', exteriorNumber: '2950', interiorNumber: null, neighborhood: 'Girasoles', city: 'Coyoacán', state: 'Ciudad de México', postalCode: '04920', country: 'MEX', latitude: '19.3010500', longitude: '-99.1270300', type: 'superette' },
+  { street: 'Av. Miguel Ángel de Quevedo', exteriorNumber: '687', interiorNumber: null, neighborhood: 'Barrio Santa Catarina', city: 'Coyoacán', state: 'Ciudad de México', postalCode: '04010', country: 'MEX', latitude: '19.3465800', longitude: '-99.1635200', type: 'tiendita' },
+  { street: 'Calz. de la Viga', exteriorNumber: '1110', interiorNumber: null, neighborhood: 'Militar Marte', city: 'Iztacalco', state: 'Ciudad de México', postalCode: '08830', country: 'MEX', latitude: '19.3910200', longitude: '-99.1145300', type: 'minisuper' },
+  { street: 'Av. Cuauhtémoc', exteriorNumber: '950', interiorNumber: null, neighborhood: 'Narvarte Poniente', city: 'Benito Juárez', state: 'Ciudad de México', postalCode: '03020', country: 'MEX', latitude: '19.3970400', longitude: '-99.1530100', type: 'tiendita' },
+  { street: 'Av. Río Churubusco', exteriorNumber: '600', interiorNumber: '2A', neighborhood: 'El Sifón', city: 'Iztapalapa', state: 'Ciudad de México', postalCode: '09400', country: 'MEX', latitude: '19.3560700', longitude: '-99.1190200', type: 'tiendita' },
+  { street: 'Av. Prol. División del Norte', exteriorNumber: '5234', interiorNumber: null, neighborhood: 'Barrio San Marcos', city: 'Xochimilco', state: 'Ciudad de México', postalCode: '16090', country: 'MEX', latitude: '19.2670300', longitude: '-99.1085400', type: 'tiendita' },
+  { street: 'Calle Corregidora', exteriorNumber: '80', interiorNumber: null, neighborhood: 'Centro', city: 'Cuauhtémoc', state: 'Ciudad de México', postalCode: '06060', country: 'MEX', latitude: '19.4290100', longitude: '-99.1340500', type: 'minisuper' },
+  { street: 'Av. México-Coyoacán', exteriorNumber: '345', interiorNumber: null, neighborhood: 'Xoco', city: 'Benito Juárez', state: 'Ciudad de México', postalCode: '03330', country: 'MEX', latitude: '19.3610800', longitude: '-99.1640500', type: 'tiendita' },
+  { street: 'Av. Santa Fe', exteriorNumber: '94', interiorNumber: 'P.B.', neighborhood: 'Santa Fe', city: 'Álvaro Obregón', state: 'Ciudad de México', postalCode: '01210', country: 'MEX', latitude: '19.3660500', longitude: '-99.2610700', type: 'cadena' },
+  { street: 'Av. San Jerónimo', exteriorNumber: '263', interiorNumber: null, neighborhood: 'La Otra Banda', city: 'Coyoacán', state: 'Ciudad de México', postalCode: '04519', country: 'MEX', latitude: '19.3355200', longitude: '-99.1850300', type: 'superette' },
+  // ── Estado de México ──
+  { street: 'Blvd. Manuel Ávila Camacho', exteriorNumber: '1007', interiorNumber: null, neighborhood: 'La Florida', city: 'Naucalpan de Juárez', state: 'Estado de México', postalCode: '53160', country: 'MEX', latitude: '19.4810200', longitude: '-99.2350600', type: 'cadena' },
+  { street: 'Av. Gustavo Baz', exteriorNumber: '180', interiorNumber: null, neighborhood: 'San Bartolo Naucalpan', city: 'Naucalpan de Juárez', state: 'Estado de México', postalCode: '53000', country: 'MEX', latitude: '19.4740500', longitude: '-99.2260300', type: 'minisuper' },
+  { street: 'Calle Benito Juárez', exteriorNumber: '42', interiorNumber: null, neighborhood: 'Centro', city: 'Tlalnepantla de Baz', state: 'Estado de México', postalCode: '54000', country: 'MEX', latitude: '19.5370200', longitude: '-99.1960400', type: 'tiendita' },
+  { street: 'Av. 1° de Mayo', exteriorNumber: '311', interiorNumber: null, neighborhood: 'Maravillas', city: 'Nezahualcóyotl', state: 'Estado de México', postalCode: '57410', country: 'MEX', latitude: '19.4100300', longitude: '-99.0140700', type: 'tiendita' },
+  { street: 'Av. Central', exteriorNumber: '520', interiorNumber: '8', neighborhood: 'Valle de Aragón 1a Sección', city: 'Ecatepec de Morelos', state: 'Estado de México', postalCode: '55280', country: 'MEX', latitude: '19.5130500', longitude: '-99.0430200', type: 'minisuper' },
+  { street: 'Av. José López Portillo', exteriorNumber: '270', interiorNumber: null, neighborhood: 'San Francisco Chilpan', city: 'Tultitlán', state: 'Estado de México', postalCode: '54940', country: 'MEX', latitude: '19.6290100', longitude: '-99.1710500', type: 'tiendita' },
+  { street: 'Blvd. Adolfo López Mateos', exteriorNumber: '1650', interiorNumber: null, neighborhood: 'Atlampa', city: 'Atizapán de Zaragoza', state: 'Estado de México', postalCode: '52910', country: 'MEX', latitude: '19.5670300', longitude: '-99.2540800', type: 'superette' },
+  { street: 'Av. Miguel Hidalgo', exteriorNumber: '100', interiorNumber: null, neighborhood: 'Centro', city: 'Cuautitlán Izcalli', state: 'Estado de México', postalCode: '54700', country: 'MEX', latitude: '19.6480200', longitude: '-99.2100500', type: 'tiendita' },
+  { street: 'Calle Morelos', exteriorNumber: '56', interiorNumber: null, neighborhood: 'San Mateo Atenco Centro', city: 'San Mateo Atenco', state: 'Estado de México', postalCode: '52100', country: 'MEX', latitude: '19.2680400', longitude: '-99.5320600', type: 'tiendita' },
+  { street: 'Av. Solidaridad Las Torres', exteriorNumber: '431', interiorNumber: null, neighborhood: 'La Loma', city: 'Toluca', state: 'Estado de México', postalCode: '50060', country: 'MEX', latitude: '19.2940300', longitude: '-99.6550700', type: 'minisuper' },
+  { street: 'Calle 5 de Febrero', exteriorNumber: '88', interiorNumber: null, neighborhood: 'Centro', city: 'Texcoco', state: 'Estado de México', postalCode: '56100', country: 'MEX', latitude: '19.5140200', longitude: '-98.8820400', type: 'tiendita' },
+  { street: 'Calle Nezahualcóyotl', exteriorNumber: '200', interiorNumber: null, neighborhood: 'Centro', city: 'Chimalhuacán', state: 'Estado de México', postalCode: '56330', country: 'MEX', latitude: '19.4340500', longitude: '-98.9530600', type: 'tiendita' },
+  { street: 'Av. Vicente Guerrero', exteriorNumber: '75', interiorNumber: null, neighborhood: 'Centro', city: 'Los Reyes La Paz', state: 'Estado de México', postalCode: '56400', country: 'MEX', latitude: '19.3620800', longitude: '-98.9730200', type: 'minisuper' },
+  { street: 'Calle Hidalgo', exteriorNumber: '34', interiorNumber: 'B', neighborhood: 'San Juan', city: 'Ixtapaluca', state: 'Estado de México', postalCode: '56530', country: 'MEX', latitude: '19.3180400', longitude: '-98.8820600', type: 'tiendita' },
+  { street: 'Av. Chimalhuacán', exteriorNumber: '678', interiorNumber: null, neighborhood: 'Benito Juárez', city: 'Nezahualcóyotl', state: 'Estado de México', postalCode: '57000', country: 'MEX', latitude: '19.4010200', longitude: '-98.9930500', type: 'superette' },
+  { street: 'Av. 16 de Septiembre', exteriorNumber: '210', interiorNumber: null, neighborhood: 'Fraccionamiento Industrial', city: 'Toluca', state: 'Estado de México', postalCode: '50000', country: 'MEX', latitude: '19.2860100', longitude: '-99.6530400', type: 'cadena' },
+  { street: 'Av. Morelos Norte', exteriorNumber: '412', interiorNumber: null, neighborhood: 'San Bernardino', city: 'Toluca', state: 'Estado de México', postalCode: '50080', country: 'MEX', latitude: '19.2990500', longitude: '-99.6510300', type: 'tiendita' },
+  { street: 'Calle Allende', exteriorNumber: '15', interiorNumber: null, neighborhood: 'Centro', city: 'Chalco', state: 'Estado de México', postalCode: '56600', country: 'MEX', latitude: '19.2640300', longitude: '-98.8970500', type: 'tiendita' },
+  { street: 'Blvd. Coacalco-Tultepec', exteriorNumber: '310', interiorNumber: null, neighborhood: 'Villa de las Flores', city: 'Coacalco de Berriozábal', state: 'Estado de México', postalCode: '55710', country: 'MEX', latitude: '19.6310200', longitude: '-99.1110400', type: 'minisuper' },
+  { street: 'Av. Alfredo del Mazo', exteriorNumber: '1500', interiorNumber: null, neighborhood: 'Científicos', city: 'Toluca', state: 'Estado de México', postalCode: '50075', country: 'MEX', latitude: '19.3120400', longitude: '-99.6440500', type: 'superette' },
+  { street: 'Calle 2 de Marzo', exteriorNumber: '44', interiorNumber: null, neighborhood: 'Centro', city: 'Metepec', state: 'Estado de México', postalCode: '52140', country: 'MEX', latitude: '19.2560700', longitude: '-99.6040300', type: 'tiendita' },
+  { street: 'Av. Tecnológico', exteriorNumber: '800', interiorNumber: 'L-3', neighborhood: 'Llano Grande', city: 'Metepec', state: 'Estado de México', postalCode: '52148', country: 'MEX', latitude: '19.2450300', longitude: '-99.6110500', type: 'minisuper' },
+  { street: 'Calle Independencia', exteriorNumber: '22', interiorNumber: null, neighborhood: 'Centro', city: 'Zinacantepec', state: 'Estado de México', postalCode: '51350', country: 'MEX', latitude: '19.2840500', longitude: '-99.7350200', type: 'tiendita' },
+  { street: 'Av. Estado de México', exteriorNumber: '1305', interiorNumber: null, neighborhood: 'Fraccionamiento Industrial', city: 'Ecatepec de Morelos', state: 'Estado de México', postalCode: '55000', country: 'MEX', latitude: '19.5290400', longitude: '-99.0600300', type: 'cadena' },
+];
+
+const buildAddress = (addr: SeedStoreAddress): string => {
+  const interior = addr.interiorNumber ? ` Int. ${addr.interiorNumber}` : '';
+  return `${addr.street} ${addr.exteriorNumber}${interior}, ${addr.neighborhood}, ${addr.city}, ${addr.state} C.P. ${addr.postalCode}`;
+};
+
 const upsertSeedStore = async (scope: string): Promise<string> => {
   const code = `seed_store_${scope}`;
+  const addr = SEED_STORE_ADDRESSES[0]!;
   const name = `Tienda Seed (${scope})`;
 
   const [existing] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.code, code)).limit(1)) as Array<{
@@ -45,9 +120,19 @@ const upsertSeedStore = async (scope: string): Promise<string> => {
       .update(stores)
       .set({
         name,
-        type: 'tiendita',
-        address: `Zona seed ${scope}`,
+        type: addr.type,
+        address: buildAddress(addr),
         phone: `+52155888000${scope === 'test' ? '01' : scope === 'local' ? '02' : '03'}`,
+        street: addr.street,
+        exteriorNumber: addr.exteriorNumber,
+        interiorNumber: addr.interiorNumber,
+        neighborhood: addr.neighborhood,
+        city: addr.city,
+        state: addr.state,
+        postalCode: addr.postalCode,
+        country: addr.country,
+        latitude: addr.latitude,
+        longitude: addr.longitude,
         status: 'active',
         updatedAt: new Date(),
       })
@@ -60,9 +145,19 @@ const upsertSeedStore = async (scope: string): Promise<string> => {
     .values({
       code,
       name,
-      type: 'tiendita',
-      address: `Zona seed ${scope}`,
+      type: addr.type,
+      address: buildAddress(addr),
       phone: `+52155888000${scope === 'test' ? '01' : scope === 'local' ? '02' : '03'}`,
+      street: addr.street,
+      exteriorNumber: addr.exteriorNumber,
+      interiorNumber: addr.interiorNumber,
+      neighborhood: addr.neighborhood,
+      city: addr.city,
+      state: addr.state,
+      postalCode: addr.postalCode,
+      country: addr.country,
+      latitude: addr.latitude,
+      longitude: addr.longitude,
       status: 'active',
     })
     .returning({ id: stores.id })) as Array<{ id: string }>;
@@ -220,6 +315,16 @@ const upsertStoreByCode = async (payload: {
   type: string;
   address: string;
   phone: string;
+  street?: string;
+  exteriorNumber?: string;
+  interiorNumber?: string | null;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  latitude?: string;
+  longitude?: string;
 }): Promise<string> => {
   const [existing] = (await db
     .select({ id: stores.id })
@@ -237,6 +342,16 @@ const upsertStoreByCode = async (payload: {
         type: payload.type,
         address: payload.address,
         phone: payload.phone,
+        street: payload.street ?? null,
+        exteriorNumber: payload.exteriorNumber ?? null,
+        interiorNumber: payload.interiorNumber ?? null,
+        neighborhood: payload.neighborhood ?? null,
+        city: payload.city ?? null,
+        state: payload.state ?? null,
+        postalCode: payload.postalCode ?? null,
+        country: payload.country ?? 'MEX',
+        latitude: payload.latitude ?? null,
+        longitude: payload.longitude ?? null,
         status: 'active',
         updatedAt: new Date(),
       })
@@ -252,6 +367,16 @@ const upsertStoreByCode = async (payload: {
       type: payload.type,
       address: payload.address,
       phone: payload.phone,
+      street: payload.street ?? null,
+      exteriorNumber: payload.exteriorNumber ?? null,
+      interiorNumber: payload.interiorNumber ?? null,
+      neighborhood: payload.neighborhood ?? null,
+      city: payload.city ?? null,
+      state: payload.state ?? null,
+      postalCode: payload.postalCode ?? null,
+      country: payload.country ?? 'MEX',
+      latitude: payload.latitude ?? null,
+      longitude: payload.longitude ?? null,
       status: 'active',
     })
     .returning({ id: stores.id })) as Array<{ id: string }>;
@@ -941,13 +1066,47 @@ export const seedUsers = async (scope: 'development' | 'local' | 'test') => {
   }
 
   if (scope === 'development' || scope === 'local') {
+    const addrB = SEED_STORE_ADDRESSES[1]!;
     const secondaryStoreId = await upsertStoreByCode({
       code: `seed_store_b_${scope}`,
       name: `Tienda Seed B (${scope})`,
-      type: 'superette',
-      address: `Zona seed B ${scope}`,
+      type: addrB.type,
+      address: buildAddress(addrB),
       phone: `+52155899000${scope === 'local' ? '12' : '13'}`,
+      street: addrB.street,
+      exteriorNumber: addrB.exteriorNumber,
+      interiorNumber: addrB.interiorNumber,
+      neighborhood: addrB.neighborhood,
+      city: addrB.city,
+      state: addrB.state,
+      postalCode: addrB.postalCode,
+      country: addrB.country,
+      latitude: addrB.latitude,
+      longitude: addrB.longitude,
     });
+
+    // ── Bulk seed: 50 tiendas con direcciones CDMX / EdoMex ──
+    for (let i = 2; i < SEED_STORE_ADDRESSES.length; i++) {
+      const addr = SEED_STORE_ADDRESSES[i]!;
+      const idx = String(i).padStart(3, '0');
+      await upsertStoreByCode({
+        code: `seed_store_${scope}_${idx}`,
+        name: `${addr.neighborhood} #${addr.exteriorNumber} (${scope})`,
+        type: addr.type,
+        address: buildAddress(addr),
+        phone: `+521558800${idx}`,
+        street: addr.street,
+        exteriorNumber: addr.exteriorNumber,
+        interiorNumber: addr.interiorNumber,
+        neighborhood: addr.neighborhood,
+        city: addr.city,
+        state: addr.state,
+        postalCode: addr.postalCode,
+        country: addr.country,
+        latitude: addr.latitude,
+        longitude: addr.longitude,
+      });
+    }
 
     const brandIds = [
       await upsertBrandByName(cpgId, `Brand Plus (${scope})`),
