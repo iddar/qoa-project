@@ -26,6 +26,12 @@ export const campaignStatus = pgEnum('campaign_status', [
 ]);
 
 export const campaignEnrollmentMode = pgEnum('campaign_enrollment_mode', ['open', 'opt_in', 'system_universal']);
+export const campaignStoreAccessMode = pgEnum('campaign_store_access_mode', ['all_related_stores', 'selected_stores']);
+export const campaignStoreEnrollmentMode = pgEnum('campaign_store_enrollment_mode', [
+  'store_opt_in',
+  'cpg_managed',
+  'auto_enroll',
+]);
 export const campaignAccumulationMode = pgEnum('campaign_accumulation_mode', ['count', 'amount']);
 
 export const campaignPolicyType = pgEnum('campaign_policy_type', [
@@ -56,6 +62,8 @@ type CampaignsTable = {
   cpgId: unknown;
   status: unknown;
   enrollmentMode: unknown;
+  storeAccessMode: unknown;
+  storeEnrollmentMode: unknown;
   createdAt: unknown;
 };
 
@@ -91,6 +99,8 @@ export const campaigns = pgTable(
     cpgId: uuid('cpg_id'),
     status: campaignStatus('status').notNull().default('draft'),
     enrollmentMode: campaignEnrollmentMode('enrollment_mode').notNull().default('opt_in'),
+    storeAccessMode: campaignStoreAccessMode('store_access_mode').notNull().default('selected_stores'),
+    storeEnrollmentMode: campaignStoreEnrollmentMode('store_enrollment_mode').notNull().default('store_opt_in'),
     accumulationMode: campaignAccumulationMode('accumulation_mode').notNull().default('count'),
     startsAt: timestamp('starts_at', { withTimezone: true }),
     endsAt: timestamp('ends_at', { withTimezone: true }),
@@ -107,6 +117,8 @@ export const campaigns = pgTable(
     index('campaigns_cpg_idx').on(table.cpgId),
     index('campaigns_status_idx').on(table.status),
     index('campaigns_enrollment_mode_idx').on(table.enrollmentMode),
+    index('campaigns_store_access_mode_idx').on(table.storeAccessMode),
+    index('campaigns_store_enrollment_mode_idx').on(table.storeEnrollmentMode),
     index('campaigns_created_at_idx').on(table.createdAt),
   ],
 );

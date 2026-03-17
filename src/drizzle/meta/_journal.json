@@ -134,6 +134,13 @@
       "when": 1773774243650,
       "tag": "0018_sparkling_lord_hawal",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1773780485915,
+      "tag": "0019_smooth_wong",
+      "breakpoints": true
     }
   ]
 }

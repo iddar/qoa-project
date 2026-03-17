@@ -20,9 +20,12 @@ import {
   transactions,
   users,
   webhookReceipts,
+  brands,
 } from '../../db/schema';
 import { UNIVERSAL_CAMPAIGN_KEY, ensureUserUniversalWalletCard } from '../../services/wallet-onboarding';
 import { evaluateCardTier } from '../../services/tier-engine';
+import { touchStoreCpgRelations, getRelatedCpgIdsForStore } from '../../services/store-cpg-relations';
+import { isStoreParticipatingInCampaign } from '../../services/campaign-store-access';
 import type { StatusHandler } from '../../types/handlers';
 import {
   transactionCreateRequest,
@@ -119,6 +122,7 @@ type ResolvedCatalogItem = {
   ref: string;
   id: string;
   brandId: string;
+  cpgId: string | null;
 };
 
 type CreateContext = {
@@ -325,17 +329,29 @@ const resolveAccumulationRule = (
 const resolveCatalogItems = async (productRefs: string[]) => {
   const resolved = new Map<string, ResolvedCatalogItem>();
 
-  for (const productRef of productRefs) {
-    const [product] = (await db
-      .select({
-        id: products.id,
-        sku: products.sku,
-        brandId: products.brandId,
-      })
-      .from(products)
-      .where(or(eq(products.id, productRef), eq(products.sku, productRef)))
-      .limit(1)) as Array<{ id: string; sku: string; brandId: string }>;
+  if (productRefs.length === 0) {
+    return resolved;
+  }
 
+  // Fetch products with their brand info
+  const productsData = (await db
+    .select({
+      id: products.id,
+      sku: products.sku,
+      brandId: products.brandId,
+      brandCpgId: brands.cpgId,
+    })
+    .from(products)
+    .leftJoin(brands, eq(products.brandId, brands.id))
+    .where(or(...productRefs.map(ref => eq(products.id, ref)), ...productRefs.map(ref => eq(products.sku, ref))))) as Array<{
+      id: string;
+      sku: string;
+      brandId: string;
+      brandCpgId: string | null;
+    }>);
+
+  for (const productRef of productRefs) {
+    const product = productsData.find(p => p.id === productRef || p.sku === productRef);
     if (!product) {
       return null;
     }
@@ -344,6 +360,7 @@ const resolveCatalogItems = async (productRefs: string[]) => {
       ref: productRef,
       id: product.id,
       brandId: product.brandId,
+      cpgId: product.brandCpgId,
     });
   }
 
@@ -564,6 +581,23 @@ const createOrReplayTransaction = async (payload: {
     return null;
   }
 
+  // Touch CPG-Store relations based on products in the transaction
+  const touchedCpgIds = new Set<string>();
+  for (const item of normalizedItems) {
+    const resolved = payload.catalogItems.get(item.productId);
+    if (resolved?.cpgId) {
+      touchedCpgIds.add(resolved.cpgId);
+    }
+  }
+  if (touchedCpgIds.size > 0) {
+    await touchStoreCpgRelations({
+      storeId: payload.storeId,
+      cpgIds: [...touchedCpgIds],
+      source: 'first_activity',
+      touchedAt: new Date(),
+    });
+  }
+
   await db.insert(transactionItems).values(
     normalizedItems.map((item) => ({
       transactionId: created.id,
@@ -647,6 +681,15 @@ const createOrReplayTransaction = async (payload: {
     for (const campaignId of campaignIds) {
       const campaignConfig = campaignById.get(campaignId);
       if (!campaignConfig) {
+        continue;
+      }
+
+      // Check if store is participating in this campaign
+      const storeParticipating = await isStoreParticipatingInCampaign({
+        campaignId,
+        storeId: payload.storeId,
+      });
+      if (!storeParticipating) {
         continue;
       }
 

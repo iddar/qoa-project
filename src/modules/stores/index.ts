@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm/sql';
 import { authGuard, authPlugin } from '../../app/plugins/auth';
@@ -6,8 +6,9 @@ import type { AuthContext } from '../../app/plugins/auth';
 import { parseLimit, parseCursor } from '../../app/utils/pagination';
 import { generateCode } from '../../app/utils/generateCode';
 import { db } from '../../db/client';
-import { stores } from '../../db/schema';
+import { stores, cpgs, cpgStoreRelations } from '../../db/schema';
 import { generateStoreQrPayload } from '../../services/stores';
+import { getRelatedCpgIdsForStore } from '../../services/store-cpg-relations';
 import type { StatusHandler } from '../../types/handlers';
 import { qrResponse, storeCreateRequest, storeListQuery, storeListResponse, storeResponse } from './model';
 
@@ -383,5 +384,74 @@ export const storesModule = new Elysia({
       detail: {
         summary: 'Obtener payload de registro',
       },
+    },
+  )
+  // ========== STORE-FACING: GET RELATED CPGs ==========
+  .get(
+    '/:storeId/cpgs',
+    async ({ auth, params, status }: { auth: AuthContext | null; params: { storeId: string }; status: StatusHandler }) => {
+      if (!auth) {
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+      }
+
+      // Allow store operator or CPG admin viewing their stores
+      const isStoreOperator = (auth.type === 'jwt' || auth.type === 'dev') && 
+        (auth.role === 'store_admin' || auth.role === 'store_staff') && 
+        auth.tenantType === 'store' && auth.tenantId === params.storeId;
+      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && auth.role === 'cpg_admin' && auth.tenantType === 'cpg';
+
+      if (!isStoreOperator && !isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para ver CPGs de esta tienda' } });
+      }
+
+      const relatedCpgIds = await getRelatedCpgIdsForStore(params.storeId);
+
+      if (relatedCpgIds.length === 0) {
+        return { data: [] };
+      }
+
+      const rows = (await db
+        .select({
+          id: cpgs.id,
+          name: cpgs.name,
+          status: cpgs.status,
+          firstActivityAt: cpgStoreRelations.firstActivityAt,
+          lastActivityAt: cpgStoreRelations.lastActivityAt,
+        })
+        .from(cpgs)
+        .innerJoin(cpgStoreRelations, eq(cpgs.id, cpgStoreRelations.cpgId))
+        .where(eq(cpgStoreRelations.storeId, params.storeId))
+        .orderBy(sql`${cpgStoreRelations.lastActivityAt} DESC NULLS LAST`)) as Array<{
+          id: string;
+          name: string;
+          status: string;
+          firstActivityAt: Date | null;
+          lastActivityAt: Date | null;
+        }>;
+
+      return {
+        data: rows.map(row => ({
+          id: row.id,
+          name: row.name,
+          status: row.status,
+          firstActivityAt: row.firstActivityAt?.toISOString() ?? undefined,
+          lastActivityAt: row.lastActivityAt?.toISOString() ?? undefined,
+        })),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff', 'cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
+      response: {
+        200: t.Object({
+          data: t.Array(t.Object({
+            id: t.String(),
+            name: t.String(),
+            status: t.String(),
+            firstActivityAt: t.Optional(t.String()),
+            lastActivityAt: t.Optional(t.String()),
+          })),
+        }),
+      },
+      detail: { summary: 'Listar CPGs relacionados con una tienda' },
     },
   );

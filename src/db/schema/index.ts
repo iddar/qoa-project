@@ -7,6 +7,8 @@ export * from './cards';
 export * from './campaigns';
 export * from './campaign-tiers';
 export * from './campaign-subscriptions';
+export * from './campaign-store-enrollments';
+export * from './cpg-store-relations';
 export * from './transactions';
 export * from './catalog';
 export * from './loyalty';

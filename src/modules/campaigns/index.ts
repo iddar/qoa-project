@@ -13,7 +13,10 @@ import {
   campaignSubscriptions,
   campaigns,
   campaignTiers,
+  campaignStoreEnrollments,
+  cpgStoreRelations,
   products,
+  stores,
   tierBenefits,
 } from '../../db/schema';
 import type { StatusHandler } from '../../types/handlers';
@@ -41,7 +44,12 @@ import {
   campaignResponse,
   campaignReviewRequest,
   campaignUpdateRequest,
+  campaignStoreTargetRequest,
+  campaignStoreEnrollRequest,
+  campaignStoreListResponse,
 } from './model';
+import { isStoreVisibleForCampaign, getStoreEnrollmentForCampaign, isStoreParticipatingInCampaign } from '../../services/campaign-store-access';
+import { getRelatedCpgIdsForStore, touchStoreCpgRelations } from '../../services/store-cpg-relations';
 
 const allowedRoles = ['cpg_admin', 'qoa_support', 'qoa_admin'] as const;
 
@@ -2640,5 +2648,300 @@ export const campaignsModule = new Elysia({
       detail: {
         summary: 'Listar auditoría de campaña',
       },
+    },
+  )
+  // ========== STORE TARGETING / ENROLLMENT ==========
+  .get(
+    '/:campaignId/stores',
+    async ({ auth, params, query, status }: CampaignParamsContext & { query: { limit?: string; cursor?: string; status?: string } }) => {
+      if (!auth) {
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, { error: { code: 'CAMPAIGN_NOT_FOUND', message: 'Campaña no encontrada' } });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para esta campaña' } });
+      }
+
+      const limit = parseLimit(query.limit ?? '50');
+      const cursorDate = parseCursor(query.cursor);
+      const conditions = [eq(campaignStoreEnrollments.campaignId, params.campaignId)];
+
+      if (query.status) {
+        conditions.push(eq(campaignStoreEnrollments.status, query.status as 'visible' | 'invited' | 'enrolled' | 'declined' | 'removed' | 'suspended'));
+      }
+      if (cursorDate) {
+        conditions.push(lt(campaignStoreEnrollments.updatedAt, cursorDate));
+      }
+
+      const rows = (await db
+        .select({
+          id: campaignStoreEnrollments.id,
+          storeId: campaignStoreEnrollments.storeId,
+          status: campaignStoreEnrollments.status,
+          visibilitySource: campaignStoreEnrollments.visibilitySource,
+          enrollmentSource: campaignStoreEnrollments.enrollmentSource,
+          invitedAt: campaignStoreEnrollments.invitedAt,
+          enrolledAt: campaignStoreEnrollments.enrolledAt,
+          updatedAt: campaignStoreEnrollments.updatedAt,
+          name: stores.name,
+          code: stores.code,
+          neighborhood: stores.neighborhood,
+          city: stores.city,
+          state: stores.state,
+        })
+        .from(campaignStoreEnrollments)
+        .innerJoin(stores, eq(campaignStoreEnrollments.storeId, stores.id))
+        .where(and(...conditions))
+        .orderBy(desc(campaignStoreEnrollments.updatedAt), desc(campaignStoreEnrollments.id))
+        .limit(limit + 1)) as Array<{
+          id: string;
+          storeId: string;
+          status: string;
+          visibilitySource: string;
+          enrollmentSource: string | null;
+          invitedAt: Date | null;
+          enrolledAt: Date | null;
+          updatedAt: Date;
+          name: string;
+          code: string;
+          neighborhood: string | null;
+          city: string | null;
+          state: string | null;
+        }>;
+
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const nextCursor = hasMore ? items[items.length - 1]?.updatedAt.toISOString() : null;
+
+      return {
+        data: items.map((row) => ({
+          storeId: row.storeId,
+          storeName: row.name,
+          storeCode: row.code,
+          neighborhood: row.neighborhood ?? undefined,
+          city: row.city ?? undefined,
+          state: row.state ?? undefined,
+          status: row.status,
+          visibilitySource: row.visibilitySource,
+          enrollmentSource: row.enrollmentSource ?? undefined,
+          invitedAt: row.invitedAt?.toISOString() ?? undefined,
+          enrolledAt: row.enrolledAt?.toISOString() ?? undefined,
+        })),
+        pagination: { hasMore, nextCursor: nextCursor ?? undefined },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: allowedRoles }),
+      response: { 200: campaignStoreListResponse },
+      detail: { summary: 'Listar tiendas de campaña' },
+    },
+  )
+  .post(
+    '/:campaignId/stores/target',
+    async ({ auth, params, body, status }: CampaignParamsContext & { body: { storeIds: string[]; status?: string; source?: string } }) => {
+      if (!auth) {
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, { error: { code: 'CAMPAIGN_NOT_FOUND', message: 'Campaña no encontrada' } });
+      }
+
+      if (!canAccessCampaign(auth, campaign)) {
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para esta campaña' } });
+      }
+
+      if (!campaign.cpgId) {
+        return status(400, { error: { code: 'INVALID_CAMPAIGN', message: 'La campaña no tiene CPG asociado' } });
+      }
+
+      if (!body.storeIds || body.storeIds.length === 0) {
+        return status(400, { error: { code: 'INVALID_ARGUMENT', message: 'Debes proporcionar al menos un storeId' } });
+      }
+
+      const actorUserId = resolveActorUserId(auth);
+      const now = new Date();
+      const targetStatus = body.status ?? 'visible';
+      const source = body.source ?? 'manual';
+
+      for (const storeId of body.storeIds) {
+        const [existing] = (await db
+          .select({ id: campaignStoreEnrollments.id })
+          .from(campaignStoreEnrollments)
+          .where(and(eq(campaignStoreEnrollments.campaignId, params.campaignId), eq(campaignStoreEnrollments.storeId, storeId)))
+          .limit(1)) as Array<{ id: string }>;
+
+        if (existing) {
+          await db
+            .update(campaignStoreEnrollments)
+            .set({
+              status: targetStatus as 'visible' | 'invited' | 'enrolled',
+              visibilitySource: source as 'manual' | 'zone' | 'import',
+              invitedAt: targetStatus === 'invited' ? now : existing ? undefined : null,
+              updatedAt: now,
+            })
+            .where(eq(campaignStoreEnrollments.id, existing.id));
+        } else {
+          await db.insert(campaignStoreEnrollments).values({
+            campaignId: params.campaignId,
+            storeId,
+            status: targetStatus as 'visible' | 'invited' | 'enrolled',
+            visibilitySource: source as 'manual' | 'zone' | 'import',
+            invitedAt: targetStatus === 'invited' ? now : null,
+            invitedByUserId: actorUserId,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      return { data: { success: true, count: body.storeIds.length } };
+    },
+    {
+      beforeHandle: authGuard({ roles: allowedRoles }),
+      body: campaignStoreTargetRequest,
+      detail: { summary: 'Agregar tiendas a campaña' },
+    },
+  )
+  .post(
+    '/:campaignId/stores/:storeId/enroll',
+    async ({ auth, params, body, status }: CampaignParamsContext & { body: { status: string } }) => {
+      if (!auth) {
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, { error: { code: 'CAMPAIGN_NOT_FOUND', message: 'Campaña no encontrada' } });
+      }
+
+      // Allow both CPG admin (canAccessCampaign) and store operator
+      const isCpgAccess = canAccessCampaign(auth, campaign);
+      const isStoreOperator = auth.type === 'jwt' || auth.type === 'dev';
+      const isStoreAccess = isStoreOperator && (auth.role === 'store_admin' || auth.role === 'store_staff') && auth.tenantType === 'store' && auth.tenantId === params.storeId;
+
+      if (!isCpgAccess && !isStoreAccess) {
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para esta campaña/tienda' } });
+      }
+
+      const actorUserId = resolveActorUserId(auth);
+      const now = new Date();
+      const targetStatus = body.status as 'enrolled' | 'declined' | 'visible' | 'invited' | 'removed' | 'suspended';
+
+      const [existing] = (await db
+        .select()
+        .from(campaignStoreEnrollments)
+        .where(and(eq(campaignStoreEnrollments.campaignId, params.campaignId), eq(campaignStoreEnrollments.storeId, params.storeId)))
+        .limit(1)) as Array<{
+          id: string;
+          status: string;
+        }>;
+
+      if (existing) {
+        await db
+          .update(campaignStoreEnrollments)
+          .set({
+            status: targetStatus,
+            enrolledAt: targetStatus === 'enrolled' ? now : null,
+            declinedAt: targetStatus === 'declined' ? now : null,
+            removedAt: targetStatus === 'removed' ? now : null,
+            enrolledByUserId: targetStatus === 'enrolled' ? actorUserId : null,
+            updatedAt: now,
+          })
+          .where(eq(campaignStoreEnrollments.id, existing.id));
+      } else {
+        // Create new enrollment if doesn't exist
+        await db.insert(campaignStoreEnrollments).values({
+          campaignId: params.campaignId,
+          storeId: params.storeId,
+          status: targetStatus,
+          visibilitySource: 'manual',
+          enrolledAt: targetStatus === 'enrolled' ? now : null,
+          declinedAt: targetStatus === 'declined' ? now : null,
+          enrolledByUserId: targetStatus === 'enrolled' ? actorUserId : null,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      return { data: { success: true, status: targetStatus } };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...allowedRoles, 'store_admin', 'store_staff'], allowApiKey: true }),
+      body: campaignStoreEnrollRequest,
+      detail: { summary: 'Enrolar o actualizar tienda en campaña' },
+    },
+  )
+  // ========== STORE-FACING: GET VISIBLE CAMPAIGNS FOR STORE ==========
+  .get(
+    '/stores/:storeId/campaigns',
+    async ({ auth, params, query, status }: { auth: AuthContext | null; params: { storeId: string }; query: { limit?: string; cursor?: string }; status: StatusHandler }) => {
+      if (!auth) {
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+      }
+
+      // Allow store operator or CPG admin viewing their stores
+      const isStoreOperator = (auth.type === 'jwt' || auth.type === 'dev') && 
+        (auth.role === 'store_admin' || auth.role === 'store_staff') && 
+        auth.tenantType === 'store' && auth.tenantId === params.storeId;
+      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && auth.role === 'cpg_admin' && auth.tenantType === 'cpg';
+
+      if (!isStoreOperator && !isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para ver campañas de esta tienda' } });
+      }
+
+      const limit = parseLimit(query.limit ?? '50');
+      const cursorDate = parseCursor(query.cursor);
+
+      // Get related CPG IDs for this store
+      const relatedCpgIds = await getRelatedCpgIdsForStore(params.storeId);
+      
+      if (relatedCpgIds.length === 0) {
+        return { data: [], pagination: { hasMore: false } };
+      }
+
+      const conditions = [
+        eq(campaigns.status, 'active'),
+      ];
+      if (cursorDate) {
+        conditions.push(lt(campaigns.createdAt, cursorDate));
+      }
+
+      const rows = (await db
+        .select()
+        .from(campaigns)
+        .where(and(...conditions, ...relatedCpgIds.map(cpgId => eq(campaigns.cpgId, cpgId))))
+        .orderBy(desc(campaigns.createdAt), desc(campaigns.id))
+        .limit(limit + 1)) as CampaignRow[];
+
+      // Filter to only visible campaigns
+      const visibleCampaigns: CampaignRow[] = [];
+      for (const campaign of rows) {
+        const isVisible = await isStoreVisibleForCampaign({ campaignId: campaign.id, storeId: params.storeId });
+        if (isVisible) {
+          visibleCampaigns.push(campaign);
+        }
+        if (visibleCampaigns.length >= limit) break;
+      }
+
+      const hasMore = visibleCampaigns.length > limit;
+      const items = hasMore ? visibleCampaigns.slice(0, limit) : visibleCampaigns;
+      const nextCursor = hasMore ? items[items.length - 1]?.createdAt.toISOString() : null;
+
+      return {
+        data: items.map(item => serializeCampaign(item)),
+        pagination: { hasMore, nextCursor: nextCursor ?? undefined },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff', 'cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
+      response: { 200: campaignListResponse },
+      detail: { summary: 'Listar campañas visibles para una tienda' },
     },
   );

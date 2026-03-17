@@ -17,6 +17,23 @@ export const campaignEnrollmentModeSchema = t.Union([
   t.Literal('opt_in'),
   t.Literal('system_universal'),
 ]);
+export const campaignStoreAccessModeSchema = t.Union([
+  t.Literal('all_related_stores'),
+  t.Literal('selected_stores'),
+]);
+export const campaignStoreEnrollmentModeSchema = t.Union([
+  t.Literal('store_opt_in'),
+  t.Literal('cpg_managed'),
+  t.Literal('auto_enroll'),
+]);
+export const campaignStoreEnrollmentStatusSchema = t.Union([
+  t.Literal('visible'),
+  t.Literal('invited'),
+  t.Literal('enrolled'),
+  t.Literal('declined'),
+  t.Literal('removed'),
+  t.Literal('suspended'),
+]);
 export const campaignAccumulationModeSchema = t.Union([t.Literal('count'), t.Literal('amount')]);
 
 export const tierWindowUnitSchema = t.Union([t.Literal('day'), t.Literal('month'), t.Literal('year')]);
@@ -59,6 +76,8 @@ export const campaignSchema = t.Object({
   cpgId: t.Optional(t.String()),
   status: campaignStatusSchema,
   enrollmentMode: campaignEnrollmentModeSchema,
+  storeAccessMode: campaignStoreAccessModeSchema,
+  storeEnrollmentMode: campaignStoreEnrollmentModeSchema,
   accumulationMode: campaignAccumulationModeSchema,
   startsAt: t.Optional(t.String()),
   endsAt: t.Optional(t.String()),
@@ -160,6 +179,8 @@ export const campaignCreateRequest = t.Object({
   key: t.Optional(t.String({ minLength: 3, maxLength: 80 })),
   cpgId: t.Optional(t.String({ format: 'uuid' })),
   enrollmentMode: t.Optional(campaignEnrollmentModeSchema),
+  storeAccessMode: t.Optional(campaignStoreAccessModeSchema),
+  storeEnrollmentMode: t.Optional(campaignStoreEnrollmentModeSchema),
   accumulationMode: t.Optional(campaignAccumulationModeSchema),
   startsAt: t.Optional(t.String()),
   endsAt: t.Optional(t.String()),
@@ -357,4 +378,35 @@ export const campaignAccumulationRuleResponse = t.Object({
 
 export const campaignAccumulationRuleListResponse = t.Object({
   data: t.Array(campaignAccumulationRuleSchema),
+});
+
+// Store targeting / enrollment schemas
+export const campaignStoreTargetRequest = t.Object({
+  storeIds: t.Array(t.String({ format: 'uuid' })),
+  status: t.Optional(campaignStoreEnrollmentStatusSchema),
+  source: t.Optional(t.Union([t.Literal('manual'), t.Literal('zone'), t.Literal('import')])),
+});
+
+export const campaignStoreEnrollRequest = t.Object({
+  storeId: t.String({ format: 'uuid' }),
+  status: campaignStoreEnrollmentStatusSchema,
+});
+
+export const campaignStoreAssignmentSchema = t.Object({
+  storeId: t.String(),
+  storeName: t.String(),
+  storeCode: t.String(),
+  neighborhood: t.Optional(t.String()),
+  city: t.Optional(t.String()),
+  state: t.Optional(t.String()),
+  status: campaignStoreEnrollmentStatusSchema,
+  visibilitySource: t.Optional(t.String()),
+  enrollmentSource: t.Optional(t.String()),
+  enrolledAt: t.Optional(t.String()),
+  invitedAt: t.Optional(t.String()),
+});
+
+export const campaignStoreListResponse = t.Object({
+  data: t.Array(campaignStoreAssignmentSchema),
+  pagination: paginationSchema,
 });
