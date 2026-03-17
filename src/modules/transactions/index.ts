@@ -343,7 +343,7 @@ const resolveCatalogItems = async (productRefs: string[]) => {
     })
     .from(products)
     .leftJoin(brands, eq(products.brandId, brands.id))
-    .where(or(...productRefs.map(ref => eq(products.id, ref)), ...productRefs.map(ref => eq(products.sku, ref))))) as Array<{
+    .where(or(...productRefs.map(ref => eq(products.id, ref)), ...productRefs.map(ref => eq(products.sku, ref)))) as Array<{
       id: string;
       sku: string;
       brandId: string;
