@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { eq } from 'drizzle-orm';
+import { and, eq, lt } from 'drizzle-orm';
 import { sql } from 'drizzle-orm/sql';
 import { authGuard, authPlugin } from '../../app/plugins/auth';
 import type { AuthContext } from '../../app/plugins/auth';
@@ -8,7 +8,7 @@ import { generateCode } from '../../app/utils/generateCode';
 import { db } from '../../db/client';
 import { stores, cpgs, cpgStoreRelations } from '../../db/schema';
 import { generateStoreQrPayload } from '../../services/stores';
-import { getRelatedCpgIdsForStore } from '../../services/store-cpg-relations';
+import { getRelatedCpgIdsForStore, getRelatedStoreIdsForCpg, touchStoreCpgRelations } from '../../services/store-cpg-relations';
 import type { StatusHandler } from '../../types/handlers';
 import { qrResponse, storeCreateRequest, storeListQuery, storeListResponse, storeResponse } from './model';
 
@@ -453,5 +453,219 @@ export const storesModule = new Elysia({
         }),
       },
       detail: { summary: 'Listar CPGs relacionados con una tienda' },
+    },
+  )
+  // ========== CPG-FACING: MANAGE CPG-STORE RELATIONS ==========
+  .get(
+    '/cpgs/:cpgId/stores',
+    async ({ auth, params, query, status }: { auth: AuthContext | null; params: { cpgId: string }; query: { limit?: string; cursor?: string; status?: string }; status: StatusHandler }) => {
+      if (!auth) {
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+      }
+
+      // Allow CPG admin for their CPG or QOA
+      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && 
+        auth.role === 'cpg_admin' && auth.tenantType === 'cpg' && auth.tenantId === params.cpgId;
+
+      if (!isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para ver stores de este CPG' } });
+      }
+
+      const limit = parseLimit(query.limit ?? '50');
+      const cursorDate = parseCursor(query.cursor);
+      const conditions = [eq(cpgStoreRelations.cpgId, params.cpgId)];
+
+      if (query.status) {
+        conditions.push(eq(cpgStoreRelations.status, query.status as 'active' | 'inactive'));
+      }
+      if (cursorDate) {
+        conditions.push(lt(cpgStoreRelations.updatedAt, cursorDate));
+      }
+
+      const rows = (await db
+        .select({
+          id: cpgStoreRelations.id,
+          storeId: cpgStoreRelations.storeId,
+          status: cpgStoreRelations.status,
+          source: cpgStoreRelations.source,
+          firstActivityAt: cpgStoreRelations.firstActivityAt,
+          lastActivityAt: cpgStoreRelations.lastActivityAt,
+          createdAt: cpgStoreRelations.createdAt,
+          name: stores.name,
+          code: stores.code,
+          neighborhood: stores.neighborhood,
+          city: stores.city,
+          state: stores.state,
+        })
+        .from(cpgStoreRelations)
+        .innerJoin(stores, eq(cpgStoreRelations.storeId, stores.id))
+        .where(and(...conditions))
+        .orderBy(desc(cpgStoreRelations.updatedAt), desc(cpgStoreRelations.id))
+        .limit(limit + 1)) as Array<{
+          id: string;
+          storeId: string;
+          status: string;
+          source: string;
+          firstActivityAt: Date | null;
+          lastActivityAt: Date | null;
+          createdAt: Date;
+          name: string;
+          code: string;
+          neighborhood: string | null;
+          city: string | null;
+          state: string | null;
+        }>;
+
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const nextCursor = hasMore ? items[items.length - 1]?.updatedAt.toISOString() : null;
+
+      return {
+        data: items.map(row => ({
+          storeId: row.storeId,
+          storeName: row.name,
+          storeCode: row.code,
+          neighborhood: row.neighborhood ?? undefined,
+          city: row.city ?? undefined,
+          state: row.state ?? undefined,
+          status: row.status,
+          source: row.source,
+          firstActivityAt: row.firstActivityAt?.toISOString() ?? undefined,
+          lastActivityAt: row.lastActivityAt?.toISOString() ?? undefined,
+        })),
+        pagination: { hasMore, nextCursor: nextCursor ?? undefined },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
+      response: {
+        200: t.Object({
+          data: t.Array(t.Object({
+            storeId: t.String(),
+            storeName: t.String(),
+            storeCode: t.String(),
+            neighborhood: t.Optional(t.String()),
+            city: t.Optional(t.String()),
+            state: t.Optional(t.String()),
+            status: t.String(),
+            source: t.String(),
+            firstActivityAt: t.Optional(t.String()),
+            lastActivityAt: t.Optional(t.String()),
+          })),
+          pagination: t.Object({
+            hasMore: t.Boolean(),
+            nextCursor: t.Optional(t.String()),
+          }),
+        }),
+      },
+      detail: { summary: 'Listar tiendas relacionadas con un CPG' },
+    },
+  )
+  .post(
+    '/cpgs/:cpgId/stores',
+    async ({ auth, params, body, status }: { auth: AuthContext | null; params: { cpgId: string }; body: { storeIds: string[] }; status: StatusHandler }) => {
+      if (!auth) {
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+      }
+
+      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && 
+        auth.role === 'cpg_admin' && auth.tenantType === 'cpg' && auth.tenantId === params.cpgId;
+
+      if (!isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para agregar stores a este CPG' } });
+      }
+
+      if (!body.storeIds || body.storeIds.length === 0) {
+        return status(400, { error: { code: 'INVALID_ARGUMENT', message: 'Debes proporcionar al menos un storeId' } });
+      }
+
+      const now = new Date();
+      const results: Array<{ storeId: string; success: boolean }> = [];
+
+      for (const storeId of body.storeIds) {
+        try {
+          // Check if relation already exists
+          const [existing] = await db
+            .select({ id: cpgStoreRelations.id })
+            .from(cpgStoreRelations)
+            .where(and(eq(cpgStoreRelations.cpgId, params.cpgId), eq(cpgStoreRelations.storeId, storeId)))
+            .limit(1);
+
+          if (existing) {
+            // Reactivate if inactive
+            await db
+              .update(cpgStoreRelations)
+              .set({ status: 'active', source: 'manual', updatedAt: now })
+              .where(eq(cpgStoreRelations.id, existing.id));
+            results.push({ storeId, success: true });
+          } else {
+            // Create new relation
+            await db.insert(cpgStoreRelations).values({
+              cpgId: params.cpgId,
+              storeId,
+              status: 'active',
+              source: 'manual',
+              createdAt: now,
+              updatedAt: now,
+            });
+            results.push({ storeId, success: true });
+          }
+        } catch {
+          results.push({ storeId, success: false });
+        }
+      }
+
+      return {
+        data: {
+          success: true,
+          created: results.filter(r => r.success).length,
+          failed: results.filter(r => !r.success).length,
+          results,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
+      body: t.Object({
+        storeIds: t.Array(t.String({ format: 'uuid' })),
+      }),
+      detail: { summary: 'Agregar tiendas a un CPG (relación manual)' },
+    },
+  )
+  .delete(
+    '/cpgs/:cpgId/stores/:storeId',
+    async ({ auth, params, status }: { auth: AuthContext | null; params: { cpgId: string; storeId: string }; status: StatusHandler }) => {
+      if (!auth) {
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+      }
+
+      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && 
+        auth.role === 'cpg_admin' && auth.tenantType === 'cpg' && auth.tenantId === params.cpgId;
+
+      if (!isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para eliminar stores de este CPG' } });
+      }
+
+      const [existing] = await db
+        .select({ id: cpgStoreRelations.id })
+        .from(cpgStoreRelations)
+        .where(and(eq(cpgStoreRelations.cpgId, params.cpgId), eq(cpgStoreRelations.storeId, params.storeId)))
+        .limit(1);
+
+      if (!existing) {
+        return status(404, { error: { code: 'NOT_FOUND', message: 'Relación no encontrada' } });
+      }
+
+      // Soft delete - set status to inactive
+      await db
+        .update(cpgStoreRelations)
+        .set({ status: 'inactive', updatedAt: new Date() })
+        .where(eq(cpgStoreRelations.id, existing.id));
+
+      return { data: { success: true } };
+    },
+    {
+      beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
+      detail: { summary: 'Eliminar tienda de un CPG (relación)' },
     },
   );
