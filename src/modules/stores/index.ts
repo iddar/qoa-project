@@ -1,18 +1,28 @@
-import { Elysia, t } from 'elysia';
-import { and, eq, lt } from 'drizzle-orm';
-import { sql } from 'drizzle-orm/sql';
-import { authGuard, authPlugin } from '../../app/plugins/auth';
-import type { AuthContext } from '../../app/plugins/auth';
-import { parseLimit, parseCursor } from '../../app/utils/pagination';
-import { generateCode } from '../../app/utils/generateCode';
-import { db } from '../../db/client';
-import { stores, cpgs, cpgStoreRelations } from '../../db/schema';
-import { generateStoreQrPayload } from '../../services/stores';
-import { getRelatedCpgIdsForStore, getRelatedStoreIdsForCpg, touchStoreCpgRelations } from '../../services/store-cpg-relations';
-import type { StatusHandler } from '../../types/handlers';
-import { qrResponse, storeCreateRequest, storeListQuery, storeListResponse, storeResponse } from './model';
+import { Elysia, t } from "elysia";
+import { and, desc, eq, lt } from "drizzle-orm";
+import { sql } from "drizzle-orm/sql";
+import { authGuard, authPlugin } from "../../app/plugins/auth";
+import type { AuthContext } from "../../app/plugins/auth";
+import { parseLimit, parseCursor } from "../../app/utils/pagination";
+import { generateCode } from "../../app/utils/generateCode";
+import { db } from "../../db/client";
+import { stores, cpgs, cpgStoreRelations } from "../../db/schema";
+import { generateStoreQrPayload } from "../../services/stores";
+import {
+  getRelatedCpgIdsForStore,
+  getRelatedStoreIdsForCpg,
+  touchStoreCpgRelations,
+} from "../../services/store-cpg-relations";
+import type { StatusHandler } from "../../types/handlers";
+import {
+  qrResponse,
+  storeCreateRequest,
+  storeListQuery,
+  storeListResponse,
+  storeResponse,
+} from "./model";
 
-const generateStoreCode = () => generateCode('sto', 20);
+const generateStoreCode = () => generateCode("sto", 20);
 
 type StoreRow = {
   id: string;
@@ -100,23 +110,23 @@ type StoreParamsContext = {
 };
 
 const isStoreOperator = (auth: AuthContext) => {
-  if (auth.type !== 'jwt' && auth.type !== 'dev') {
+  if (auth.type !== "jwt" && auth.type !== "dev") {
     return false;
   }
 
-  return auth.role === 'store_admin' || auth.role === 'store_staff';
+  return auth.role === "store_admin" || auth.role === "store_staff";
 };
 
 const canAccessStore = (auth: AuthContext, storeId: string) => {
-  if (auth.type === 'jwt' || auth.type === 'dev') {
+  if (auth.type === "jwt" || auth.type === "dev") {
     if (!isStoreOperator(auth)) {
       return true;
     }
 
-    return auth.tenantType === 'store' && auth.tenantId === storeId;
+    return auth.tenantType === "store" && auth.tenantId === storeId;
   }
 
-  return auth.tenantType === 'store' && auth.tenantId === storeId;
+  return auth.tenantType === "store" && auth.tenantId === storeId;
 };
 
 const serializeStore = (store: StoreRow) => ({
@@ -141,20 +151,20 @@ const serializeStore = (store: StoreRow) => ({
 });
 
 export const storesModule = new Elysia({
-  prefix: '/stores',
+  prefix: "/stores",
   detail: {
-    tags: ['Stores'],
+    tags: ["Stores"],
   },
 })
   .use(authPlugin)
   .get(
-    '/',
+    "/",
     async ({ auth, query, status }: StoreListContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: 'UNAUTHORIZED',
-            message: 'Autenticación requerida',
+            code: "UNAUTHORIZED",
+            message: "Autenticación requerida",
           },
         });
       }
@@ -163,8 +173,8 @@ export const storesModule = new Elysia({
       if (query.cursor && !cursorDate) {
         return status(400, {
           error: {
-            code: 'INVALID_CURSOR',
-            message: 'Cursor inválido',
+            code: "INVALID_CURSOR",
+            message: "Cursor inválido",
           },
         });
       }
@@ -178,11 +188,11 @@ export const storesModule = new Elysia({
       }
 
       if (isStoreOperator(auth)) {
-        if (auth.tenantType !== 'store' || !auth.tenantId) {
+        if (auth.tenantType !== "store" || !auth.tenantId) {
           return status(403, {
             error: {
-              code: 'FORBIDDEN',
-              message: 'Usuario de tienda sin tenant válido',
+              code: "FORBIDDEN",
+              message: "Usuario de tienda sin tenant válido",
             },
           });
         }
@@ -243,12 +253,12 @@ export const storesModule = new Elysia({
         200: storeListResponse,
       },
       detail: {
-        summary: 'Listar tiendas',
+        summary: "Listar tiendas",
       },
     },
   )
   .post(
-    '/',
+    "/",
     async ({ body, status }: StoreCreateContext) => {
       const code = generateStoreCode();
       const [created] = (await db
@@ -275,8 +285,8 @@ export const storesModule = new Elysia({
       if (!created) {
         return status(500, {
           error: {
-            code: 'STORE_CREATE_FAILED',
-            message: 'No se pudo crear la tienda',
+            code: "STORE_CREATE_FAILED",
+            message: "No se pudo crear la tienda",
           },
         });
       }
@@ -292,18 +302,18 @@ export const storesModule = new Elysia({
         201: storeResponse,
       },
       detail: {
-        summary: 'Crear tienda',
+        summary: "Crear tienda",
       },
     },
   )
   .get(
-    '/:storeId',
+    "/:storeId",
     async ({ auth, params, status }: StoreParamsContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: 'UNAUTHORIZED',
-            message: 'Autenticación requerida',
+            code: "UNAUTHORIZED",
+            message: "Autenticación requerida",
           },
         });
       }
@@ -311,18 +321,21 @@ export const storesModule = new Elysia({
       if (!canAccessStore(auth, params.storeId)) {
         return status(403, {
           error: {
-            code: 'FORBIDDEN',
-            message: 'No puedes acceder a esta tienda',
+            code: "FORBIDDEN",
+            message: "No puedes acceder a esta tienda",
           },
         });
       }
 
-      const [store] = (await db.select().from(stores).where(eq(stores.id, params.storeId))) as StoreRow[];
+      const [store] = (await db
+        .select()
+        .from(stores)
+        .where(eq(stores.id, params.storeId))) as StoreRow[];
       if (!store) {
         return status(404, {
           error: {
-            code: 'STORE_NOT_FOUND',
-            message: 'Tienda no encontrada',
+            code: "STORE_NOT_FOUND",
+            message: "Tienda no encontrada",
           },
         });
       }
@@ -337,18 +350,18 @@ export const storesModule = new Elysia({
         200: storeResponse,
       },
       detail: {
-        summary: 'Obtener tienda',
+        summary: "Obtener tienda",
       },
     },
   )
   .get(
-    '/:storeId/qr',
+    "/:storeId/qr",
     async ({ auth, params, status }: StoreParamsContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: 'UNAUTHORIZED',
-            message: 'Autenticación requerida',
+            code: "UNAUTHORIZED",
+            message: "Autenticación requerida",
           },
         });
       }
@@ -356,18 +369,21 @@ export const storesModule = new Elysia({
       if (!canAccessStore(auth, params.storeId)) {
         return status(403, {
           error: {
-            code: 'FORBIDDEN',
-            message: 'No puedes acceder a esta tienda',
+            code: "FORBIDDEN",
+            message: "No puedes acceder a esta tienda",
           },
         });
       }
 
-      const [store] = (await db.select().from(stores).where(eq(stores.id, params.storeId))) as StoreRow[];
+      const [store] = (await db
+        .select()
+        .from(stores)
+        .where(eq(stores.id, params.storeId))) as StoreRow[];
       if (!store) {
         return status(404, {
           error: {
-            code: 'STORE_NOT_FOUND',
-            message: 'Tienda no encontrada',
+            code: "STORE_NOT_FOUND",
+            message: "Tienda no encontrada",
           },
         });
       }
@@ -382,26 +398,45 @@ export const storesModule = new Elysia({
         200: qrResponse,
       },
       detail: {
-        summary: 'Obtener payload de registro',
+        summary: "Obtener payload de registro",
       },
     },
   )
   // ========== STORE-FACING: GET RELATED CPGs ==========
   .get(
-    '/:storeId/cpgs',
-    async ({ auth, params, status }: { auth: AuthContext | null; params: { storeId: string }; status: StatusHandler }) => {
+    "/:storeId/cpgs",
+    async ({
+      auth,
+      params,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      status: StatusHandler;
+    }) => {
       if (!auth) {
-        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
       // Allow store operator or CPG admin viewing their stores
-      const isStoreOperator = (auth.type === 'jwt' || auth.type === 'dev') && 
-        (auth.role === 'store_admin' || auth.role === 'store_staff') && 
-        auth.tenantType === 'store' && auth.tenantId === params.storeId;
-      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && auth.role === 'cpg_admin' && auth.tenantType === 'cpg';
+      const isStoreOperator =
+        (auth.type === "jwt" || auth.type === "dev") &&
+        (auth.role === "store_admin" || auth.role === "store_staff") &&
+        auth.tenantType === "store" &&
+        auth.tenantId === params.storeId;
+      const isCpgAccess =
+        (auth.type === "jwt" || auth.type === "dev") &&
+        auth.role === "cpg_admin" &&
+        auth.tenantType === "cpg";
 
-      if (!isStoreOperator && !isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
-        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para ver CPGs de esta tienda' } });
+      if (
+        !isStoreOperator &&
+        !isCpgAccess &&
+        !(auth.role === "qoa_admin" || auth.role === "qoa_support")
+      ) {
+        return status(403, {
+          error: { code: "FORBIDDEN", message: "No tienes permisos para ver CPGs de esta tienda" },
+        });
       }
 
       const relatedCpgIds = await getRelatedCpgIdsForStore(params.storeId);
@@ -422,15 +457,15 @@ export const storesModule = new Elysia({
         .innerJoin(cpgStoreRelations, eq(cpgs.id, cpgStoreRelations.cpgId))
         .where(eq(cpgStoreRelations.storeId, params.storeId))
         .orderBy(sql`${cpgStoreRelations.lastActivityAt} DESC NULLS LAST`)) as Array<{
-          id: string;
-          name: string;
-          status: string;
-          firstActivityAt: Date | null;
-          lastActivityAt: Date | null;
-        }>;
+        id: string;
+        name: string;
+        status: string;
+        firstActivityAt: Date | null;
+        lastActivityAt: Date | null;
+      }>;
 
       return {
-        data: rows.map(row => ({
+        data: rows.map((row) => ({
           id: row.id,
           name: row.name,
           status: row.status,
@@ -440,43 +475,63 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff', 'cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
+      beforeHandle: authGuard({
+        roles: ["store_admin", "store_staff", "cpg_admin", "qoa_admin", "qoa_support"],
+        allowApiKey: true,
+      }),
       response: {
         200: t.Object({
-          data: t.Array(t.Object({
-            id: t.String(),
-            name: t.String(),
-            status: t.String(),
-            firstActivityAt: t.Optional(t.String()),
-            lastActivityAt: t.Optional(t.String()),
-          })),
+          data: t.Array(
+            t.Object({
+              id: t.String(),
+              name: t.String(),
+              status: t.String(),
+              firstActivityAt: t.Optional(t.String()),
+              lastActivityAt: t.Optional(t.String()),
+            }),
+          ),
         }),
       },
-      detail: { summary: 'Listar CPGs relacionados con una tienda' },
+      detail: { summary: "Listar CPGs relacionados con una tienda" },
     },
   )
   // ========== CPG-FACING: MANAGE CPG-STORE RELATIONS ==========
   .get(
-    '/cpgs/:cpgId/stores',
-    async ({ auth, params, query, status }: { auth: AuthContext | null; params: { cpgId: string }; query: { limit?: string; cursor?: string; status?: string }; status: StatusHandler }) => {
+    "/cpgs/:cpgId/stores",
+    async ({
+      auth,
+      params,
+      query,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { cpgId: string };
+      query: { limit?: string; cursor?: string; status?: string };
+      status: StatusHandler;
+    }) => {
       if (!auth) {
-        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
       // Allow CPG admin for their CPG or QOA
-      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && 
-        auth.role === 'cpg_admin' && auth.tenantType === 'cpg' && auth.tenantId === params.cpgId;
+      const isCpgAccess =
+        (auth.type === "jwt" || auth.type === "dev") &&
+        auth.role === "cpg_admin" &&
+        auth.tenantType === "cpg" &&
+        auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
-        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para ver stores de este CPG' } });
+      if (!isCpgAccess && !(auth.role === "qoa_admin" || auth.role === "qoa_support")) {
+        return status(403, {
+          error: { code: "FORBIDDEN", message: "No tienes permisos para ver stores de este CPG" },
+        });
       }
 
-      const limit = parseLimit(query.limit ?? '50');
+      const limit = parseLimit(query.limit ?? "50");
       const cursorDate = parseCursor(query.cursor);
       const conditions = [eq(cpgStoreRelations.cpgId, params.cpgId)];
 
       if (query.status) {
-        conditions.push(eq(cpgStoreRelations.status, query.status as 'active' | 'inactive'));
+        conditions.push(eq(cpgStoreRelations.status, query.status as "active" | "inactive"));
       }
       if (cursorDate) {
         conditions.push(lt(cpgStoreRelations.updatedAt, cursorDate));
@@ -491,43 +546,60 @@ export const storesModule = new Elysia({
           firstActivityAt: cpgStoreRelations.firstActivityAt,
           lastActivityAt: cpgStoreRelations.lastActivityAt,
           createdAt: cpgStoreRelations.createdAt,
+          updatedAt: cpgStoreRelations.updatedAt,
           name: stores.name,
           code: stores.code,
           neighborhood: stores.neighborhood,
           city: stores.city,
           state: stores.state,
+          address: stores.address,
+          type: stores.type,
+          latitude: stores.latitude,
+          longitude: stores.longitude,
         })
         .from(cpgStoreRelations)
         .innerJoin(stores, eq(cpgStoreRelations.storeId, stores.id))
         .where(and(...conditions))
         .orderBy(desc(cpgStoreRelations.updatedAt), desc(cpgStoreRelations.id))
         .limit(limit + 1)) as Array<{
-          id: string;
-          storeId: string;
-          status: string;
-          source: string;
-          firstActivityAt: Date | null;
-          lastActivityAt: Date | null;
-          createdAt: Date;
-          name: string;
-          code: string;
-          neighborhood: string | null;
-          city: string | null;
-          state: string | null;
-        }>;
+        id: string;
+        storeId: string;
+        status: string;
+        source: string;
+        firstActivityAt: Date | null;
+        lastActivityAt: Date | null;
+        createdAt: Date;
+        updatedAt: Date | null;
+        name: string;
+        code: string;
+        neighborhood: string | null;
+        city: string | null;
+        state: string | null;
+        address: string | null;
+        type: string | null;
+        latitude: string | null;
+        longitude: string | null;
+      }>;
 
       const hasMore = rows.length > limit;
       const items = hasMore ? rows.slice(0, limit) : rows;
-      const nextCursor = hasMore ? items[items.length - 1]?.updatedAt.toISOString() : null;
+      const nextCursor =
+        hasMore && items[items.length - 1]?.updatedAt
+          ? items[items.length - 1]!.updatedAt!.toISOString()
+          : null;
 
       return {
-        data: items.map(row => ({
+        data: items.map((row) => ({
           storeId: row.storeId,
           storeName: row.name,
           storeCode: row.code,
           neighborhood: row.neighborhood ?? undefined,
           city: row.city ?? undefined,
           state: row.state ?? undefined,
+          address: row.address ?? undefined,
+          type: row.type ?? undefined,
+          latitude: row.latitude ? Number(row.latitude) : undefined,
+          longitude: row.longitude ? Number(row.longitude) : undefined,
           status: row.status,
           source: row.source,
           firstActivityAt: row.firstActivityAt?.toISOString() ?? undefined,
@@ -537,46 +609,75 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
+      beforeHandle: authGuard({
+        roles: ["cpg_admin", "qoa_admin", "qoa_support"],
+        allowApiKey: true,
+      }),
       response: {
         200: t.Object({
-          data: t.Array(t.Object({
-            storeId: t.String(),
-            storeName: t.String(),
-            storeCode: t.String(),
-            neighborhood: t.Optional(t.String()),
-            city: t.Optional(t.String()),
-            state: t.Optional(t.String()),
-            status: t.String(),
-            source: t.String(),
-            firstActivityAt: t.Optional(t.String()),
-            lastActivityAt: t.Optional(t.String()),
-          })),
+          data: t.Array(
+            t.Object({
+              storeId: t.String(),
+              storeName: t.String(),
+              storeCode: t.String(),
+              neighborhood: t.Optional(t.String()),
+              city: t.Optional(t.String()),
+              state: t.Optional(t.String()),
+              address: t.Optional(t.String()),
+              type: t.Optional(t.String()),
+              latitude: t.Optional(t.Number()),
+              longitude: t.Optional(t.Number()),
+              status: t.String(),
+              source: t.String(),
+              firstActivityAt: t.Optional(t.String()),
+              lastActivityAt: t.Optional(t.String()),
+            }),
+          ),
           pagination: t.Object({
             hasMore: t.Boolean(),
             nextCursor: t.Optional(t.String()),
           }),
         }),
       },
-      detail: { summary: 'Listar tiendas relacionadas con un CPG' },
+      detail: { summary: "Listar tiendas relacionadas con un CPG" },
     },
   )
   .post(
-    '/cpgs/:cpgId/stores',
-    async ({ auth, params, body, status }: { auth: AuthContext | null; params: { cpgId: string }; body: { storeIds: string[] }; status: StatusHandler }) => {
+    "/cpgs/:cpgId/stores",
+    async ({
+      auth,
+      params,
+      body,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { cpgId: string };
+      body: { storeIds: string[] };
+      status: StatusHandler;
+    }) => {
       if (!auth) {
-        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
-      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && 
-        auth.role === 'cpg_admin' && auth.tenantType === 'cpg' && auth.tenantId === params.cpgId;
+      const isCpgAccess =
+        (auth.type === "jwt" || auth.type === "dev") &&
+        auth.role === "cpg_admin" &&
+        auth.tenantType === "cpg" &&
+        auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
-        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para agregar stores a este CPG' } });
+      if (!isCpgAccess && !(auth.role === "qoa_admin" || auth.role === "qoa_support")) {
+        return status(403, {
+          error: {
+            code: "FORBIDDEN",
+            message: "No tienes permisos para agregar stores a este CPG",
+          },
+        });
       }
 
       if (!body.storeIds || body.storeIds.length === 0) {
-        return status(400, { error: { code: 'INVALID_ARGUMENT', message: 'Debes proporcionar al menos un storeId' } });
+        return status(400, {
+          error: { code: "INVALID_ARGUMENT", message: "Debes proporcionar al menos un storeId" },
+        });
       }
 
       const now = new Date();
@@ -588,14 +689,19 @@ export const storesModule = new Elysia({
           const [existing] = await db
             .select({ id: cpgStoreRelations.id })
             .from(cpgStoreRelations)
-            .where(and(eq(cpgStoreRelations.cpgId, params.cpgId), eq(cpgStoreRelations.storeId, storeId)))
+            .where(
+              and(
+                eq(cpgStoreRelations.cpgId, params.cpgId),
+                eq(cpgStoreRelations.storeId, storeId),
+              ),
+            )
             .limit(1);
 
           if (existing) {
             // Reactivate if inactive
             await db
               .update(cpgStoreRelations)
-              .set({ status: 'active', source: 'manual', updatedAt: now })
+              .set({ status: "active", source: "manual", updatedAt: now })
               .where(eq(cpgStoreRelations.id, existing.id));
             results.push({ storeId, success: true });
           } else {
@@ -603,8 +709,8 @@ export const storesModule = new Elysia({
             await db.insert(cpgStoreRelations).values({
               cpgId: params.cpgId,
               storeId,
-              status: 'active',
-              source: 'manual',
+              status: "active",
+              source: "manual",
               createdAt: now,
               updatedAt: now,
             });
@@ -618,54 +724,81 @@ export const storesModule = new Elysia({
       return {
         data: {
           success: true,
-          created: results.filter(r => r.success).length,
-          failed: results.filter(r => !r.success).length,
+          created: results.filter((r) => r.success).length,
+          failed: results.filter((r) => !r.success).length,
           results,
         },
       };
     },
     {
-      beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
-      body: t.Object({
-        storeIds: t.Array(t.String({ format: 'uuid' })),
+      beforeHandle: authGuard({
+        roles: ["cpg_admin", "qoa_admin", "qoa_support"],
+        allowApiKey: true,
       }),
-      detail: { summary: 'Agregar tiendas a un CPG (relación manual)' },
+      body: t.Object({
+        storeIds: t.Array(t.String({ format: "uuid" })),
+      }),
+      detail: { summary: "Agregar tiendas a un CPG (relación manual)" },
     },
   )
   .delete(
-    '/cpgs/:cpgId/stores/:storeId',
-    async ({ auth, params, status }: { auth: AuthContext | null; params: { cpgId: string; storeId: string }; status: StatusHandler }) => {
+    "/cpgs/:cpgId/stores/:storeId",
+    async ({
+      auth,
+      params,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { cpgId: string; storeId: string };
+      status: StatusHandler;
+    }) => {
       if (!auth) {
-        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
-      const isCpgAccess = (auth.type === 'jwt' || auth.type === 'dev') && 
-        auth.role === 'cpg_admin' && auth.tenantType === 'cpg' && auth.tenantId === params.cpgId;
+      const isCpgAccess =
+        (auth.type === "jwt" || auth.type === "dev") &&
+        auth.role === "cpg_admin" &&
+        auth.tenantType === "cpg" &&
+        auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(auth.role === 'qoa_admin' || auth.role === 'qoa_support')) {
-        return status(403, { error: { code: 'FORBIDDEN', message: 'No tienes permisos para eliminar stores de este CPG' } });
+      if (!isCpgAccess && !(auth.role === "qoa_admin" || auth.role === "qoa_support")) {
+        return status(403, {
+          error: {
+            code: "FORBIDDEN",
+            message: "No tienes permisos para eliminar stores de este CPG",
+          },
+        });
       }
 
       const [existing] = await db
         .select({ id: cpgStoreRelations.id })
         .from(cpgStoreRelations)
-        .where(and(eq(cpgStoreRelations.cpgId, params.cpgId), eq(cpgStoreRelations.storeId, params.storeId)))
+        .where(
+          and(
+            eq(cpgStoreRelations.cpgId, params.cpgId),
+            eq(cpgStoreRelations.storeId, params.storeId),
+          ),
+        )
         .limit(1);
 
       if (!existing) {
-        return status(404, { error: { code: 'NOT_FOUND', message: 'Relación no encontrada' } });
+        return status(404, { error: { code: "NOT_FOUND", message: "Relación no encontrada" } });
       }
 
       // Soft delete - set status to inactive
       await db
         .update(cpgStoreRelations)
-        .set({ status: 'inactive', updatedAt: new Date() })
+        .set({ status: "inactive", updatedAt: new Date() })
         .where(eq(cpgStoreRelations.id, existing.id));
 
       return { data: { success: true } };
     },
     {
-      beforeHandle: authGuard({ roles: ['cpg_admin', 'qoa_admin', 'qoa_support'], allowApiKey: true }),
-      detail: { summary: 'Eliminar tienda de un CPG (relación)' },
+      beforeHandle: authGuard({
+        roles: ["cpg_admin", "qoa_admin", "qoa_support"],
+        allowApiKey: true,
+      }),
+      detail: { summary: "Eliminar tienda de un CPG (relación)" },
     },
   );
