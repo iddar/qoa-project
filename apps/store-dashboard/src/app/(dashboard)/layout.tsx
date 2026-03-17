@@ -11,6 +11,7 @@ const navItems = [
   { href: "/scan", label: "Escanear" },
   { href: "/customers", label: "Clientes" },
   { href: "/reports", label: "Reportes" },
+  { href: "/campaigns", label: "Campañas" },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
