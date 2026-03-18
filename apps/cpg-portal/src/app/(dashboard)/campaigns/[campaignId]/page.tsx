@@ -264,9 +264,6 @@ export default function CampaignDetailPage() {
     const [isStoreCoverageExpanded, setIsStoreCoverageExpanded] = useState(false);
     const [storeSelectionMode, setStoreSelectionMode] = useState<"list" | "map">("list");
     const [storeCoverageSearch, setStoreCoverageSearch] = useState("");
-    const [selectionBounds, setSelectionBounds] = useState<[[number, number], [number, number]] | null>(
-        null,
-    );
     const deferredStoreCoverageSearch = useDeferredValue(storeCoverageSearch);
 
     const closePolicyModal = () => {
@@ -287,7 +284,6 @@ export default function CampaignDetailPage() {
     const closeStoreCoverageModal = () => {
         setStoreSelectionMode("list");
         setStoreCoverageSearch("");
-        setSelectionBounds(null);
         setIsStoreCoverageModalOpen(false);
     };
 
@@ -754,7 +750,6 @@ export default function CampaignDetailPage() {
         setSelectedCampaignStoreIds(targetedStores.map((store) => store.storeId));
         setStoreSelectionMode("list");
         setStoreCoverageSearch("");
-        setSelectionBounds(null);
         setIsStoreCoverageModalOpen(true);
     };
 
@@ -1335,15 +1330,14 @@ export default function CampaignDetailPage() {
                                     <div className="space-y-3">
                                         <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
                                             El modo mapa agrega a la selección las tiendas que
-                                            queden dentro del área dibujada. Después puedes ajustar
-                                            el resultado desde la pestaña de lista.
+                                            queden dentro de un área rectangular, circular o
+                                            multi-puntos. Después puedes ajustar el resultado desde
+                                            la pestaña de lista.
                                         </div>
                                         <CampaignStoreSelectionMap
                                             stores={geoRelatedStoreOptions}
                                             selectedStoreIds={selectedCampaignStoreIds}
                                             onSelectionChange={setSelectedCampaignStoreIds}
-                                            rectangleBounds={selectionBounds}
-                                            onRectangleBoundsChange={setSelectionBounds}
                                         />
                                         {relatedStoreOptions.length > geoRelatedStoreOptions.length && (
                                             <p className="text-xs text-zinc-400">
