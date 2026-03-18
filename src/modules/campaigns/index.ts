@@ -192,6 +192,7 @@ type CampaignUpdateContext = {
     name?: string;
     description?: string;
     enrollmentMode?: "open" | "opt_in" | "system_universal";
+    storeAccessMode?: "all_related_stores" | "selected_stores";
     accumulationMode?: "count" | "amount";
     startsAt?: string;
     endsAt?: string;
@@ -1306,6 +1307,7 @@ export const campaignsModule = new Elysia({
           name: body.name ?? campaign.name,
           description: body.description ?? campaign.description,
           enrollmentMode: body.enrollmentMode ?? campaign.enrollmentMode,
+          storeAccessMode: body.storeAccessMode ?? campaign.storeAccessMode,
           accumulationMode: body.accumulationMode ?? campaign.accumulationMode,
           startsAt,
           endsAt,

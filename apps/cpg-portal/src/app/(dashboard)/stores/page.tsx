@@ -32,6 +32,34 @@ type PlatformStore = {
     state?: string;
 };
 
+type AddStoreMode = "existing" | "create";
+
+type CreateStoreForm = {
+    name: string;
+    type: string;
+    address: string;
+    phone: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+    country: string;
+    latitude: string;
+    longitude: string;
+};
+
+const emptyCreateStoreForm: CreateStoreForm = {
+    name: "",
+    type: "",
+    address: "",
+    phone: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+    country: "MX",
+    latitude: "",
+    longitude: "",
+};
+
 const statusLabel: Record<StoreRelation["status"], string> = {
     active: "Activa",
     inactive: "Inactiva",
@@ -52,16 +80,38 @@ const formatDate = (dateStr?: string) =>
           })
         : "Sin movimiento";
 
+const parseOptionalCoordinate = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 export default function StoresPage() {
     const queryClient = useQueryClient();
     const { tenantId } = useAuth();
     const token = getAccessToken();
 
     const [addModalOpen, setAddModalOpen] = useState(false);
+    const [addStoreMode, setAddStoreMode] = useState<AddStoreMode>("existing");
     const [newStoreIds, setNewStoreIds] = useState<string[]>([]);
+    const [availableStoreSearch, setAvailableStoreSearch] = useState("");
+    const [createStoreForm, setCreateStoreForm] = useState<CreateStoreForm>(emptyCreateStoreForm);
     const [search, setSearch] = useState("");
     const [selectedStoreId, setSelectedStoreId] = useState<string>("");
     const deferredSearch = useDeferredValue(search);
+    const deferredAvailableStoreSearch = useDeferredValue(availableStoreSearch);
+
+    const closeAddModal = () => {
+        setAddModalOpen(false);
+        setAddStoreMode("existing");
+        setNewStoreIds([]);
+        setAvailableStoreSearch("");
+        setCreateStoreForm(emptyCreateStoreForm);
+    };
 
     const allStoresQuery = useQuery({
         queryKey: ["all-stores-for-cpg", tenantId],
@@ -112,9 +162,9 @@ export default function StoresPage() {
             return data;
         },
         onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["all-stores-for-cpg", tenantId] });
             queryClient.invalidateQueries({ queryKey: ["cpg-relations", tenantId] });
-            setAddModalOpen(false);
-            setNewStoreIds([]);
+            closeAddModal();
         },
     });
 
@@ -140,6 +190,54 @@ export default function StoresPage() {
         },
     });
 
+    const createAndAttachStoreMutation = useMutation({
+        mutationFn: async () => {
+            if (!tenantId) {
+                throw new Error("missing_cpg");
+            }
+
+            const payload = {
+                name: createStoreForm.name.trim(),
+                type: createStoreForm.type.trim() || undefined,
+                address: createStoreForm.address.trim() || undefined,
+                phone: createStoreForm.phone.trim() || undefined,
+                neighborhood: createStoreForm.neighborhood.trim() || undefined,
+                city: createStoreForm.city.trim() || undefined,
+                state: createStoreForm.state.trim() || undefined,
+                country: createStoreForm.country.trim() || undefined,
+                latitude: parseOptionalCoordinate(createStoreForm.latitude),
+                longitude: parseOptionalCoordinate(createStoreForm.longitude),
+            };
+
+            const { data: createdStore, error: createError } = await api.v1.stores.post(payload, {
+                headers: { authorization: `Bearer ${token}` },
+            });
+
+            if (createError) {
+                throw createError;
+            }
+
+            const { error: relationError } = await (api.v1.stores as any)
+                .cpgs({ cpgId: tenantId })
+                .stores.post(
+                    { storeIds: [createdStore.data.id] },
+                    { headers: { authorization: `Bearer ${token}` } },
+                );
+
+            if (relationError) {
+                throw relationError;
+            }
+
+            return createdStore.data;
+        },
+        onSuccess: (store) => {
+            queryClient.invalidateQueries({ queryKey: ["all-stores-for-cpg", tenantId] });
+            queryClient.invalidateQueries({ queryKey: ["cpg-relations", tenantId] });
+            setSelectedStoreId(store.id);
+            closeAddModal();
+        },
+    });
+
     const allStores = ((allStoresQuery.data?.data ?? []) as PlatformStore[]).sort((a, b) =>
         a.name.localeCompare(b.name, "es"),
     );
@@ -150,6 +248,16 @@ export default function StoresPage() {
             .map((relation) => relation.storeId),
     );
     const availableStores = allStores.filter((store) => !relatedStoreIds.has(store.id));
+    const normalizedAvailableStoreSearch = deferredAvailableStoreSearch.trim().toLowerCase();
+    const filteredAvailableStores = !normalizedAvailableStoreSearch
+        ? availableStores
+        : availableStores.filter((store) =>
+              [store.name, store.code, store.city, store.state]
+                  .filter(Boolean)
+                  .some((value) =>
+                      value!.toLowerCase().includes(normalizedAvailableStoreSearch),
+                  ),
+          );
 
     const normalizedSearch = deferredSearch.trim().toLowerCase();
     const filteredRelations = !normalizedSearch
@@ -343,7 +451,7 @@ export default function StoresPage() {
                                         )}
                                 </div>
                                 {selectedStore.status === "active" && (
-                                    <button
+                            <button
                                         onClick={() =>
                                             removeRelationMutation.mutate(selectedStore.storeId)
                                         }
@@ -481,7 +589,7 @@ export default function StoresPage() {
             </section>
 
             {addModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
                     <div className="w-full max-w-2xl rounded-xl border border-zinc-200 bg-white p-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900">
                         <div className="flex items-start justify-between gap-4">
                             <div>
@@ -494,80 +602,291 @@ export default function StoresPage() {
                                 </p>
                             </div>
                             <button
-                                onClick={() => {
-                                    setAddModalOpen(false);
-                                    setNewStoreIds([]);
-                                }}
+                                onClick={closeAddModal}
                                 className="rounded-full border border-zinc-200 px-3 py-1.5 text-sm dark:border-zinc-700"
                             >
                                 Cerrar
                             </button>
                         </div>
 
-                        <div className="mt-5 max-h-96 space-y-2 overflow-y-auto pr-1">
-                            {availableStores.length === 0 ? (
-                                <p className="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                                    No hay tiendas disponibles para agregar.
-                                </p>
-                            ) : (
-                                availableStores.map((store) => (
-                                    <label
-                                        key={store.id}
-                                        className="flex cursor-pointer items-center gap-3 rounded-2xl border border-zinc-200 p-4 transition hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={newStoreIds.includes(store.id)}
-                                            onChange={(event) => {
-                                                if (event.target.checked) {
-                                                    setNewStoreIds((current) => [
-                                                        ...current,
-                                                        store.id,
-                                                    ]);
-                                                    return;
-                                                }
-                                                setNewStoreIds((current) =>
-                                                    current.filter((value) => value !== store.id),
-                                                );
-                                            }}
-                                            className="rounded border-zinc-300"
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                            <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                                                {store.name}
-                                            </p>
-                                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                                {store.code} ·{" "}
-                                                {[store.city, store.state]
-                                                    .filter(Boolean)
-                                                    .join(", ") || "Sin ciudad"}
-                                            </p>
-                                        </div>
-                                    </label>
-                                ))
-                            )}
+                        <div className="mt-5 inline-flex rounded-full border border-zinc-200 p-1 dark:border-zinc-700">
+                            <button
+                                type="button"
+                                onClick={() => setAddStoreMode("existing")}
+                                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                    addStoreMode === "existing"
+                                        ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                                        : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                }`}
+                            >
+                                Agregar existentes
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAddStoreMode("create")}
+                                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                                    addStoreMode === "create"
+                                        ? "bg-zinc-950 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                                        : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                }`}
+                            >
+                                Crear nueva
+                            </button>
                         </div>
 
-                        <div className="mt-6 flex justify-end gap-3">
-                            <button
-                                onClick={() => {
-                                    setAddModalOpen(false);
-                                    setNewStoreIds([]);
+                        {addStoreMode === "existing" ? (
+                            <>
+                                <div className="mt-4">
+                                    <input
+                                        value={availableStoreSearch}
+                                        onChange={(event) =>
+                                            setAvailableStoreSearch(event.target.value)
+                                        }
+                                        placeholder="Buscar por nombre, código o ciudad"
+                                        className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm outline-none transition focus:border-cyan-500 focus:bg-white dark:border-zinc-700 dark:bg-zinc-950 dark:focus:bg-zinc-900"
+                                    />
+                                </div>
+
+                                <div className="mt-5 max-h-96 space-y-2 overflow-y-auto pr-1">
+                                    {filteredAvailableStores.length === 0 ? (
+                                        <p className="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                                            {availableStores.length === 0
+                                                ? "No hay tiendas disponibles para agregar."
+                                                : "No hay tiendas que coincidan con la búsqueda."}
+                                        </p>
+                                    ) : (
+                                        filteredAvailableStores.map((store) => (
+                                            <label
+                                                key={store.id}
+                                                className="flex cursor-pointer items-center gap-3 rounded-2xl border border-zinc-200 p-4 transition hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newStoreIds.includes(store.id)}
+                                                    onChange={(event) => {
+                                                        if (event.target.checked) {
+                                                            setNewStoreIds((current) => [
+                                                                ...current,
+                                                                store.id,
+                                                            ]);
+                                                            return;
+                                                        }
+                                                        setNewStoreIds((current) =>
+                                                            current.filter(
+                                                                (value) => value !== store.id,
+                                                            ),
+                                                        );
+                                                    }}
+                                                    className="rounded border-zinc-300"
+                                                />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                                                        {store.name}
+                                                    </p>
+                                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                                        {store.code} ·{" "}
+                                                        {[store.city, store.state]
+                                                            .filter(Boolean)
+                                                            .join(", ") || "Sin ciudad"}
+                                                    </p>
+                                                </div>
+                                            </label>
+                                        ))
+                                    )}
+                                </div>
+
+                                <div className="mt-6 flex justify-end gap-3">
+                                    <button
+                                        onClick={closeAddModal}
+                                        className="rounded-full border border-zinc-200 px-4 py-2.5 text-sm dark:border-zinc-700"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={() => addRelationMutation.mutate(newStoreIds)}
+                                        disabled={
+                                            newStoreIds.length === 0 || addRelationMutation.isPending
+                                        }
+                                        className="rounded-full bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white transition disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                                    >
+                                        {addRelationMutation.isPending
+                                            ? "Agregando..."
+                                            : `Agregar ${newStoreIds.length} tienda(s)`}
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <form
+                                className="mt-5 space-y-4"
+                                onSubmit={(event) => {
+                                    event.preventDefault();
+                                    createAndAttachStoreMutation.mutate();
                                 }}
-                                className="rounded-full border border-zinc-200 px-4 py-2.5 text-sm dark:border-zinc-700"
                             >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={() => addRelationMutation.mutate(newStoreIds)}
-                                disabled={newStoreIds.length === 0 || addRelationMutation.isPending}
-                                className="rounded-full bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white transition disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-                            >
-                                {addRelationMutation.isPending
-                                    ? "Agregando..."
-                                    : `Agregar ${newStoreIds.length} tienda(s)`}
-                            </button>
-                        </div>
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        Nombre
+                                        <input
+                                            required
+                                            value={createStoreForm.name}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    name: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        Tipo
+                                        <input
+                                            value={createStoreForm.type}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    type: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300 md:col-span-2">
+                                        Dirección
+                                        <input
+                                            value={createStoreForm.address}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    address: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        Colonia
+                                        <input
+                                            value={createStoreForm.neighborhood}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    neighborhood: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        Teléfono
+                                        <input
+                                            value={createStoreForm.phone}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    phone: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        Ciudad
+                                        <input
+                                            value={createStoreForm.city}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    city: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        Estado
+                                        <input
+                                            value={createStoreForm.state}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    state: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        País
+                                        <input
+                                            value={createStoreForm.country}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    country: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm uppercase dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        Latitud
+                                        <input
+                                            inputMode="decimal"
+                                            value={createStoreForm.latitude}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    latitude: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                    <label className="text-sm text-zinc-600 dark:text-zinc-300">
+                                        Longitud
+                                        <input
+                                            inputMode="decimal"
+                                            value={createStoreForm.longitude}
+                                            onChange={(event) =>
+                                                setCreateStoreForm((current) => ({
+                                                    ...current,
+                                                    longitude: event.target.value,
+                                                }))
+                                            }
+                                            className="mt-1 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                                        />
+                                    </label>
+                                </div>
+
+                                <div className="flex justify-end gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={closeAddModal}
+                                        className="rounded-full border border-zinc-200 px-4 py-2.5 text-sm dark:border-zinc-700"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={
+                                            !createStoreForm.name.trim() ||
+                                            createAndAttachStoreMutation.isPending
+                                        }
+                                        className="rounded-full bg-zinc-950 px-5 py-2.5 text-sm font-semibold text-white transition disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+                                    >
+                                        {createAndAttachStoreMutation.isPending
+                                            ? "Creando..."
+                                            : "Crear y agregar tienda"}
+                                    </button>
+                                </div>
+                                {createAndAttachStoreMutation.isError && (
+                                    <p className="text-sm text-red-600 dark:text-red-400">
+                                        No se pudo crear la tienda o vincularla al CPG.
+                                    </p>
+                                )}
+                            </form>
+                        )}
                     </div>
                 </div>
             )}

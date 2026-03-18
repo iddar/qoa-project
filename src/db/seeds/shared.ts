@@ -6,6 +6,7 @@ import {
   brands,
   campaignBalances,
   campaignPolicies,
+  campaignStoreEnrollments,
   campaignSubscriptions,
   campaigns,
   cpgs,
@@ -1182,6 +1183,9 @@ const upsertCampaignByKey = async (payload: {
   description: string;
   cpgId: string;
   enrollmentMode: "open" | "opt_in" | "system_universal";
+  storeAccessMode?: "all_related_stores" | "selected_stores";
+  storeEnrollmentMode?: "store_opt_in" | "cpg_managed" | "auto_enroll";
+  startsAt?: Date;
   status: string;
 }): Promise<string> => {
   const [existing] = (await db
@@ -1201,7 +1205,9 @@ const upsertCampaignByKey = async (payload: {
         cpgId: payload.cpgId,
         status: payload.status,
         enrollmentMode: payload.enrollmentMode,
-        startsAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        storeAccessMode: payload.storeAccessMode ?? "selected_stores",
+        storeEnrollmentMode: payload.storeEnrollmentMode ?? "store_opt_in",
+        startsAt: payload.startsAt ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
         updatedAt: new Date(),
       })
       .where(eq(campaigns.id, existing.id));
@@ -1217,11 +1223,78 @@ const upsertCampaignByKey = async (payload: {
       cpgId: payload.cpgId,
       status: payload.status,
       enrollmentMode: payload.enrollmentMode,
-      startsAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      storeAccessMode: payload.storeAccessMode ?? "selected_stores",
+      storeEnrollmentMode: payload.storeEnrollmentMode ?? "store_opt_in",
+      startsAt: payload.startsAt ?? new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
     })
     .returning({ id: campaigns.id })) as Array<{ id: string }>;
 
   return created!.id;
+};
+
+const syncCampaignStoreAssignments = async (payload: {
+  campaignId: string;
+  storeIds: string[];
+  actorUserId?: string | null;
+  status?: "visible" | "invited" | "enrolled";
+  visibilitySource?: "manual" | "zone" | "import" | "auto_related";
+  enrollmentSource?: "cpg_managed" | "store_opt_in" | "auto_enroll";
+}) => {
+  const targetIds = [...new Set(payload.storeIds)];
+  const now = new Date();
+  const existingRows = (await db
+    .select({
+      id: campaignStoreEnrollments.id,
+      storeId: campaignStoreEnrollments.storeId,
+    })
+    .from(campaignStoreEnrollments)
+    .where(eq(campaignStoreEnrollments.campaignId, payload.campaignId))) as Array<{
+    id: string;
+    storeId: string;
+  }>;
+
+  const existingByStoreId = new Map(existingRows.map((row) => [row.storeId, row]));
+
+  for (const storeId of targetIds) {
+    const existing = existingByStoreId.get(storeId);
+    if (existing) {
+      await db
+        .update(campaignStoreEnrollments)
+        .set({
+          status: payload.status ?? "visible",
+          visibilitySource: payload.visibilitySource ?? "manual",
+          enrollmentSource: payload.enrollmentSource ?? null,
+          invitedByUserId: payload.actorUserId ?? null,
+          updatedAt: now,
+          removedAt: null,
+        })
+        .where(eq(campaignStoreEnrollments.id, existing.id));
+      continue;
+    }
+
+    await db.insert(campaignStoreEnrollments).values({
+      campaignId: payload.campaignId,
+      storeId,
+      status: payload.status ?? "visible",
+      visibilitySource: payload.visibilitySource ?? "manual",
+      enrollmentSource: payload.enrollmentSource ?? null,
+      invitedByUserId: payload.actorUserId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
+  const storesToRemove = existingRows.filter((row) => !targetIds.includes(row.storeId));
+  for (const row of storesToRemove) {
+    await db
+      .update(campaignStoreEnrollments)
+      .set({
+        status: "removed",
+        removedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(campaignStoreEnrollments.id, row.id));
+  }
 };
 
 const upsertRewardByName = async (payload: {
@@ -1868,6 +1941,8 @@ export const seedUsers = async (scope: "development" | "local" | "test") => {
     const cpgAdminId = userIdsByEmail.get(`cpg.${scope}@qoa.local`) ?? null;
     const managedStoreIds = [storeId, secondaryStoreId, ...bulkStoreIds];
     const activeStoreIds = new Set(managedStoreIds.slice(0, RELATED_SEED_STORES));
+    const selectedStoreIdsForSeedCampaign = managedStoreIds.slice(0, 10);
+    const editableStoreIdsForSeedCampaign = managedStoreIds.slice(10, 15);
 
     for (const managedStoreId of managedStoreIds) {
       await upsertCpgStoreRelation({
@@ -1919,6 +1994,8 @@ export const seedUsers = async (scope: "development" | "local" | "test") => {
       name: `Campaña Open Seed (${scope})`,
       description: "Campaña abierta para demo de acumulaciones adicionales.",
       cpgId,
+      storeAccessMode: "all_related_stores",
+      storeEnrollmentMode: "auto_enroll",
       enrollmentMode: "open",
       status: "active",
     });
@@ -1928,8 +2005,46 @@ export const seedUsers = async (scope: "development" | "local" | "test") => {
       name: `Campaña Flash Seed (${scope})`,
       description: "Campaña de temporada para demostrar variantes de rewards.",
       cpgId,
+      storeAccessMode: "selected_stores",
+      storeEnrollmentMode: "store_opt_in",
       enrollmentMode: "opt_in",
       status: "active",
+    });
+
+    await upsertCampaignByKey({
+      key: `qoa_seed_reto_${scope}`,
+      name: `Reto Seed (${scope})`,
+      description: "Campaña de prueba para wallet/rewards en entorno local.",
+      cpgId,
+      storeAccessMode: "selected_stores",
+      storeEnrollmentMode: "store_opt_in",
+      enrollmentMode: "opt_in",
+      status: "draft",
+      startsAt: new Date(),
+    });
+
+    await syncCampaignStoreAssignments({
+      campaignId,
+      storeIds: editableStoreIdsForSeedCampaign,
+      actorUserId: cpgAdminId,
+      status: "visible",
+      visibilitySource: "manual",
+      enrollmentSource: "cpg_managed",
+    });
+
+    await syncCampaignStoreAssignments({
+      campaignId: flashCampaignId,
+      storeIds: selectedStoreIdsForSeedCampaign,
+      actorUserId: cpgAdminId,
+      status: "visible",
+      visibilitySource: "manual",
+      enrollmentSource: "cpg_managed",
+    });
+
+    await syncCampaignStoreAssignments({
+      campaignId: openCampaignId,
+      storeIds: [],
+      actorUserId: cpgAdminId,
     });
 
     const rewardIds = [
