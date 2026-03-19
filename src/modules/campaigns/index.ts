@@ -60,6 +60,13 @@ import {
 
 const allowedRoles = ["cpg_admin", "qoa_support", "qoa_admin"] as const;
 
+const getAuthRole = (auth: AuthContext): string | null => {
+  if (auth.type === "jwt" || auth.type === "dev") {
+    return auth.role;
+  }
+  return null;
+};
+
 type CampaignRow = {
   id: string;
   key: string | null;
@@ -2820,7 +2827,7 @@ export const campaignsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: allowedRoles }),
+      beforeHandle: authGuard({ roles: [...allowedRoles] }),
       response: { 200: campaignStoreListResponse },
       detail: { summary: "Listar tiendas de campaña" },
     },
@@ -2908,7 +2915,7 @@ export const campaignsModule = new Elysia({
       return { data: { success: true, count: body.storeIds.length } };
     },
     {
-      beforeHandle: authGuard({ roles: allowedRoles }),
+      beforeHandle: authGuard({ roles: [...allowedRoles] }),
       body: campaignStoreTargetRequest,
       detail: { summary: "Agregar tiendas a campaña" },
     },
@@ -2920,7 +2927,7 @@ export const campaignsModule = new Elysia({
       params,
       body,
       status,
-    }: CampaignParamsContext & { body: { status: string } }) => {
+    }: CampaignParamsContext & { body: { status: string }; params: { campaignId: string; storeId: string } }) => {
       if (!auth) {
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
@@ -2932,12 +2939,12 @@ export const campaignsModule = new Elysia({
         });
       }
 
-      // Allow both CPG admin (canAccessCampaign) and store operator
+      const role = getAuthRole(auth);
       const isCpgAccess = canAccessCampaign(auth, campaign);
       const isStoreOperator = auth.type === "jwt" || auth.type === "dev";
       const isStoreAccess =
         isStoreOperator &&
-        (auth.role === "store_admin" || auth.role === "store_staff") &&
+        (role === "store_admin" || role === "store_staff") &&
         auth.tenantType === "store" &&
         auth.tenantId === params.storeId;
 
@@ -3027,21 +3034,21 @@ export const campaignsModule = new Elysia({
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
-      // Allow store operator or CPG admin viewing their stores
+      const role = getAuthRole(auth);
       const isStoreOperator =
         (auth.type === "jwt" || auth.type === "dev") &&
-        (auth.role === "store_admin" || auth.role === "store_staff") &&
+        (role === "store_admin" || role === "store_staff") &&
         auth.tenantType === "store" &&
         auth.tenantId === params.storeId;
       const isCpgAccess =
         (auth.type === "jwt" || auth.type === "dev") &&
-        auth.role === "cpg_admin" &&
+        role === "cpg_admin" &&
         auth.tenantType === "cpg";
 
       if (
         !isStoreOperator &&
         !isCpgAccess &&
-        !(auth.role === "qoa_admin" || auth.role === "qoa_support")
+        !(role === "qoa_admin" || role === "qoa_support")
       ) {
         return status(403, {
           error: {

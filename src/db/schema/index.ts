@@ -14,3 +14,4 @@ export * from './catalog';
 export * from './loyalty';
 export * from './rewards';
 export * from './operations';
+export * from './store-products';

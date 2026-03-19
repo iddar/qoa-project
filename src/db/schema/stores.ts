@@ -1,6 +1,6 @@
 import {
   index,
-  numeric,
+  decimal,
   pgEnum,
   pgTable,
   text,
@@ -44,8 +44,8 @@ export const stores = pgTable(
     country: varchar('country', { length: 3 }).default('MEX'),
 
     // Georeferencia
-    latitude: numeric('latitude', { precision: 10, scale: 7 }),
-    longitude: numeric('longitude', { precision: 10, scale: 7 }),
+    latitude: decimal('latitude', { precision: 10, scale: 7 }),
+    longitude: decimal('longitude', { precision: 10, scale: 7 }),
 
     status: storeStatus('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

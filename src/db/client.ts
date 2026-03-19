@@ -5,6 +5,9 @@ const connectionString = process.env.DATABASE_URL ?? 'postgres://qoa:supersecret
 
 type DbQuery = Promise<unknown[]> & {
   from: (...args: unknown[]) => DbQuery;
+  innerJoin: (...args: unknown[]) => DbQuery;
+  leftJoin: (...args: unknown[]) => DbQuery;
+  rightJoin: (...args: unknown[]) => DbQuery;
   where: (...args: unknown[]) => DbQuery;
   orderBy: (...args: unknown[]) => DbQuery;
   limit: (value: number) => DbQuery;

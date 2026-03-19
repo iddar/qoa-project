@@ -6,7 +6,7 @@ import type { AuthContext } from "../../app/plugins/auth";
 import { parseLimit, parseCursor } from "../../app/utils/pagination";
 import { generateCode } from "../../app/utils/generateCode";
 import { db } from "../../db/client";
-import { stores, cpgs, cpgStoreRelations } from "../../db/schema";
+import { stores, cpgs, cpgStoreRelations, storeProducts, products, brands, cards, users, transactions, transactionItems } from "../../db/schema";
 import { generateStoreQrPayload } from "../../services/stores";
 import {
   getRelatedCpgIdsForStore,
@@ -20,7 +20,26 @@ import {
   storeListQuery,
   storeListResponse,
   storeResponse,
+  storeProductSchema,
+  storeProductCreateRequest,
+  storeProductUpdateRequest,
+  storeProductListQuery,
+  storeProductResponse,
+  storeProductListResponse,
+  storeProductSearchQuery,
+  storeTransactionCreateRequest,
+  storeTransactionSchema,
+  storeTransactionResponse,
+  storeTransactionListQuery,
+  storeTransactionListResponse,
 } from "./model";
+
+const getAuthRole = (auth: AuthContext): string | null => {
+  if (auth.type === "jwt" || auth.type === "dev") {
+    return auth.role;
+  }
+  return null;
+};
 
 const generateStoreCode = () => generateCode("sto", 20);
 
@@ -110,11 +129,9 @@ type StoreParamsContext = {
 };
 
 const isStoreOperator = (auth: AuthContext) => {
-  if (auth.type !== "jwt" && auth.type !== "dev") {
-    return false;
-  }
-
-  return auth.role === "store_admin" || auth.role === "store_staff";
+  const role = getAuthRole(auth);
+  if (!role) return false;
+  return role === "store_admin" || role === "store_staff";
 };
 
 const canAccessStore = (auth: AuthContext, storeId: string) => {
@@ -418,21 +435,21 @@ export const storesModule = new Elysia({
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
-      // Allow store operator or CPG admin viewing their stores
+      const role = getAuthRole(auth);
       const isStoreOperator =
         (auth.type === "jwt" || auth.type === "dev") &&
-        (auth.role === "store_admin" || auth.role === "store_staff") &&
+        (role === "store_admin" || role === "store_staff") &&
         auth.tenantType === "store" &&
         auth.tenantId === params.storeId;
       const isCpgAccess =
         (auth.type === "jwt" || auth.type === "dev") &&
-        auth.role === "cpg_admin" &&
+        role === "cpg_admin" &&
         auth.tenantType === "cpg";
 
       if (
         !isStoreOperator &&
         !isCpgAccess &&
-        !(auth.role === "qoa_admin" || auth.role === "qoa_support")
+        !(role === "qoa_admin" || role === "qoa_support")
       ) {
         return status(403, {
           error: { code: "FORBIDDEN", message: "No tienes permisos para ver CPGs de esta tienda" },
@@ -513,14 +530,14 @@ export const storesModule = new Elysia({
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
-      // Allow CPG admin for their CPG or QOA
+      const role = getAuthRole(auth);
       const isCpgAccess =
         (auth.type === "jwt" || auth.type === "dev") &&
-        auth.role === "cpg_admin" &&
+        role === "cpg_admin" &&
         auth.tenantType === "cpg" &&
         auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(auth.role === "qoa_admin" || auth.role === "qoa_support")) {
+      if (!isCpgAccess && !(role === "qoa_admin" || role === "qoa_support")) {
         return status(403, {
           error: { code: "FORBIDDEN", message: "No tienes permisos para ver stores de este CPG" },
         });
@@ -659,13 +676,14 @@ export const storesModule = new Elysia({
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
+      const role = getAuthRole(auth);
       const isCpgAccess =
         (auth.type === "jwt" || auth.type === "dev") &&
-        auth.role === "cpg_admin" &&
+        role === "cpg_admin" &&
         auth.tenantType === "cpg" &&
         auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(auth.role === "qoa_admin" || auth.role === "qoa_support")) {
+      if (!isCpgAccess && !(role === "qoa_admin" || role === "qoa_support")) {
         return status(403, {
           error: {
             code: "FORBIDDEN",
@@ -685,8 +703,7 @@ export const storesModule = new Elysia({
 
       for (const storeId of body.storeIds) {
         try {
-          // Check if relation already exists
-          const [existing] = await db
+          const [existing] = (await db
             .select({ id: cpgStoreRelations.id })
             .from(cpgStoreRelations)
             .where(
@@ -695,7 +712,7 @@ export const storesModule = new Elysia({
                 eq(cpgStoreRelations.storeId, storeId),
               ),
             )
-            .limit(1);
+            .limit(1)) as Array<{ id: string }> || [null];
 
           if (existing) {
             // Reactivate if inactive
@@ -741,6 +758,7 @@ export const storesModule = new Elysia({
       detail: { summary: "Agregar tiendas a un CPG (relación manual)" },
     },
   )
+  // @ts-ignore: TypeScript loses inference after long chain
   .delete(
     "/cpgs/:cpgId/stores/:storeId",
     async ({
@@ -756,13 +774,14 @@ export const storesModule = new Elysia({
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
+      const role = getAuthRole(auth);
       const isCpgAccess =
         (auth.type === "jwt" || auth.type === "dev") &&
-        auth.role === "cpg_admin" &&
+        role === "cpg_admin" &&
         auth.tenantType === "cpg" &&
         auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(auth.role === "qoa_admin" || auth.role === "qoa_support")) {
+      if (!isCpgAccess && !(role === "qoa_admin" || role === "qoa_support")) {
         return status(403, {
           error: {
             code: "FORBIDDEN",
@@ -771,7 +790,7 @@ export const storesModule = new Elysia({
         });
       }
 
-      const [existing] = await db
+      const [existing] = (await db
         .select({ id: cpgStoreRelations.id })
         .from(cpgStoreRelations)
         .where(
@@ -780,7 +799,7 @@ export const storesModule = new Elysia({
             eq(cpgStoreRelations.storeId, params.storeId),
           ),
         )
-        .limit(1);
+        .limit(1)) as Array<{ id: string }> || [null];
 
       if (!existing) {
         return status(404, { error: { code: "NOT_FOUND", message: "Relación no encontrada" } });
@@ -800,5 +819,734 @@ export const storesModule = new Elysia({
         allowApiKey: true,
       }),
       detail: { summary: "Eliminar tienda de un CPG (relación)" },
+    },
+  )
+  // ========== STORE PRODUCTS ==========
+  .get(
+    "/:storeId/products",
+    async ({
+      auth,
+      params,
+      query,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      query: { limit?: string; cursor?: string; status?: string; search?: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const cursorDate = parseCursor(query.cursor);
+      const limit = parseLimit(query.limit);
+      const safeLimit = Math.trunc(limit) + 1;
+
+      const filters = [sql`"store_products"."store_id" = ${params.storeId}`];
+
+      if (query.status) {
+        filters.push(sql`"store_products"."status" = ${query.status}`);
+      }
+
+      if (query.search) {
+        filters.push(sql`"store_products"."name" ILIKE ${'%' + query.search + '%'}`);
+      }
+
+      if (cursorDate) {
+        filters.push(sql`"store_products"."created_at" < ${cursorDate}`);
+      }
+
+      const whereClause = filters.length > 0 ? sql`where ${sql.join(filters, sql` and `)}` : sql``;
+
+      const rows = (await db.execute(sql`
+        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "status", "created_at"
+        from "store_products"
+        ${whereClause}
+        order by "store_products"."created_at" desc
+        limit ${sql.raw(String(safeLimit))}
+      `)) as Array<{
+        id: string;
+        store_id: string;
+        product_id: string | null;
+        cpg_id: string | null;
+        name: string;
+        sku: string | null;
+        unit_type: string;
+        price: string;
+        status: string;
+        created_at: Date;
+      }>;
+
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const nextCursor = hasMore ? items[items.length - 1]?.created_at.toISOString() : null;
+
+      return {
+        data: items.map((row) => ({
+          id: row.id,
+          storeId: row.store_id,
+          productId: row.product_id ?? undefined,
+          cpgId: row.cpg_id ?? undefined,
+          name: row.name,
+          sku: row.sku ?? undefined,
+          unitType: row.unit_type,
+          price: Number(row.price),
+          status: row.status,
+          createdAt: row.created_at.toISOString(),
+        })),
+        pagination: {
+          hasMore,
+          nextCursor: nextCursor ?? undefined,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      query: storeProductListQuery,
+      response: { 200: storeProductListResponse },
+      detail: { summary: "Listar productos de una tienda" },
+    },
+  )
+  .post(
+    "/:storeId/products",
+    async ({
+      auth,
+      params,
+      body,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      body: { name: string; sku?: string; productId?: string; cpgId?: string; price: number };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const [created] = (await db
+        .insert(storeProducts)
+        .values({
+          storeId: params.storeId,
+          name: body.name,
+          sku: body.sku ?? null,
+          productId: body.productId ?? null,
+          cpgId: body.cpgId ?? null,
+          price: body.price.toString(),
+        })
+        .returning()) as Array<{
+        id: string;
+        store_id: string;
+        product_id: string | null;
+        cpg_id: string | null;
+        name: string;
+        sku: string | null;
+        unit_type: string;
+        price: string;
+        status: string;
+        created_at: Date;
+      }>;
+
+      if (!created) {
+        return status(500, {
+          error: {
+            code: "STORE_PRODUCT_CREATE_FAILED",
+            message: "No se pudo crear el producto",
+          },
+        });
+      }
+
+      return status(201, {
+        data: {
+          id: created.id,
+          storeId: created.store_id,
+          productId: created.product_id ?? undefined,
+          cpgId: created.cpg_id ?? undefined,
+          name: created.name,
+          sku: created.sku ?? undefined,
+          unitType: created.unit_type,
+          price: Number(created.price),
+          status: created.status,
+          createdAt: created.created_at.toISOString(),
+        },
+      });
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      body: storeProductCreateRequest,
+      response: { 201: storeProductResponse },
+      detail: { summary: "Crear producto en catálogo de tienda" },
+    },
+  )
+  .get(
+    "/:storeId/products/:productId",
+    async ({
+      auth,
+      params,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string; productId: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const [row] = (await db.execute(sql`
+        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "status", "created_at"
+        from "store_products"
+        where "id" = ${params.productId} and "store_id" = ${params.storeId}
+      `)) as Array<{
+        id: string;
+        store_id: string;
+        product_id: string | null;
+        cpg_id: string | null;
+        name: string;
+        sku: string | null;
+        unit_type: string;
+        price: string;
+        status: string;
+        created_at: Date;
+      }>;
+
+      if (!row) {
+        return status(404, { error: { code: "NOT_FOUND", message: "Producto no encontrado" } });
+      }
+
+      return {
+        data: {
+          id: row.id,
+          storeId: row.store_id,
+          productId: row.product_id ?? undefined,
+          cpgId: row.cpg_id ?? undefined,
+          name: row.name,
+          sku: row.sku ?? undefined,
+          unitType: row.unit_type,
+          price: Number(row.price),
+          status: row.status,
+          createdAt: row.created_at.toISOString(),
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      response: { 200: storeProductResponse },
+      detail: { summary: "Obtener producto de tienda" },
+    },
+  )
+  .patch(
+    "/:storeId/products/:productId",
+    async ({
+      auth,
+      params,
+      body,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string; productId: string };
+      body: { name?: string; sku?: string; cpgId?: string; price?: number; status?: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const [existing] = (await db
+        .select({ id: storeProducts.id })
+        .from(storeProducts)
+        .where(and(eq(storeProducts.id, params.productId), eq(storeProducts.storeId, params.storeId)))
+        .limit(1)) as Array<{ id: string }>;
+
+      if (!existing) {
+        return status(404, { error: { code: "NOT_FOUND", message: "Producto no encontrado" } });
+      }
+
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.sku !== undefined) updates.sku = body.sku;
+      if (body.cpgId !== undefined) updates.cpgId = body.cpgId;
+      if (body.price !== undefined) updates.price = body.price.toString();
+      if (body.status !== undefined) updates.status = body.status;
+
+      const [updated] = (await db
+        .update(storeProducts)
+        .set(updates)
+        .where(and(eq(storeProducts.id, params.productId), eq(storeProducts.storeId, params.storeId)))
+        .returning()) as Array<{
+        id: string;
+        store_id: string;
+        product_id: string | null;
+        cpg_id: string | null;
+        name: string;
+        sku: string | null;
+        unit_type: string;
+        price: string;
+        status: string;
+        created_at: Date;
+      }>;
+
+      if (!updated) {
+        return status(500, {
+          error: {
+            code: "STORE_PRODUCT_UPDATE_FAILED",
+            message: "No se pudo actualizar el producto",
+          },
+        });
+      }
+
+      return {
+        data: {
+          id: updated.id,
+          storeId: updated.store_id,
+          productId: updated.product_id ?? undefined,
+          cpgId: updated.cpg_id ?? undefined,
+          name: updated.name,
+          sku: updated.sku ?? undefined,
+          unitType: updated.unit_type,
+          price: Number(updated.price),
+          status: updated.status,
+          createdAt: updated.created_at.toISOString(),
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      body: storeProductUpdateRequest,
+      response: { 200: storeProductResponse },
+      detail: { summary: "Actualizar producto de tienda" },
+    },
+  )
+  .delete(
+    "/:storeId/products/:productId",
+    async ({
+      auth,
+      params,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string; productId: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const [existing] = (await db
+        .select({ id: storeProducts.id })
+        .from(storeProducts)
+        .where(and(eq(storeProducts.id, params.productId), eq(storeProducts.storeId, params.storeId)))
+        .limit(1)) as Array<{ id: string }>;
+
+      if (!existing) {
+        return status(404, { error: { code: "NOT_FOUND", message: "Producto no encontrado" } });
+      }
+
+      await db
+        .update(storeProducts)
+        .set({ status: "inactive", updatedAt: new Date() })
+        .where(and(eq(storeProducts.id, params.productId), eq(storeProducts.storeId, params.storeId)));
+
+      return { data: { success: true } };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      detail: { summary: "Desactivar producto de tienda" },
+    },
+  )
+  // ========== STORE PRODUCT SEARCH ==========
+  .get(
+    "/:storeId/products-search",
+    async ({
+      auth,
+      params,
+      query,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      query: { q: string; limit?: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const limit = parseLimit(query.limit ?? "20");
+      const searchTerm = '%' + query.q + '%';
+
+      const storeProductsRows = (await db.execute(sql`
+        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "status", "created_at"
+        from "store_products"
+        where "store_id" = ${params.storeId} and "status" = 'active' and "name" ILIKE ${searchTerm}
+        order by "name"
+        limit ${sql.raw(String(limit))}
+      `)) as Array<{
+        id: string;
+        store_id: string;
+        product_id: string | null;
+        cpg_id: string | null;
+        name: string;
+        sku: string | null;
+        unit_type: string;
+        price: string;
+        status: string;
+        created_at: Date;
+      }>;
+
+      const globalProductsRows = (await db.execute(sql`
+        select p."id", p."brand_id", p."name", p."sku", b."cpg_id", c."name" as "cpg_name"
+        from "products" p
+        inner join "brands" b on p."brand_id" = b."id"
+        inner join "cpgs" c on b."cpg_id" = c."id"
+        where p."status" = 'active' and p."name" ILIKE ${searchTerm}
+        order by p."name"
+        limit ${sql.raw(String(limit))}
+      `)) as Array<{
+        id: string;
+        brand_id: string;
+        name: string;
+        sku: string;
+        cpg_id: string;
+        cpg_name: string;
+      }>;
+
+      const storeProducts = storeProductsRows.map((row) => ({
+        id: row.id,
+        storeId: row.store_id,
+        productId: row.product_id ?? undefined,
+        cpgId: row.cpg_id ?? undefined,
+        name: row.name,
+        sku: row.sku ?? undefined,
+        unitType: row.unit_type,
+        price: Number(row.price),
+        status: row.status,
+        createdAt: row.created_at.toISOString(),
+        source: "store" as const,
+      }));
+
+      const globalProducts = globalProductsRows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        sku: row.sku,
+        brandId: row.brand_id,
+        cpgId: row.cpg_id,
+        cpgName: row.cpg_name,
+        source: "global" as const,
+      }));
+
+      return {
+        data: {
+          storeProducts,
+          globalProducts,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      query: storeProductSearchQuery,
+      detail: { summary: "Buscar productos en catálogo global y de tienda" },
+    },
+  )
+  // ========== STORE TRANSACTIONS ==========
+  .post(
+    "/:storeId/transactions",
+    async ({
+      auth,
+      params,
+      body,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      body: { userId?: string; cardId?: string; items: Array<{ storeProductId: string; quantity: number; amount: number }>; idempotencyKey?: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      if (!body.items || body.items.length === 0) {
+        return status(400, { error: { code: "INVALID_ARGUMENT", message: "Debes enviar al menos un item" } });
+      }
+
+      const guestFlag = !body.userId;
+
+      if (body.userId) {
+        const [user] = (await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, body.userId))
+          .limit(1)) as Array<{ id: string }>;
+        if (!user) {
+          return status(404, { error: { code: "USER_NOT_FOUND", message: "Usuario no encontrado" } });
+        }
+      }
+
+      if (body.cardId) {
+        const [card] = (await db
+          .select({ id: cards.id, userId: cards.userId })
+          .from(cards)
+          .where(eq(cards.id, body.cardId))
+          .limit(1)) as Array<{ id: string; userId: string }>;
+        if (!card) {
+          return status(404, { error: { code: "CARD_NOT_FOUND", message: "Tarjeta no encontrada" } });
+        }
+        if (body.userId && card.userId !== body.userId) {
+          return status(400, { error: { code: "CARD_USER_MISMATCH", message: "La tarjeta no pertenece al usuario indicado" } });
+        }
+      }
+
+      const storeProductIds = body.items.map((item) => item.storeProductId);
+      const storeProductsRows = (await db
+        .select()
+        .from(storeProducts)
+        .where(and(sql`${storeProducts.id} = any(${storeProductIds})`, eq(storeProducts.storeId, params.storeId)))) as Array<{
+        id: string;
+        productId: string | null;
+        cpgId: string | null;
+        name: string;
+        price: string;
+      }>;
+
+      const storeProductMap = new Map(storeProductsRows.map((sp) => [sp.id, sp]));
+
+      for (const item of body.items) {
+        if (!storeProductMap.has(item.storeProductId)) {
+          return status(404, { error: { code: "PRODUCT_NOT_FOUND", message: `Producto ${item.storeProductId} no encontrado` } });
+        }
+      }
+
+      const totalAmount = body.items.reduce((sum, item) => sum + item.amount, 0);
+
+      const [transaction] = (await db
+        .insert(transactions)
+        .values({
+          userId: body.userId ?? null,
+          storeId: params.storeId,
+          cardId: body.cardId ?? null,
+          totalAmount,
+          idempotencyKey: body.idempotencyKey ?? null,
+        })
+        .returning()) as Array<{
+        id: string;
+        userId: string | null;
+        storeId: string;
+        cardId: string | null;
+        totalAmount: number;
+        createdAt: Date;
+      }>;
+
+      if (!transaction) {
+        return status(500, {
+          error: {
+            code: "TRANSACTION_CREATE_FAILED",
+            message: "No se pudo crear la transacción",
+          },
+        });
+      }
+
+      const transactionItemsData = body.items.map((item) => ({
+        transactionId: transaction.id,
+        productId: storeProductMap.get(item.storeProductId)!.productId ?? storeProductMap.get(item.storeProductId)!.name,
+        quantity: item.quantity,
+        amount: item.amount,
+      }));
+
+      const items = (await db
+        .insert(transactionItems)
+        .values(transactionItemsData)
+        .returning()) as Array<{
+        id: string;
+        transactionId: string;
+        productId: string;
+        quantity: number;
+        amount: number;
+      }>;
+
+      return status(201, {
+        data: {
+          id: transaction.id,
+          userId: transaction.userId ?? undefined,
+          storeId: transaction.storeId,
+          cardId: transaction.cardId ?? undefined,
+          items: items.map((item) => ({
+            id: item.id,
+            storeProductId: body.items.find((bi) => bi.storeProductId && storeProductMap.get(bi.storeProductId)?.productId === item.productId)?.storeProductId ?? item.productId,
+            productId: storeProductMap.get(item.productId)?.productId ?? undefined,
+            name: storeProductMap.get(item.productId)?.name ?? item.productId,
+            quantity: item.quantity,
+            amount: item.amount,
+          })),
+          totalAmount: transaction.totalAmount,
+          guestFlag,
+          createdAt: transaction.createdAt.toISOString(),
+        },
+      });
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      body: storeTransactionCreateRequest,
+      response: { 201: storeTransactionResponse },
+      detail: { summary: "Registrar transacción desde POS" },
+    },
+  )
+  .get(
+    "/:storeId/transactions",
+    async ({
+      auth,
+      params,
+      query,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      query: { limit?: string; cursor?: string; from?: string; to?: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const cursorDate = parseCursor(query.cursor);
+      const limit = parseLimit(query.limit);
+      const safeLimit = Math.trunc(limit) + 1;
+
+      const filters = [sql`"transactions"."store_id" = ${params.storeId}`];
+
+      if (query.from) {
+        filters.push(sql`"transactions"."created_at" >= ${query.from}`);
+      }
+      if (query.to) {
+        filters.push(sql`"transactions"."created_at" <= ${query.to}`);
+      }
+      if (cursorDate) {
+        filters.push(sql`"transactions"."created_at" < ${cursorDate}`);
+      }
+
+      const whereClause = filters.length > 0 ? sql`where ${sql.join(filters, sql` and `)}` : sql``;
+
+      const txRows = (await db.execute(sql`
+        select "id", "user_id", "store_id", "card_id", "total_amount", "created_at"
+        from "transactions"
+        ${whereClause}
+        order by "transactions"."created_at" desc
+        limit ${sql.raw(String(safeLimit))}
+      `)) as Array<{
+        id: string;
+        user_id: string | null;
+        store_id: string;
+        card_id: string | null;
+        total_amount: number;
+        created_at: Date;
+      }>;
+
+      const hasMore = txRows.length > limit;
+      const txs = hasMore ? txRows.slice(0, limit) : txRows;
+      const nextCursor = hasMore ? txs[txs.length - 1]?.created_at.toISOString() : null;
+
+      const txIds = txs.map((tx) => tx.id);
+      const itemsRows = txIds.length > 0
+        ? (await db.execute(sql`
+            select "id", "transaction_id", "product_id", "quantity", "amount"
+            from "transaction_items"
+            where "transaction_id" = any(${txIds})
+          `)) as Array<{
+            id: string;
+            transaction_id: string;
+            product_id: string;
+            quantity: number;
+            amount: number;
+          }>
+        : [];
+
+      const itemsByTx = new Map<string, typeof itemsRows>();
+      for (const item of itemsRows) {
+        if (!itemsByTx.has(item.transaction_id)) {
+          itemsByTx.set(item.transaction_id, []);
+        }
+        itemsByTx.get(item.transaction_id)!.push(item);
+      }
+
+      const storeProductsMap = new Map<string, { name: string; storeProductId?: string }>();
+      if (itemsRows.length > 0) {
+        const productIds = [...new Set(itemsRows.map((i) => i.product_id))];
+        const storeProductsData = (await db
+          .select({ id: storeProducts.id, name: storeProducts.name, productId: storeProducts.productId })
+          .from(storeProducts)
+          .where(sql`${storeProducts.id} = any(${productIds})`) as any) as Array<{ id: string; name: string; productId: string | null }>;
+        for (const sp of storeProductsData) {
+          storeProductsMap.set(sp.id, { name: sp.name, storeProductId: sp.id });
+        }
+      }
+
+      return {
+        data: txs.map((tx) => {
+          const txItems = itemsByTx.get(tx.id) ?? [];
+          return {
+            id: tx.id,
+            userId: tx.user_id ?? undefined,
+            storeId: tx.store_id,
+            cardId: tx.card_id ?? undefined,
+            items: txItems.map((item) => {
+              const spInfo = storeProductsMap.get(item.product_id);
+              return {
+                id: item.id,
+                storeProductId: spInfo?.storeProductId ?? item.product_id,
+                productId: spInfo ? undefined : item.product_id,
+                name: spInfo?.name ?? item.product_id,
+                quantity: item.quantity,
+                amount: item.amount,
+              };
+            }),
+            totalAmount: tx.total_amount,
+            guestFlag: !tx.user_id,
+            createdAt: tx.created_at.toISOString(),
+          };
+        }),
+        pagination: {
+          hasMore,
+          nextCursor: nextCursor ?? undefined,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      query: storeTransactionListQuery,
+      response: { 200: storeTransactionListResponse },
+      detail: { summary: "Listar transacciones de tienda" },
     },
   );

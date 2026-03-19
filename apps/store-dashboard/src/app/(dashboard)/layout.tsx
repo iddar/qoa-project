@@ -7,6 +7,7 @@ import { useAuth } from "@/providers/auth-provider";
 
 const navItems = [
   { href: "/", label: "Resumen" },
+  { href: "/pos", label: "POS" },
   { href: "/sales", label: "Ventas" },
   { href: "/scan", label: "Escanear" },
   { href: "/customers", label: "Clientes" },
