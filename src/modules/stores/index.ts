@@ -12,6 +12,7 @@ import {
   getRelatedCpgIdsForStore,
   getRelatedStoreIdsForCpg,
   touchStoreCpgRelations,
+  ensureOrganicRelation,
 } from "../../services/store-cpg-relations";
 import type { StatusHandler } from "../../types/handlers";
 import {
@@ -934,6 +935,31 @@ export const storesModule = new Elysia({
         return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
       }
 
+      let inferredCpgId: string | null = body.cpgId ?? null;
+
+      if (body.productId) {
+        const [productRow] = (await db
+          .select({ brandId: products.brandId })
+          .from(products)
+          .where(eq(products.id, body.productId))
+          .limit(1)) as Array<{ brandId: string | null }>;
+
+        if (productRow?.brandId) {
+          const [brandRow] = (await db
+            .select({ cpgId: brands.cpgId })
+            .from(brands)
+            .where(eq(brands.id, productRow.brandId))
+            .limit(1)) as Array<{ cpgId: string | null }>;
+
+          if (brandRow?.cpgId) {
+            inferredCpgId = brandRow.cpgId;
+            await ensureOrganicRelation(params.storeId, brandRow.cpgId);
+          }
+        }
+      } else if (body.cpgId) {
+        await ensureOrganicRelation(params.storeId, body.cpgId);
+      }
+
       const [created] = (await db
         .insert(storeProducts)
         .values({
@@ -941,7 +967,7 @@ export const storesModule = new Elysia({
           name: body.name,
           sku: body.sku ?? null,
           productId: body.productId ?? null,
-          cpgId: body.cpgId ?? null,
+          cpgId: inferredCpgId,
           price: body.price.toString(),
         })
         .returning()) as Array<{
@@ -1274,7 +1300,7 @@ export const storesModule = new Elysia({
       detail: { summary: "Buscar productos en catálogo global y de tienda" },
     },
   )
-  // ========== STORE BRANDS (available via CPG relations) ==========
+  // ========== STORE BRANDS (all brands - not filtered by CPG relations) ==========
   .get(
     "/:storeId/brands",
     async ({
@@ -1294,16 +1320,10 @@ export const storesModule = new Elysia({
         return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
       }
 
-      const cpgIds = await getRelatedCpgIdsForStore(params.storeId);
-
-      if (cpgIds.length === 0) {
-        return { data: [] };
-      }
-
       const brandsRows = (await db.execute(sql`
         select "id", "cpg_id", "name", "logo_url", "status", "created_at"
         from "brands"
-        where "cpg_id" = any(${cpgIds}) and "status" = 'active'
+        where "status" = 'active'
         order by "name"
       `)) as Array<{
         id: string;

@@ -588,7 +588,14 @@ paths:
     post:
       tags: [Stores]
       summary: Crear producto en tienda
-      description: Crea un producto en el catálogo local de la tienda. Si no se asocia un CPG, el producto no generará acumulaciones.
+      description: |
+        Crea un producto en el catálogo local de la tienda. 
+        
+        Si se proporciona `productId` (producto del catálogo global), se infiere el CPG del brand y se crea automáticamente una relación orgánica (source=organic) si no existe.
+        
+        Si se crea un producto local sin `productId` pero con `cpgId`, también se crea la relación orgánica automáticamente.
+        
+        Los productos sin CPG no generarán acumulaciones en campañas.
       operationId: createStoreProduct
       security:
         - bearerAuth: []
@@ -723,7 +730,7 @@ paths:
     get:
       tags: [Stores]
       summary: Listar marcas disponibles para la tienda
-      description: Retorna las marcas disponibles para una tienda, basadas en las relaciones CPG-tienda
+      description: Retorna todas las marcas activas del sistema. Cuando un store agrega un producto de una marca sin relación formal, se crea automáticamente una relación orgánica (source=organic) para análisis de mercado.
       operationId: listStoreBrands
       security:
         - bearerAuth: []

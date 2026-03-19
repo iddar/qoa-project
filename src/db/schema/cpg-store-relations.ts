@@ -5,7 +5,13 @@ import { stores } from './stores';
 import { users } from './users';
 
 export const cpgStoreRelationStatus = pgEnum('cpg_store_relation_status', ['active', 'inactive']);
-export const cpgStoreRelationSource = pgEnum('cpg_store_relation_source', ['first_activity', 'manual', 'import']);
+export const cpgStoreRelationSource = pgEnum('cpg_store_relation_source', [
+  'first_activity',
+  'manual',
+  'import',
+  'capture',
+  'organic',
+]);
 
 type CpgStoreRelationsTable = {
   cpgId: unknown;

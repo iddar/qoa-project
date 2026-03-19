@@ -2,6 +2,8 @@ import { and, eq, or } from 'drizzle-orm';
 import { db } from '../db/client';
 import { cpgStoreRelations } from '../db/schema';
 
+type CpgStoreRelationSource = 'first_activity' | 'manual' | 'import' | 'capture' | 'organic';
+
 export const isStoreRelatedToCpg = async (storeId: string, cpgId: string) => {
   const [row] = (await db
     .select({ id: cpgStoreRelations.id })
@@ -43,7 +45,7 @@ export const getRelatedCpgIdsForStore = async (storeId: string) => {
 export const touchStoreCpgRelations = async (payload: {
   storeId: string;
   cpgIds: string[];
-  source?: 'first_activity' | 'manual' | 'import';
+  source?: CpgStoreRelationSource;
   actorUserId?: string | null;
   touchedAt?: Date;
 }) => {
@@ -94,4 +96,33 @@ export const touchStoreCpgRelations = async (payload: {
       updatedAt: now,
     });
   }
+};
+
+export const ensureOrganicRelation = async (storeId: string, cpgId: string) => {
+  const existing = (await db
+    .select({ id: cpgStoreRelations.id, source: cpgStoreRelations.source })
+    .from(cpgStoreRelations)
+    .where(and(
+      eq(cpgStoreRelations.storeId, storeId),
+      eq(cpgStoreRelations.cpgId, cpgId),
+    ))
+    .limit(1)) as Array<{ id: string; source: string }>;
+
+  if (existing && existing.length > 0) {
+    return existing[0];
+  }
+
+  const now = new Date();
+  const [created] = await db.insert(cpgStoreRelations).values({
+    storeId,
+    cpgId,
+    status: 'active',
+    source: 'organic',
+    firstActivityAt: now,
+    lastActivityAt: now,
+    createdAt: now,
+    updatedAt: now,
+  }).returning();
+
+  return created;
 };
