@@ -165,3 +165,28 @@ export const storeProductSearchQuery = t.Object({
   q: t.String(),
   limit: t.Optional(t.String()),
 });
+
+export const storeBrandSchema = t.Object({
+  id: t.String(),
+  cpgId: t.String(),
+  name: t.String(),
+  logoUrl: t.Optional(t.String()),
+  status: t.String(),
+});
+
+export const storeBrandListResponse = t.Object({
+  data: t.Array(storeBrandSchema),
+});
+
+export const storeBrandWithProductsSchema = t.Object({
+  id: t.String(),
+  cpgId: t.String(),
+  name: t.String(),
+  logoUrl: t.Optional(t.String()),
+  products: t.Array(t.Object({
+    id: t.String(),
+    name: t.String(),
+    sku: t.Optional(t.String()),
+    price: t.String(),
+  })),
+});

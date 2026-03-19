@@ -32,6 +32,7 @@ import {
   storeTransactionResponse,
   storeTransactionListQuery,
   storeTransactionListResponse,
+  storeBrandListResponse,
 } from "./model";
 
 const getAuthRole = (auth: AuthContext): string | null => {
@@ -1271,6 +1272,62 @@ export const storesModule = new Elysia({
       beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
       query: storeProductSearchQuery,
       detail: { summary: "Buscar productos en catálogo global y de tienda" },
+    },
+  )
+  // ========== STORE BRANDS (available via CPG relations) ==========
+  .get(
+    "/:storeId/brands",
+    async ({
+      auth,
+      params,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const cpgIds = await getRelatedCpgIdsForStore(params.storeId);
+
+      if (cpgIds.length === 0) {
+        return { data: [] };
+      }
+
+      const brandsRows = (await db.execute(sql`
+        select "id", "cpg_id", "name", "logo_url", "status", "created_at"
+        from "brands"
+        where "cpg_id" = any(${cpgIds}) and "status" = 'active'
+        order by "name"
+      `)) as Array<{
+        id: string;
+        cpg_id: string;
+        name: string;
+        logo_url: string | null;
+        status: string;
+        created_at: Date;
+      }>;
+
+      return {
+        data: brandsRows.map((row) => ({
+          id: row.id,
+          cpgId: row.cpg_id,
+          name: row.name,
+          logoUrl: row.logo_url ?? undefined,
+          status: row.status,
+        })),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      response: { 200: storeBrandListResponse },
+      detail: { summary: "Listar marcas disponibles para la tienda" },
     },
   )
   // ========== STORE TRANSACTIONS ==========

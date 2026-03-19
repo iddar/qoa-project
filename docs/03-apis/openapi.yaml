@@ -719,6 +719,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/StoreProductSearchResponse'
 
+  /stores/{storeId}/brands:
+    get:
+      tags: [Stores]
+      summary: Listar marcas disponibles para la tienda
+      description: Retorna las marcas disponibles para una tienda, basadas en las relaciones CPG-tienda
+      operationId: listStoreBrands
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+      responses:
+        '200':
+          description: Lista de marcas disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreBrandListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   # ==================== STORE TRANSACTIONS ====================
   /stores/{storeId}/transactions:
     get:
@@ -2952,6 +2974,32 @@ components:
                   source:
                     type: string
                     enum: [global]
+
+    StoreBrand:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cpgId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+
+    StoreBrandListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreBrand'
 
     # ===== Store Transaction =====
     StoreTransactionItem:
