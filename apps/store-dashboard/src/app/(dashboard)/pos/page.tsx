@@ -230,7 +230,7 @@ export default function StorePOSPage() {
                 key={product.id}
                 type="button"
                 onClick={() => addToCart(product)}
-                className="flex flex-col rounded-xl border border-zinc-200 bg-white p-4 text-left transition hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+                className="flex flex-col rounded-xl border border-zinc-200 bg-white p-4 text-left transition hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 cursor-pointer"
               >
                 <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{product.name}</span>
                 {product.sku && (
