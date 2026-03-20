@@ -1,6 +1,5 @@
 import {
   index,
-  decimal,
   pgEnum,
   pgTable,
   text,
@@ -9,6 +8,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { decimal } from 'drizzle-orm/pg-core/columns/numeric';
 import { sql } from 'drizzle-orm';
 
 export const storeStatus = pgEnum('store_status', ['active', 'inactive']);

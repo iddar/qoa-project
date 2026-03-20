@@ -21,6 +21,11 @@ import {
   users,
 } from "../db/schema";
 
+type CpgRow = { id: string; name: string };
+type StoreRow = { id: string; name: string; code: string };
+type CampaignRow = { id: string; name: string; cpgId: string };
+type EnrollmentRow = { campaignId: string; storeId: string; status: string; enrolledAt?: Date };
+
 process.env.AUTH_DEV_MODE = "true";
 process.env.NODE_ENV = "test";
 
@@ -75,8 +80,8 @@ describe("CPG-Store Relations", () => {
     await db.delete(users);
 
     // Create CPG
-    const [cpg] = await db.insert(cpgs).values({ name: "Test CPG" }).returning();
-    testCpgId = cpg.id;
+    const [cpg] = await db.insert(cpgs).values({ name: "Test CPG" }).returning() as CpgRow[];
+    testCpgId = cpg!.id;
 
     // Create Store
     const [store] = await db
@@ -91,8 +96,8 @@ describe("CPG-Store Relations", () => {
         latitude: "19.4326000",
         longitude: "-99.1332000",
       })
-      .returning();
-    testStoreId = store.id;
+      .returning() as StoreRow[];
+    testStoreId = store!.id;
 
     // Create Campaign
     const [campaign] = await db
@@ -104,8 +109,8 @@ describe("CPG-Store Relations", () => {
         storeAccessMode: "selected_stores",
         storeEnrollmentMode: "store_opt_in",
       })
-      .returning();
-    testCampaignId = campaign.id;
+      .returning() as CampaignRow[];
+    testCampaignId = campaign!.id;
   });
 
   it("lists related CPGs for a store", async () => {
@@ -180,7 +185,7 @@ describe("CPG-Store Relations", () => {
     const [enrollment] = await db
       .select()
       .from(campaignStoreEnrollments)
-      .where(eq(campaignStoreEnrollments.campaignId, testCampaignId));
+      .where(eq(campaignStoreEnrollments.campaignId, testCampaignId)) as EnrollmentRow[];
 
     expect(enrollment).toBeDefined();
     expect(enrollment?.status).toBe("visible");
@@ -216,7 +221,7 @@ describe("CPG-Store Relations", () => {
     const [enrollment] = await db
       .select()
       .from(campaignStoreEnrollments)
-      .where(eq(campaignStoreEnrollments.campaignId, testCampaignId));
+      .where(eq(campaignStoreEnrollments.campaignId, testCampaignId)) as EnrollmentRow[];
 
     expect(enrollment?.status).toBe("enrolled");
     expect(enrollment?.enrolledAt).toBeDefined();
