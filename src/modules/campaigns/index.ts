@@ -3018,6 +3018,69 @@ export const campaignsModule = new Elysia({
       detail: { summary: "Enrolar o actualizar tienda en campaña" },
     },
   )
+  .get(
+    "/:campaignId/stores/:storeId/campaigns",
+    async ({
+      auth,
+      params,
+      query,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { campaignId: string; storeId: string };
+      query: { limit?: string; cursor?: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      const role = getAuthRole(auth);
+      const isStoreOperator =
+        (auth.type === "jwt" || auth.type === "dev") &&
+        (role === "store_admin" || role === "store_staff") &&
+        auth.tenantType === "store" &&
+        auth.tenantId === params.storeId;
+      const isCpgAccess =
+        (auth.type === "jwt" || auth.type === "dev") &&
+        role === "cpg_admin" &&
+        auth.tenantType === "cpg";
+
+      if (!isStoreOperator && !isCpgAccess && !(role === "qoa_admin" || role === "qoa_support")) {
+        return status(403, {
+          error: {
+            code: "FORBIDDEN",
+            message: "No tienes permisos para ver campañas de esta tienda",
+          },
+        });
+      }
+
+      const campaign = await ensureCampaign(params.campaignId);
+      if (!campaign) {
+        return status(404, {
+          error: { code: "CAMPAIGN_NOT_FOUND", message: "Campaña no encontrada" },
+        });
+      }
+
+      const isVisible = await isStoreParticipatingInCampaign({
+        campaignId: params.campaignId,
+        storeId: params.storeId,
+      });
+
+      return {
+        data: isVisible ? [serializeCampaign(campaign)] : [],
+        pagination: { hasMore: false, nextCursor: query.cursor },
+      };
+    },
+    {
+      beforeHandle: authGuard({
+        roles: ["store_admin", "store_staff", "cpg_admin", "qoa_admin", "qoa_support"],
+        allowApiKey: true,
+      }),
+      response: { 200: campaignListResponse },
+      detail: { summary: "Listar campañas visibles de una tienda para una campaña específica" },
+    },
+  )
   // ========== STORE-FACING: GET VISIBLE CAMPAIGNS FOR STORE ==========
   .get(
     "/stores/:storeId/campaigns",

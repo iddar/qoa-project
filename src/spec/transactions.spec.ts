@@ -133,6 +133,7 @@ const createPolicyFixture = async () => {
     .insert(campaigns)
     .values({
       name: `Campaign Policy ${crypto.randomUUID().slice(0, 6)}`,
+      status: 'active',
     })
     .returning({ id: campaigns.id })) as Array<{ id: string }>;
 
@@ -193,6 +194,7 @@ describe('Transactions module', () => {
       .insert(campaigns)
       .values({
         name: `Campaign TX ${crypto.randomUUID().slice(0, 6)}`,
+        status: 'active',
       })
       .returning({ id: campaigns.id })) as Array<{ id: string }>;
 
@@ -624,6 +626,7 @@ describe('Transactions module', () => {
       .insert(campaigns)
       .values({
         name: `Campaign Rules ${crypto.randomUUID().slice(0, 6)}`,
+        status: 'active',
       })
       .returning({ id: campaigns.id })) as Array<{ id: string }>;
 
