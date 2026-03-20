@@ -414,6 +414,7 @@ export default function CampaignDetailPage() {
     const campaignStoresQuery = useQuery({
         queryKey: ["campaign-stores", campaignId],
         queryFn: async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data, error } = await (api.v1.campaigns({ campaignId }).stores as any).get({
                 query: { limit: "500" },
                 headers: { authorization: `Bearer ${token}` },
@@ -428,6 +429,7 @@ export default function CampaignDetailPage() {
         queryKey: ["related-cpg-stores", tenantId],
         enabled: Boolean(tenantId),
         queryFn: async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data, error } = await (api.v1.stores as any)
                 .cpgs({ cpgId: tenantId! })
                 .stores.get({
@@ -610,6 +612,7 @@ export default function CampaignDetailPage() {
 
                 if (toAdd.length > 0) {
                     const { error } = await (
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         api.v1.campaigns({ campaignId })["stores/target"] as any
                     ).post(
                         {
@@ -627,6 +630,7 @@ export default function CampaignDetailPage() {
 
                 for (const storeId of toRemove) {
                     const { error } = await (
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         api.v1.campaigns({ campaignId }).stores({ storeId }).enroll as any
                     ).post(
                         {

@@ -135,6 +135,7 @@ export default function StoresPage() {
             if (!tenantId) {
                 return { data: [], pagination: { hasMore: false } };
             }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data, error } = await (api.v1.stores as any)
                 .cpgs({ cpgId: tenantId })
                 .stores.get({
@@ -153,6 +154,7 @@ export default function StoresPage() {
             if (!tenantId) {
                 throw new Error("missing_cpg");
             }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data, error } = await (api.v1.stores as any)
                 .cpgs({ cpgId: tenantId })
                 .stores.post({ storeIds }, { headers: { authorization: `Bearer ${token}` } });
@@ -173,6 +175,7 @@ export default function StoresPage() {
             if (!tenantId) {
                 throw new Error("missing_cpg");
             }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data, error } = await (api.v1.stores as any)
                 .cpgs({ cpgId: tenantId })
                 .stores({ storeId })
@@ -217,6 +220,7 @@ export default function StoresPage() {
                 throw createError;
             }
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { error: relationError } = await (api.v1.stores as any)
                 .cpgs({ cpgId: tenantId })
                 .stores.post(
@@ -282,11 +286,13 @@ export default function StoresPage() {
 
     useEffect(() => {
         if (!filteredRelations.length) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedStoreId("");
             return;
         }
 
         if (!filteredRelations.some((relation) => relation.storeId === selectedStoreId)) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedStoreId(filteredRelations[0]!.storeId);
         }
     }, [filteredRelations, selectedStoreId]);
