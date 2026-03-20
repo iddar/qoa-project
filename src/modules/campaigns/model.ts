@@ -397,7 +397,6 @@ export const campaignStoreTargetRequest = t.Object({
 });
 
 export const campaignStoreEnrollRequest = t.Object({
-  storeId: t.String({ format: "uuid" }),
   status: campaignStoreEnrollmentStatusSchema,
 });
 

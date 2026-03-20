@@ -24,13 +24,8 @@ export const isStoreVisibleForCampaign = async (payload: { campaignId: string; s
     return false;
   }
 
-  const related = await isStoreRelatedToCpg(payload.storeId, campaign.cpgId);
-  if (!related) {
-    return false;
-  }
-
   if (campaign.storeAccessMode === 'all_related_stores') {
-    return true;
+    return isStoreRelatedToCpg(payload.storeId, campaign.cpgId);
   }
 
   const [enrollment] = (await db
@@ -97,17 +92,23 @@ export const isStoreParticipatingInCampaign = async (payload: { campaignId: stri
     storeEnrollmentMode: 'store_opt_in' | 'cpg_managed' | 'auto_enroll';
   }>;
 
-  if (!campaign || campaign.status !== 'active' || !campaign.cpgId) {
+  if (!campaign || campaign.status !== 'active') {
     return false;
   }
 
-  const related = await isStoreRelatedToCpg(payload.storeId, campaign.cpgId);
-  if (!related) {
-    return false;
-  }
-
-  if (campaign.storeAccessMode === 'all_related_stores' && campaign.storeEnrollmentMode === 'auto_enroll') {
+  if (!campaign.cpgId) {
     return true;
+  }
+
+  if (campaign.storeAccessMode === 'all_related_stores') {
+    const related = await isStoreRelatedToCpg(payload.storeId, campaign.cpgId);
+    if (!related) {
+      return false;
+    }
+
+    if (campaign.storeEnrollmentMode === 'auto_enroll') {
+      return true;
+    }
   }
 
   const [enrollment] = (await db

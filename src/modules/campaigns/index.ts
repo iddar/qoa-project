@@ -738,6 +738,8 @@ export const campaignsModule = new Elysia({
           cpgId: campaigns.cpgId,
           status: campaigns.status,
           enrollmentMode: campaigns.enrollmentMode,
+          storeAccessMode: campaigns.storeAccessMode,
+          storeEnrollmentMode: campaigns.storeEnrollmentMode,
           accumulationMode: campaigns.accumulationMode,
           startsAt: campaigns.startsAt,
           endsAt: campaigns.endsAt,
