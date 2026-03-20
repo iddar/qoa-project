@@ -15,6 +15,7 @@ import {
   redemptions,
   rewards,
   stores,
+  storeProducts,
   transactionItems,
   transactions,
   users,
@@ -901,6 +902,43 @@ const upsertSeedProduct = async (scope: string, brandId: string): Promise<string
     .returning({ id: products.id })) as Array<{ id: string }>;
 
   return inserted!.id;
+};
+
+const upsertSeedStoreProducts = async (scope: string, storeId: string) => {
+  const allProducts = (await db
+    .select({ id: products.id, brandId: products.brandId, name: products.name })
+    .from(products)
+    .where(eq(products.status, "active"))) as Array<{ id: string; brandId: string; name: string }>;
+
+  for (const product of allProducts) {
+    const [existing] = (await db
+      .select({ id: storeProducts.id })
+      .from(storeProducts)
+      .where(and(eq(storeProducts.storeId, storeId), eq(storeProducts.productId, product.id)))
+      .limit(1)) as Array<{ id: string }>;
+
+    if (existing) continue;
+
+    const [brandRow] = (await db
+      .select({ cpgId: brands.cpgId })
+      .from(brands)
+      .where(eq(brands.id, product.brandId))
+      .limit(1)) as Array<{ cpgId: string | null }>;
+
+    const price = Math.floor(Math.random() * 20000) + 1000;
+    const sku = `STORE-${product.id}`;
+
+    await db.insert(storeProducts).values({
+      storeId,
+      productId: product.id,
+      cpgId: brandRow?.cpgId ?? null,
+      name: product.name,
+      sku,
+      price: price.toString(),
+      unitType: "piece",
+      status: "active",
+    });
+  }
 };
 
 const upsertSeedCampaign = async (scope: string, cpgId: string): Promise<string> => {
@@ -1852,6 +1890,7 @@ export const seedUsers = async (scope: "development" | "local" | "test") => {
   const storeId = await upsertSeedStore(scope);
   const brandId = await upsertSeedBrand(scope, cpgId);
   const productId = await upsertSeedProduct(scope, brandId);
+  await upsertSeedStoreProducts(scope, storeId);
   const campaignId = await upsertSeedCampaign(scope, cpgId);
   const rewardId = await upsertSeedReward(scope, campaignId);
   const definitions = baseUsers(scope, cpgId, storeId);

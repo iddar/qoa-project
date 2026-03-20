@@ -176,7 +176,7 @@ export default function StoreProductsPage() {
               <button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white"
+                className="mt-4 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
               >
                 Agregar tu primer producto
               </button>
@@ -395,11 +395,13 @@ function AddProductModal({ storeId, token, brands, product, onClose, onSuccess }
     setSelectedBrand(brand);
     setShowNewProductForm(false);
     setSelectedProductId(null);
+    setFormData({ name: "", sku: "", price: "" });
   };
 
   const handleCreateNewProduct = () => {
     setShowNewProductForm(true);
     setSelectedProductId(null);
+    setFormData({ name: "", sku: "", price: "" });
   };
 
   const isEditing = Boolean(product);
@@ -489,7 +491,11 @@ function AddProductModal({ storeId, token, brands, product, onClose, onSuccess }
                     if (e.target.checked) {
                       setSelectedBrand(null);
                       setShowNewProductForm(true);
+                    } else {
+                      setShowNewProductForm(false);
                     }
+                    setFormData({ name: "", sku: "", price: "" });
+                    setNewBrandName("");
                   }}
                   className="rounded border-zinc-300"
                 />
@@ -635,7 +641,7 @@ function AddProductModal({ storeId, token, brands, product, onClose, onSuccess }
                 ? !formData.name || !formData.price
                 : !formData.name || !formData.price || (!selectedBrand && !createNewBrand)
             }
-            className="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex-1 rounded-lg bg-zinc-900 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
           >
             {isEditing ? "Guardar Cambios" : "Agregar Producto"}
           </button>
