@@ -10,13 +10,14 @@
         "lint": "eslint"
     },
     "dependencies": {
-        "@qoa/api-client": "workspace:*",
         "@elysiajs/eden": "^1.4.2",
-        "@qoa/auth-client": "workspace:*",
         "@lglab/react-qr-code": "^1.4.9",
+        "@qoa/api-client": "workspace:*",
+        "@qoa/auth-client": "workspace:*",
         "@qoa/core": "workspace:*",
         "@qoa/ui": "workspace:*",
         "@tanstack/react-query": "^5",
+        "lucide-react": "^0.577.0",
         "next": "16.1.6",
         "react": "19.2.3",
         "react-dom": "19.2.3"

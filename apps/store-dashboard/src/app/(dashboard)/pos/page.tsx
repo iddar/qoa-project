@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { useAuth } from "@/providers/auth-provider";
+import { Trash2 } from "lucide-react";
 
 type StoreProduct = {
   id: string;
@@ -254,9 +255,19 @@ export default function StorePOSPage() {
       </div>
 
       <aside className="w-80 flex-shrink-0 flex flex-col rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <header className="border-b border-zinc-100 px-4 py-4 dark:border-zinc-800">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Carrito</h2>
+        <header className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 dark:border-zinc-800">
+          <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Carrito</h2>
+          <div className="flex items-center gap-2">
+            {cart.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setCart([])}
+                className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2 py-1 text-xs text-zinc-500 transition hover:border-red-200 hover:text-red-500 dark:border-zinc-700 dark:hover:border-red-800 dark:hover:text-red-400"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Limpiar
+              </button>
+            )}
             <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
               {cartItemCount} items
             </span>
