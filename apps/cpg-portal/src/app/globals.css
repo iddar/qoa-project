@@ -1,6 +1,41 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+    --font-sans: var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+}
+
+.leaflet-container {
+    font-family: var(--font-geist-sans), sans-serif;
+    background: linear-gradient(180deg, #e0f2fe 0%, #f8fafc 100%);
+}
+
+.leaflet-control-attribution {
+    border-radius: 10px 0 0 0;
+    background: rgb(255 255 255 / 0.92) !important;
+}
+
+.cpg-store-marker-shell {
+    background: transparent;
+    border: none;
+}
+
+.cpg-store-marker {
+    display: flex;
+    height: 28px;
+    width: 28px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    background: #111827;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    box-shadow: 0 10px 25px rgb(15 23 42 / 0.22);
+    border: 2px solid rgb(255 255 255 / 0.94);
+}
+
+.cpg-store-marker.is-selected {
+    background: #0f766e;
+    transform: scale(1.08);
 }

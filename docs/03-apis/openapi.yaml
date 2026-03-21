@@ -550,6 +550,273 @@ paths:
               schema:
                 $ref: '#/components/schemas/QrResponse'
 
+  # ==================== STORE PRODUCTS ====================
+  /stores/{storeId}/products:
+    get:
+      tags: [Stores]
+      summary: Listar productos de tienda
+      description: Lista los productos del catálogo local de la tienda
+      operationId: listStoreProducts
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive]
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Búsqueda por nombre
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de productos de tienda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreProductListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Stores]
+      summary: Crear producto en tienda
+      description: |
+        Crea un producto en el catálogo local de la tienda. 
+        
+        Si se proporciona `productId` (producto del catálogo global), se infiere el CPG del brand y se crea automáticamente una relación orgánica (source=organic) si no existe.
+        
+        Si se crea un producto local sin `productId` pero con `cpgId`, también se crea la relación orgánica automáticamente.
+        
+        Los productos sin CPG no generarán acumulaciones en campañas.
+      operationId: createStoreProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreProductCreate'
+      responses:
+        '201':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreProductResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /stores/{storeId}/products/{productId}:
+    get:
+      tags: [Stores]
+      summary: Obtener producto de tienda
+      operationId: getStoreProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalle de producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags: [Stores]
+      summary: Actualizar producto de tienda
+      operationId: updateStoreProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreProductUpdate'
+      responses:
+        '200':
+          description: Producto actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Stores]
+      summary: Desactivar producto de tienda
+      operationId: deleteStoreProduct
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Producto desactivado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /stores/{storeId}/products-search:
+    get:
+      tags: [Stores]
+      summary: Buscar productos en catálogo global y de tienda
+      description: Busca productos tanto en el catálogo global como en el catálogo local de la tienda
+      operationId: searchStoreProducts
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Término de búsqueda
+        - $ref: '#/components/parameters/limitParam'
+      responses:
+        '200':
+          description: Resultados de búsqueda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreProductSearchResponse'
+
+  /stores/{storeId}/brands:
+    get:
+      tags: [Stores]
+      summary: Listar marcas disponibles para la tienda
+      description: Retorna todas las marcas activas del sistema. Cuando un store agrega un producto de una marca sin relación formal, se crea automáticamente una relación orgánica (source=organic) para análisis de mercado.
+      operationId: listStoreBrands
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+      responses:
+        '200':
+          description: Lista de marcas disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreBrandListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ==================== STORE TRANSACTIONS ====================
+  /stores/{storeId}/transactions:
+    get:
+      tags: [Stores]
+      summary: Listar transacciones de tienda
+      description: Lista el historial de transacciones de la tienda
+      operationId: listStoreTransactions
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de transacciones
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreTransactionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags: [Stores]
+      summary: Registrar transacción desde POS
+      description: |
+        Registra una transacción desde el punto de venta. 
+        
+        - Si se proporciona `cardId`, la transacción será elegible para acumulaciones si hay campañas activas.
+        - Si NO se proporciona `userId` ni `cardId`, se registra como transacción de invitado (guest).
+        - Los productos sin CPG asociado no generarán acumulaciones.
+      operationId: createStoreTransaction
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreTransactionCreate'
+      responses:
+        '201':
+          description: Transacción creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreTransactionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   # ==================== BRANDS ====================
   /cpgs:
     get:
@@ -1545,6 +1812,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionWebhookResponse'
+        '201':
+          description: Evento procesado por primera vez
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionWebhookResponse'
+        '401':
+          description: Firma de webhook inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Límite de solicitudes de webhook excedido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /transactions/webhook-receipts:
     get:
@@ -1603,12 +1888,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransactionWebhookMetricsResponse'
-        '201':
-          description: Evento procesado por primera vez
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TransactionWebhookResponse'
 
   # ==================== ALERTS ====================
   /alerts:
@@ -2430,9 +2709,53 @@ components:
         address:
           type: string
           nullable: true
+          description: Dirección en texto libre (legacy)
         phone:
           type: string
           nullable: true
+        street:
+          type: string
+          nullable: true
+          description: Calle
+        exteriorNumber:
+          type: string
+          nullable: true
+          description: Número exterior
+        interiorNumber:
+          type: string
+          nullable: true
+          description: Número interior
+        neighborhood:
+          type: string
+          nullable: true
+          description: Colonia
+        city:
+          type: string
+          nullable: true
+          description: Ciudad / Municipio
+        state:
+          type: string
+          nullable: true
+          description: Estado
+        postalCode:
+          type: string
+          nullable: true
+          description: Código postal
+        country:
+          type: string
+          nullable: true
+          description: País (ISO 3166-1 alpha-3)
+          default: MEX
+        latitude:
+          type: number
+          format: double
+          nullable: true
+          description: Latitud (WGS 84)
+        longitude:
+          type: number
+          format: double
+          nullable: true
+          description: Longitud (WGS 84)
         status:
           type: string
           enum: [active, inactive]
@@ -2452,8 +2775,50 @@ components:
           nullable: true
         address:
           type: string
+          description: Dirección en texto libre (legacy)
         phone:
           type: string
+        street:
+          type: string
+          maxLength: 255
+          description: Calle
+        exteriorNumber:
+          type: string
+          maxLength: 20
+          description: Número exterior
+        interiorNumber:
+          type: string
+          maxLength: 20
+          description: Número interior
+        neighborhood:
+          type: string
+          maxLength: 150
+          description: Colonia
+        city:
+          type: string
+          maxLength: 150
+          description: Ciudad / Municipio
+        state:
+          type: string
+          maxLength: 100
+          description: Estado
+        postalCode:
+          type: string
+          maxLength: 10
+          description: Código postal
+        country:
+          type: string
+          maxLength: 3
+          description: País (ISO 3166-1 alpha-3)
+          default: MEX
+        latitude:
+          type: number
+          format: double
+          description: Latitud (WGS 84)
+        longitude:
+          type: number
+          format: double
+          description: Longitud (WGS 84)
 
     StoreResponse:
       type: object
@@ -2474,6 +2839,281 @@ components:
           $ref: '#/components/schemas/Pagination'
         meta:
           $ref: '#/components/schemas/Meta'
+
+    # ===== Store Product =====
+    StoreProduct:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        storeId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID del producto en catálogo global (si existe)
+        cpgId:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID del CPG asociado. Si es null, el producto no genera acumulaciones
+        name:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        unitType:
+          type: string
+          enum: [piece]
+          default: piece
+        price:
+          type: number
+          description: Precio en centavos
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+
+    StoreProductCreate:
+      type: object
+      required: [name, price]
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        sku:
+          type: string
+          maxLength: 100
+          nullable: true
+        productId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Vincular a producto del catálogo global
+        cpgId:
+          type: string
+          format: uuid
+          nullable: true
+          description: CPG del producto. Si no se especifica, el producto no generará acumulaciones
+        price:
+          type: number
+          minimum: 0
+          description: Precio en centavos
+
+    StoreProductUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 200
+        sku:
+          type: string
+          maxLength: 100
+          nullable: true
+        cpgId:
+          type: string
+          format: uuid
+          nullable: true
+        price:
+          type: number
+          minimum: 0
+        status:
+          type: string
+          enum: [active, inactive]
+
+    StoreProductResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/StoreProduct'
+
+    StoreProductListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreProduct'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    StoreProductSearchResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            storeProducts:
+              type: array
+              items:
+                allOf:
+                  - $ref: '#/components/schemas/StoreProduct'
+                  - type: object
+                    properties:
+                      source:
+                        type: string
+                        enum: [store]
+            globalProducts:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  sku:
+                    type: string
+                  brandId:
+                    type: string
+                    format: uuid
+                  cpgId:
+                    type: string
+                    format: uuid
+                  cpgName:
+                    type: string
+                  source:
+                    type: string
+                    enum: [global]
+
+    StoreBrand:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cpgId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        logoUrl:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+
+    StoreBrandListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreBrand'
+
+    # ===== Store Transaction =====
+    StoreTransactionItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        storeProductId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          nullable: true
+          description: ID del producto en catálogo global (si existe)
+        name:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        amount:
+          type: number
+          description: Monto total de la línea en centavos
+
+    StoreTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        storeId:
+          type: string
+          format: uuid
+        cardId:
+          type: string
+          format: uuid
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreTransactionItem'
+        totalAmount:
+          type: number
+          description: Monto total en centavos
+        guestFlag:
+          type: boolean
+          description: True si la transacción fue registrada sin identificador de cliente
+        createdAt:
+          type: string
+          format: date-time
+
+    StoreTransactionCreate:
+      type: object
+      required: [items]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID del usuario (opcional - si no se proporciona, se registra como guest)
+        cardId:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID de la tarjeta de fidelización (opcional)
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [storeProductId, quantity, amount]
+            properties:
+              storeProductId:
+                type: string
+                format: uuid
+                description: ID del producto en el catálogo de la tienda
+              quantity:
+                type: integer
+                minimum: 1
+              amount:
+                type: number
+                minimum: 0
+                description: Monto total de la línea en centavos
+        idempotencyKey:
+          type: string
+          nullable: true
+          description: Clave de idempotencia para evitar duplicados
+
+    StoreTransactionResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/StoreTransaction'
+
+    StoreTransactionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreTransaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
 
     # ===== CPG =====
     Cpg:

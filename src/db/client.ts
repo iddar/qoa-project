@@ -1,10 +1,13 @@
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/bun-sql';
+import { SQL } from 'bun';
 
 const connectionString = process.env.DATABASE_URL ?? 'postgres://qoa:supersecret@127.0.0.1:5432/qoa_local';
 
 type DbQuery = Promise<unknown[]> & {
   from: (...args: unknown[]) => DbQuery;
+  innerJoin: (...args: unknown[]) => DbQuery;
+  leftJoin: (...args: unknown[]) => DbQuery;
+  rightJoin: (...args: unknown[]) => DbQuery;
   where: (...args: unknown[]) => DbQuery;
   orderBy: (...args: unknown[]) => DbQuery;
   limit: (value: number) => DbQuery;
@@ -35,14 +38,20 @@ type DbClient = {
   execute: (query: unknown) => Promise<unknown[]>;
 };
 
-export const sqlClient = postgres(connectionString, {
-  prepare: false,
-});
+export const sqlClient = new SQL(connectionString);
 
 export const db = drizzle(sqlClient) as DbClient;
 
 export const closeDbConnection = async () => {
-  await sqlClient.end();
+  const client = sqlClient as { close?: () => void | Promise<void>; end?: () => Promise<void> };
+  if (typeof client.close === 'function') {
+    await client.close();
+    return;
+  }
+
+  if (typeof client.end === 'function') {
+    await client.end();
+  }
 };
 
 export type Database = typeof db;

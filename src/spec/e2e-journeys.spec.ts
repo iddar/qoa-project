@@ -72,6 +72,8 @@ const buildJourneyFixture = async (campaignStatus: 'draft' | 'active' = 'draft')
       cpgId: cpg?.id,
       name: `Campaign E2E ${crypto.randomUUID().slice(0, 6)}`,
       status: campaignStatus,
+      storeAccessMode: 'all_related_stores',
+      storeEnrollmentMode: 'auto_enroll',
     })
     .returning({ id: campaigns.id })) as Array<{ id: string }>;
 

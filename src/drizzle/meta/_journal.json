@@ -127,6 +127,34 @@
       "when": 1772498726161,
       "tag": "0017_round_xorn",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1773774243650,
+      "tag": "0018_sparkling_lord_hawal",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1773780485915,
+      "tag": "0019_smooth_wong",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1773949935252,
+      "tag": "0020_daffy_the_watchers",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1773964490355,
+      "tag": "0021_salty_kulan_gath",
+      "breakpoints": true
     }
   ]
 }

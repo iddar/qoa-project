@@ -1,0 +1,14 @@
+{
+  "name": "@qoa/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/eden": "^1.4.2",
+    "@qoa/core": "workspace:*"
+  },
+  "packageManager": "bun@1.3.8"
+}

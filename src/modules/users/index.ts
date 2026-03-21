@@ -1,6 +1,7 @@
 import { and, desc, eq, lt, ne, or, sql } from 'drizzle-orm';
 import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { isUserAuth } from '../../app/plugins/permissions';
 import { allUserRoles, backofficeRoles } from '../../app/plugins/roles';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
@@ -125,9 +126,6 @@ type UserMeUpdateContext = {
   body: UserMeUpdateBody;
   status: StatusHandler;
 };
-
-const isUserAuth = (auth: AuthContext): auth is Extract<AuthContext, { type: 'jwt' | 'dev' }> =>
-  auth.type === 'jwt' || auth.type === 'dev';
 
 const generateTemporaryPassword = () => {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
