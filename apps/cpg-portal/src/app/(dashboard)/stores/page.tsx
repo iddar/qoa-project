@@ -375,7 +375,7 @@ export default function StoresPage() {
                 />
             </section>
 
-            <section className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,0.9fr)]">
+            <section className="space-y-6">
                 <div className="flex h-full min-h-[680px] flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
                     <div className="flex flex-col gap-4 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800 lg:flex-row lg:items-center lg:justify-between">
                         <div>
