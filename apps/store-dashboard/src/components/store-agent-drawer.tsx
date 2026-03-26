@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bot, LoaderCircle, MessageSquarePlus, Paperclip, SendHorizontal, Sparkles, X } from "lucide-react";
+import { ArrowDown, Bot, LoaderCircle, MessageSquarePlus, Paperclip, SendHorizontal, Sparkles, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type StorePosDraft } from "@/lib/store-pos";
 import { useStorePos } from "@/providers/store-pos-provider";
@@ -44,12 +44,36 @@ export function StoreAgentDrawer() {
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [attachments, setAttachments] = useState<AgentAttachment[]>([]);
+  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (pathname.startsWith("/pos")) {
       setAgentOpen(true);
     }
   }, [pathname, setAgentOpen]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 96;
+    if (isNearBottom) {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages, pending]);
+
+  const scrollToLatest = () => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    setShowScrollToLatest(false);
+  };
 
   const summary = useMemo(
     () => ({
@@ -166,7 +190,15 @@ export function StoreAgentDrawer() {
         </div>
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div
+        ref={messagesContainerRef}
+        onScroll={(event) => {
+          const container = event.currentTarget;
+          const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+          setShowScrollToLatest(distanceToBottom > 120);
+        }}
+        className="relative flex-1 space-y-3 overflow-y-auto px-4 py-4"
+      >
         {messages.map((message) => (
           <article
             key={message.id}
@@ -192,6 +224,17 @@ export function StoreAgentDrawer() {
             <LoaderCircle className="h-4 w-4 animate-spin" />
             Pensando y operando en caja...
           </div>
+        ) : null}
+
+        {showScrollToLatest ? (
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            className="sticky bottom-0 ml-auto inline-flex items-center gap-2 rounded-full bg-zinc-950 px-3 py-2 text-xs font-semibold text-white shadow-lg dark:bg-zinc-100 dark:text-zinc-950"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            Ir al final
+          </button>
         ) : null}
       </div>
 

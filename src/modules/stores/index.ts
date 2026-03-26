@@ -152,29 +152,56 @@ const canAccessStore = (auth: AuthContext, storeId: string) => {
 };
 
 const parseCardLookupInput = (value: string) => {
-  const trimmed = value.trim();
+  const trimmed = value
+    .trim()
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/”/g, '"');
 
   if (!trimmed) {
     return null;
   }
 
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+  const tryParsePayload = (candidate: string) => {
     try {
-      const payload = JSON.parse(trimmed) as { entityType?: string; entityId?: string; code?: string };
-      if (payload.entityType === "card" && typeof payload.entityId === "string") {
+      const payload = JSON.parse(candidate) as {
+        entityType?: string;
+        entityId?: string;
+        code?: string;
+        payload?: { entityType?: string; entityId?: string; code?: string };
+      };
+      const resolvedPayload = payload.payload ?? payload;
+      if (resolvedPayload.entityType === "card" && typeof resolvedPayload.entityId === "string") {
         return {
           kind: "cardId" as const,
-          value: payload.entityId,
+          value: resolvedPayload.entityId,
         };
       }
-      if (payload.entityType === "card" && typeof payload.code === "string") {
+      if (resolvedPayload.entityType === "card" && typeof resolvedPayload.code === "string") {
         return {
           kind: "cardCode" as const,
-          value: payload.code,
+          value: resolvedPayload.code,
         };
       }
     } catch {
       return null;
+    }
+
+    return null;
+  };
+
+  if (trimmed.startsWith("{")) {
+    const parsed = tryParsePayload(trimmed) ?? (trimmed.endsWith("}") ? null : tryParsePayload(`${trimmed}"}`));
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  const jsonBlockMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (jsonBlockMatch) {
+    const parsed = tryParsePayload(jsonBlockMatch[0]);
+    if (parsed) {
+      return parsed;
     }
   }
 
