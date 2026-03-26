@@ -59,7 +59,7 @@ const webhookHeaderSchema = t.Object({
 
 type TransactionRow = {
   id: string;
-  userId: string;
+  userId: string | null;
   storeId: string;
   cardId: string | null;
   totalAmount: number;
@@ -236,7 +236,7 @@ const buildItemsMap = (items: TransactionItemRow[]) => {
 
 const toListPayload = (tx: TransactionRow, items: TransactionItemRow[]) => ({
   id: tx.id,
-  userId: tx.userId,
+  userId: tx.userId ?? undefined,
   storeId: tx.storeId,
   cardId: tx.cardId ?? undefined,
   totalAmount: tx.totalAmount,
@@ -249,7 +249,7 @@ const toListPayload = (tx: TransactionRow, items: TransactionItemRow[]) => ({
   })),
 });
 
-const toDetailPayload = (tx: TransactionRow, items: TransactionItemRow[], txAccumulations: AccumulationRow[] = []) => ({
+export const toDetailPayload = (tx: TransactionRow, items: TransactionItemRow[], txAccumulations: AccumulationRow[] = []) => ({
   ...toListPayload(tx, items),
   accumulations: txAccumulations.map((entry) => ({
     cardId: entry.cardId,
@@ -369,23 +369,25 @@ const resolveCatalogItems = async (productRefs: string[]) => {
 
 const ensureTransactionEntities = async (
   payload: {
-    userId: string;
+    userId?: string;
     storeId: string;
     cardId?: string;
     items?: Array<{ productId: string }>;
   },
   status: StatusHandler,
 ) => {
-  const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.id, payload.userId))) as Array<{
-    id: string;
-  }>;
-  if (!user) {
-    return status(404, {
-      error: {
-        code: 'USER_NOT_FOUND',
-        message: 'Usuario no encontrado',
-      },
-    });
+  if (payload.userId) {
+    const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.id, payload.userId))) as Array<{
+      id: string;
+    }>;
+    if (!user) {
+      return status(404, {
+        error: {
+          code: 'USER_NOT_FOUND',
+          message: 'Usuario no encontrado',
+        },
+      });
+    }
   }
 
   const [store] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.id, payload.storeId))) as Array<{
@@ -417,7 +419,7 @@ const ensureTransactionEntities = async (
       });
     }
 
-    if (card.userId !== payload.userId) {
+    if (payload.userId && card.userId !== payload.userId) {
       return status(400, {
         error: {
           code: 'CARD_USER_MISMATCH',
@@ -454,27 +456,33 @@ const ensureTransactionEntities = async (
   };
 };
 
-const resolveCardForTransaction = async (payload: { userId: string; cardId?: string }) => {
+const resolveCardForTransaction = async (payload: { userId?: string; cardId?: string }) => {
   if (payload.cardId) {
     const [card] = (await db
       .select({ id: cards.id, campaignId: cards.campaignId, userId: cards.userId })
       .from(cards)
       .where(eq(cards.id, payload.cardId))) as Array<{ id: string; campaignId: string; userId: string }>;
 
-    if (!card || card.userId !== payload.userId) {
+    if (!card || (payload.userId && card.userId !== payload.userId)) {
       return null;
     }
 
     return {
       cardId: card.id,
       baseCampaignId: card.campaignId,
+      userId: card.userId,
     };
+  }
+
+  if (!payload.userId) {
+    return null;
   }
 
   const ensured = await ensureUserUniversalWalletCard(payload.userId);
   return {
     cardId: ensured.cardId,
     baseCampaignId: ensured.campaignId,
+    userId: payload.userId,
   };
 };
 
@@ -512,8 +520,8 @@ const resolveEligibleCampaignIds = async (payload: { userId: string; cardId: str
   return [...ids];
 };
 
-const createOrReplayTransaction = async (payload: {
-  userId: string;
+export const createOrReplayTransaction = async (payload: {
+  userId?: string;
   storeId: string;
   cardId?: string;
   metadata?: string;
@@ -564,11 +572,12 @@ const createOrReplayTransaction = async (payload: {
     userId: payload.userId,
     cardId: payload.cardId,
   });
+  const resolvedUserId = payload.userId ?? resolvedCard?.userId ?? null;
 
   const [created] = (await db
     .insert(transactions)
     .values({
-      userId: payload.userId,
+      userId: resolvedUserId,
       storeId: payload.storeId,
       cardId: resolvedCard?.cardId ?? null,
       totalAmount,
@@ -615,7 +624,7 @@ const createOrReplayTransaction = async (payload: {
 
   let createdAccumulations: AccumulationRow[] = [];
 
-  if (resolvedCard) {
+  if (resolvedCard && resolvedUserId) {
     const now = new Date();
     const [existingBalance] = (await db
       .select()
@@ -627,7 +636,7 @@ const createOrReplayTransaction = async (payload: {
     }>;
 
     const campaignIds = await resolveEligibleCampaignIds({
-      userId: payload.userId,
+      userId: resolvedUserId,
       cardId: resolvedCard.cardId,
       baseCampaignId: resolvedCard.baseCampaignId,
     });
@@ -961,6 +970,41 @@ const createOrReplayTransaction = async (payload: {
     items: createdItems,
     accumulations: createdAccumulations,
   };
+};
+
+export const createStorePosTransaction = async (payload: {
+  storeId: string;
+  userId?: string;
+  cardId?: string;
+  idempotencyKey?: string;
+  items: Array<{
+    storeProductId: string;
+    productId?: string;
+    name: string;
+    quantity: number;
+    amount: number;
+  }>;
+}) => {
+  const linkedProductRefs = [...new Set(payload.items.map((item) => item.productId).filter((item): item is string => Boolean(item)))];
+  const catalogItems = (linkedProductRefs.length > 0 ? await resolveCatalogItems(linkedProductRefs) : new Map()) ?? new Map();
+
+  return createOrReplayTransaction({
+    userId: payload.userId,
+    storeId: payload.storeId,
+    cardId: payload.cardId,
+    idempotencyKey: payload.idempotencyKey,
+    items: payload.items.map((item) => ({
+      productId: item.productId ?? item.name,
+      quantity: item.quantity,
+      amount: item.amount,
+      metadata: JSON.stringify({
+        source: 'store_pos',
+        storeProductId: item.storeProductId,
+        displayName: item.name,
+      }),
+    })),
+    catalogItems,
+  });
 };
 
 const createWebhookHash = (payload: {

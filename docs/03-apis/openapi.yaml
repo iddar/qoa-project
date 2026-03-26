@@ -749,6 +749,40 @@ paths:
           $ref: '#/components/responses/Forbidden'
 
   # ==================== STORE TRANSACTIONS ====================
+  /stores/{storeId}/customer-resolve:
+    post:
+      tags: [Stores]
+      summary: Resolver cliente por QR o código de tarjeta
+      description: |
+        Resuelve un cliente a partir del QR de su tarjeta, el `cardId` o el `card code`.
+
+        - Acepta el payload JSON del QR completo.
+        - Si encuentra la tarjeta, devuelve `userId`, `cardId` y `cardCode` listos para POS.
+      operationId: resolveStoreCustomer
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreCustomerResolveRequest'
+      responses:
+        '200':
+          description: Cliente resuelto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreCustomerResolveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   /stores/{storeId}/transactions:
     get:
       tags: [Stores]
@@ -787,11 +821,12 @@ paths:
       tags: [Stores]
       summary: Registrar transacción desde POS
       description: |
-        Registra una transacción desde el punto de venta. 
-        
-        - Si se proporciona `cardId`, la transacción será elegible para acumulaciones si hay campañas activas.
+        Registra una transacción desde el punto de venta solo al momento de confirmar la venta.
+
+        - Si se proporciona `cardId`, el backend resuelve el `userId` automáticamente y ejecuta el mismo motor canónico de acumulaciones.
         - Si NO se proporciona `userId` ni `cardId`, se registra como transacción de invitado (guest).
-        - Los productos sin CPG asociado no generarán acumulaciones.
+        - `amount` representa el precio unitario de cada línea y el backend calcula `totalAmount = amount * quantity`.
+        - Responde con el cliente ligado y las acumulaciones generadas en la confirmación.
       operationId: createStoreTransaction
       security:
         - bearerAuth: []
@@ -804,6 +839,12 @@ paths:
             schema:
               $ref: '#/components/schemas/StoreTransactionCreate'
       responses:
+        '200':
+          description: Transacción previamente registrada por idempotencia
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreTransactionResponse'
         '201':
           description: Transacción creada
           content:
@@ -3029,7 +3070,47 @@ components:
           minimum: 1
         amount:
           type: number
-          description: Monto total de la línea en centavos
+          description: Precio unitario de la línea en centavos
+
+    StoreTransactionCustomer:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        cardId:
+          type: string
+          format: uuid
+        cardCode:
+          type: string
+        name:
+          type: string
+          nullable: true
+        phone:
+          type: string
+        email:
+          type: string
+          nullable: true
+
+    StoreTransactionAccumulation:
+      type: object
+      properties:
+        cardId:
+          type: string
+        campaignId:
+          type: string
+        accumulated:
+          type: integer
+        newBalance:
+          type: integer
+        sourceType:
+          type: string
+        codeCaptureId:
+          type: string
+          nullable: true
+        codeValue:
+          type: string
+          nullable: true
 
     StoreTransaction:
       type: object
@@ -3058,6 +3139,14 @@ components:
         guestFlag:
           type: boolean
           description: True si la transacción fue registrada sin identificador de cliente
+        customer:
+          allOf:
+            - $ref: '#/components/schemas/StoreTransactionCustomer'
+          nullable: true
+        accumulations:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreTransactionAccumulation'
         createdAt:
           type: string
           format: date-time
@@ -3093,11 +3182,25 @@ components:
               amount:
                 type: number
                 minimum: 0
-                description: Monto total de la línea en centavos
+                description: Precio unitario de la línea en centavos
         idempotencyKey:
           type: string
           nullable: true
           description: Clave de idempotencia para evitar duplicados
+
+    StoreCustomerResolveRequest:
+      type: object
+      required: [input]
+      properties:
+        input:
+          type: string
+          description: Payload del QR, `cardId` o `cardCode`
+
+    StoreCustomerResolveResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/StoreTransactionCustomer'
 
     StoreTransactionResponse:
       type: object
@@ -4265,6 +4368,7 @@ components:
           type: string
         userId:
           type: string
+          nullable: true
         storeId:
           type: string
         items:

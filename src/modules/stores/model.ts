@@ -134,6 +134,25 @@ export const storeTransactionItemSchema = t.Object({
   amount: t.Number(),
 });
 
+export const storeTransactionCustomerSchema = t.Object({
+  userId: t.String(),
+  cardId: t.String(),
+  cardCode: t.String(),
+  name: t.Optional(t.String()),
+  phone: t.String(),
+  email: t.Optional(t.String()),
+});
+
+export const storeTransactionAccumulationSchema = t.Object({
+  cardId: t.String(),
+  campaignId: t.String(),
+  accumulated: t.Number(),
+  newBalance: t.Number(),
+  sourceType: t.String(),
+  codeCaptureId: t.Optional(t.String()),
+  codeValue: t.Optional(t.String()),
+});
+
 export const storeTransactionSchema = t.Object({
   id: t.String(),
   userId: t.Optional(t.String()),
@@ -142,6 +161,8 @@ export const storeTransactionSchema = t.Object({
   items: t.Array(storeTransactionItemSchema),
   totalAmount: t.Number(),
   guestFlag: t.Boolean(),
+  customer: t.Optional(storeTransactionCustomerSchema),
+  accumulations: t.Array(storeTransactionAccumulationSchema),
   createdAt: t.String(),
 });
 
@@ -164,6 +185,14 @@ export const storeTransactionListResponse = t.Object({
 export const storeProductSearchQuery = t.Object({
   q: t.String(),
   limit: t.Optional(t.String()),
+});
+
+export const storeCustomerResolveRequest = t.Object({
+  input: t.String({ minLength: 1 }),
+});
+
+export const storeCustomerResolveResponse = t.Object({
+  data: storeTransactionCustomerSchema,
 });
 
 export const storeBrandSchema = t.Object({

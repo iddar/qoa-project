@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { stores, users } from '../db/schema';
+import { accumulations, balances, brands, campaignBalances, campaigns, cards, cpgs, products, storeProducts, stores, transactionItems, transactions, users } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -50,6 +50,50 @@ const createUser = async () => {
 const buildAuthHeaders = (accessToken: string) => ({
   authorization: `Bearer ${accessToken}`,
 });
+
+const createCatalogProduct = async () => {
+  const [cpg] = (await db
+    .insert(cpgs)
+    .values({
+      name: `CPG Store ${crypto.randomUUID().slice(0, 6)}`,
+    })
+    .returning({ id: cpgs.id })) as Array<{ id: string }>;
+
+  if (!cpg) {
+    throw new Error('Failed to create test cpg');
+  }
+
+  const [brand] = (await db
+    .insert(brands)
+    .values({
+      cpgId: cpg.id,
+      name: `Brand Store ${crypto.randomUUID().slice(0, 6)}`,
+    })
+    .returning({ id: brands.id })) as Array<{ id: string }>;
+
+  if (!brand) {
+    throw new Error('Failed to create test brand');
+  }
+
+  const [product] = (await db
+    .insert(products)
+    .values({
+      brandId: brand.id,
+      sku: `SKU-STORE-${crypto.randomUUID().slice(0, 8)}`,
+      name: `Product Store ${crypto.randomUUID().slice(0, 6)}`,
+    })
+    .returning({ id: products.id })) as Array<{ id: string }>;
+
+  if (!product) {
+    throw new Error('Failed to create test product');
+  }
+
+  return {
+    cpgId: cpg.id,
+    brandId: brand.id,
+    productId: product.id,
+  };
+};
 
 describe('Stores module', () => {
   it('creates, fetches, and returns QR payload for stores', async () => {
@@ -242,5 +286,149 @@ describe('Stores module', () => {
     await db.delete(users).where(eq(users.id, storeUser.id));
     await db.delete(stores).where(eq(stores.id, storeB.id));
     await db.delete(stores).where(eq(stores.id, storeA.id));
+  });
+
+  it('resolves customers and registers POS transactions with loyalty using the store flow', async () => {
+    const user = await createUser();
+    const [store] = (await db
+      .insert(stores)
+      .values({
+        name: `POS Store ${crypto.randomUUID().slice(0, 6)}`,
+        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        type: 'tiendita',
+      })
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+
+    if (!store) {
+      throw new Error('Failed to create POS test store');
+    }
+
+    const catalog = await createCatalogProduct();
+
+    const [storeProduct] = (await db
+      .insert(storeProducts)
+      .values({
+        storeId: store.id,
+        productId: catalog.productId,
+        cpgId: catalog.cpgId,
+        name: 'Refresco 600ml',
+        sku: `POS-${crypto.randomUUID().slice(0, 8)}`,
+        unitType: 'piece',
+        price: 25,
+      })
+      .returning({ id: storeProducts.id })) as Array<{ id: string }>;
+
+    if (!storeProduct) {
+      throw new Error('Failed to create POS store product');
+    }
+
+    const [campaign] = (await db
+      .insert(campaigns)
+      .values({
+        name: `Campaign POS ${crypto.randomUUID().slice(0, 6)}`,
+        status: 'active',
+      })
+      .returning({ id: campaigns.id })) as Array<{ id: string }>;
+
+    if (!campaign) {
+      throw new Error('Failed to create POS campaign');
+    }
+
+    const [card] = (await db
+      .insert(cards)
+      .values({
+        userId: user.id,
+        campaignId: campaign.id,
+        storeId: store.id,
+        code: `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+      })
+      .returning({ id: cards.id, code: cards.code })) as Array<{ id: string; code: string }>;
+
+    if (!card) {
+      throw new Error('Failed to create POS card');
+    }
+
+    const storeHeaders = {
+      authorization: 'Bearer dev-token',
+      'x-dev-user-id': 'dev-store-pos',
+      'x-dev-user-role': 'store_admin',
+      'x-dev-tenant-type': 'store',
+      'x-dev-tenant-id': store.id,
+    };
+
+    const resolvedByQr = await api.v1.stores({ storeId: store.id })['customer-resolve'].post(
+      { input: JSON.stringify({ entityType: 'card', entityId: card.id, code: card.code }) },
+      { headers: storeHeaders },
+    );
+
+    if (resolvedByQr.error || !resolvedByQr.data) {
+      throw resolvedByQr.error?.value ?? new Error('Customer resolve failed');
+    }
+
+    expect(resolvedByQr.status).toBe(200);
+    expect(resolvedByQr.data.data.userId).toBe(user.id);
+    expect(resolvedByQr.data.data.cardId).toBe(card.id);
+
+    const created = await api.v1.stores({ storeId: store.id }).transactions.post(
+      {
+        cardId: card.id,
+        items: [
+          {
+            storeProductId: storeProduct.id,
+            quantity: 2,
+            amount: 25,
+          },
+        ],
+        idempotencyKey: `store-pos-${crypto.randomUUID()}`,
+      },
+      { headers: storeHeaders },
+    );
+
+    if (created.error || !created.data) {
+      throw created.error?.value ?? new Error('Store POS transaction failed');
+    }
+
+    expect(created.status).toBe(201);
+    expect(created.data.data.userId).toBe(user.id);
+    expect(created.data.data.guestFlag).toBe(false);
+    expect(created.data.data.customer?.cardId).toBe(card.id);
+    expect(created.data.data.accumulations.length).toBeGreaterThanOrEqual(1);
+    expect(created.data.data.items[0]?.storeProductId).toBe(storeProduct.id);
+    expect(created.data.data.totalAmount).toBe(50);
+
+    const txId = created.data.data.id;
+
+    const [storedTransaction] = (await db
+      .select({ userId: transactions.userId, cardId: transactions.cardId })
+      .from(transactions)
+      .where(eq(transactions.id, txId))) as Array<{ userId: string | null; cardId: string | null }>;
+    expect(storedTransaction?.userId).toBe(user.id);
+    expect(storedTransaction?.cardId).toBe(card.id);
+
+    const [storedItem] = (await db
+      .select({ metadata: transactionItems.metadata })
+      .from(transactionItems)
+      .where(eq(transactionItems.transactionId, txId))) as Array<{ metadata: string | null }>;
+    expect(storedItem?.metadata).toContain(storeProduct.id);
+
+    const [balance] = (await db
+      .select({ current: balances.current })
+      .from(balances)
+      .where(eq(balances.cardId, card.id))) as Array<{ current: number }>;
+    expect(balance?.current).toBeGreaterThanOrEqual(2);
+
+    await db.delete(campaignBalances).where(eq(campaignBalances.cardId, card.id));
+    await db.delete(accumulations).where(eq(accumulations.cardId, card.id));
+    await db.delete(balances).where(eq(balances.cardId, card.id));
+    await db.delete(cards).where(eq(cards.id, card.id));
+    await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
+    await db.delete(transactionItems).where(eq(transactionItems.transactionId, txId));
+    await db.delete(transactions).where(eq(transactions.id, txId));
+    await db.delete(storeProducts).where(eq(storeProducts.id, storeProduct.id));
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
+    await db.delete(stores).where(eq(stores.id, store.id));
+    await db.delete(users).where(eq(users.id, user.id));
   });
 });
