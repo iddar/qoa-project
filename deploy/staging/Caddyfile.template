@@ -1,19 +1,19 @@
-{$API_DOMAIN} {
-  reverse_proxy 127.0.0.1:{$API_HOST_PORT}
+${API_DOMAIN} {
+  reverse_proxy 127.0.0.1:${API_HOST_PORT}
 }
 
-{$BACKOFFICE_DOMAIN} {
-  reverse_proxy 127.0.0.1:{$BACKOFFICE_HOST_PORT}
+${BACKOFFICE_DOMAIN} {
+  reverse_proxy 127.0.0.1:${BACKOFFICE_HOST_PORT}
 }
 
-{$CPG_DOMAIN} {
-  reverse_proxy 127.0.0.1:{$CPG_HOST_PORT}
+${CPG_DOMAIN} {
+  reverse_proxy 127.0.0.1:${CPG_HOST_PORT}
 }
 
-{$STORE_DOMAIN} {
-  reverse_proxy 127.0.0.1:{$STORE_HOST_PORT}
+${STORE_DOMAIN} {
+  reverse_proxy 127.0.0.1:${STORE_HOST_PORT}
 }
 
-{$WALLET_DOMAIN} {
-  reverse_proxy 127.0.0.1:{$WALLET_HOST_PORT}
+${WALLET_DOMAIN} {
+  reverse_proxy 127.0.0.1:${WALLET_HOST_PORT}
 }

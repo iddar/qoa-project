@@ -39,3 +39,4 @@ Operar staging de QOA en un droplet con `caddy` en host y toda la aplicacion QOA
 - El deploy rehace `staging` desde cero con `bun run db:rebuild:staging`.
 - `staging` no usa Redis por ahora.
 - El smoke test valida `GET /v1/health` y la carga base de las apps web.
+- Los puertos host sugeridos para evitar choques con servicios legacy son `3100-3104`.

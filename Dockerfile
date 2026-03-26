@@ -23,6 +23,7 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 COPY --from=deps /repo/node_modules ./node_modules
+COPY --from=deps /repo/src/node_modules ./src/node_modules
 COPY package.json bun.lock tsconfig.base.json ./
 COPY src ./src
 COPY packages ./packages
