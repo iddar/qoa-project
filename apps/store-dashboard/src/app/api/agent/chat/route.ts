@@ -212,7 +212,7 @@ export async function POST(request: Request) {
     .join("\n\n");
 
   const result = await generateText({
-    model: minimax("MiniMax-M2"),
+    model: minimax("MiniMax-M2.7"),
     system: systemPrompt,
     prompt: transcript,
     stopWhen: stepCountIs(8),

@@ -74,11 +74,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </button>
           </div>
         </aside>
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <main className="flex-1 p-6 lg:p-8">{children}</main>
         </div>
+        <StoreAgentDrawer />
       </div>
-      <StoreAgentDrawer />
     </StorePosProvider>
   );
 }
