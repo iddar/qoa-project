@@ -3,8 +3,6 @@ services:
     image: postgres:18-alpine
     env_file:
       - ${QOA_SERVICE_ENV_FILE:-./deploy/staging/staging.env}
-    ports:
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
     volumes:
       - qoa_staging_postgres_data:/var/lib/postgresql/data
     healthcheck:

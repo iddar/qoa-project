@@ -3,16 +3,14 @@
 set -euo pipefail
 
 ENV_FILE="${QOA_STAGING_ENV_FILE:-/srv/qoa/env/staging.env}"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 if [[ ! -f "$ENV_FILE" ]]; then
   printf 'Missing env file: %s\n' "$ENV_FILE" >&2
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+eval "$(python3 "$ROOT_DIR/scripts/staging/load-env.py" "$ENV_FILE")"
 
 check_url() {
   local url="$1"

@@ -10,9 +10,6 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
+eval "$(python3 "$ROOT_DIR/scripts/staging/load-env.py" "$ENV_FILE")"
 
 envsubst < "$ROOT_DIR/deploy/staging/Caddyfile.template"
