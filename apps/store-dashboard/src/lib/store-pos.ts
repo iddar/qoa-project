@@ -58,6 +58,10 @@ export type AgentAttachment = {
   name: string;
   contentType: string;
   dataUrl: string;
+  kind?: "image" | "audio";
+  durationMs?: number;
+  transcript?: string;
+  status?: "pending" | "ready" | "processing" | "transcribed" | "failed";
 };
 
 export type AgentMessage = {

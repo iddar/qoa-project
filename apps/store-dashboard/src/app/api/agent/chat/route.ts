@@ -6,6 +6,8 @@ import { z } from "zod";
 import { api } from "@/lib/api";
 import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
+const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
+
 const requestSchema = z.object({
   messages: z.array(
     z.object({
@@ -19,6 +21,10 @@ const requestSchema = z.object({
             name: z.string(),
             contentType: z.string(),
             dataUrl: z.string(),
+            kind: z.enum(["image", "audio"]).optional(),
+            durationMs: z.number().optional(),
+            transcript: z.string().optional(),
+            status: z.enum(["pending", "ready", "processing", "transcribed", "failed"]).optional(),
           }),
         )
         .optional(),
@@ -172,6 +178,69 @@ const decodeQrFromAttachment = async (attachment: AgentAttachment) => {
   return null;
 };
 
+const getAttachmentKind = (attachment: AgentAttachment) => {
+  if (attachment.kind) {
+    return attachment.kind;
+  }
+
+  return attachment.contentType.startsWith("audio/") ? "audio" : "image";
+};
+
+const getFileExtension = (contentType: string) => {
+  if (contentType.includes("webm")) return "webm";
+  if (contentType.includes("ogg")) return "ogg";
+  if (contentType.includes("wav")) return "wav";
+  if (contentType.includes("mpeg") || contentType.includes("mp3")) return "mp3";
+  if (contentType.includes("mp4") || contentType.includes("m4a") || contentType.includes("aac")) return "m4a";
+  return "bin";
+};
+
+const parseDataUrl = (dataUrl: string) => {
+  const [meta, encoded] = dataUrl.split(",");
+  if (!meta || !encoded) {
+    throw new Error("INVALID_DATA_URL");
+  }
+
+  const match = meta.match(/^data:([^;]+);base64$/);
+  if (!match) {
+    throw new Error("INVALID_DATA_URL");
+  }
+
+  return {
+    contentType: match[1],
+    buffer: Buffer.from(encoded, "base64"),
+  };
+};
+
+const transcribeAudioAttachment = async (attachment: AgentAttachment) => {
+  const choughUrl = process.env.CHOUGH_URL;
+  if (!choughUrl) {
+    throw new Error("CHOUGH_NOT_CONFIGURED");
+  }
+
+  const { buffer, contentType } = parseDataUrl(attachment.dataUrl);
+  const formData = new FormData();
+  formData.append(
+    "file",
+    new Blob([buffer], { type: contentType }),
+    `${attachment.id}.${getFileExtension(contentType)}`,
+  );
+  formData.append("format", "text");
+  formData.append("chunk_size", "30");
+
+  const response = await fetch(new URL("/transcribe", choughUrl), {
+    method: "POST",
+    body: formData,
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!response.ok) {
+    throw new Error("TRANSCRIPTION_FAILED");
+  }
+
+  return (await response.text()).trim();
+};
+
 export async function POST(request: Request) {
   const authorization = request.headers.get("authorization");
   if (!authorization) {
@@ -200,7 +269,71 @@ export async function POST(request: Request) {
 
   let workingDraft = cloneDraft(draft ?? createEmptyDraft());
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
-  const latestAttachments = latestUserMessage?.attachments ?? [];
+  let latestAttachments = latestUserMessage?.attachments ?? [];
+  let normalizedUserMessage = latestUserMessage ? { ...latestUserMessage } : null;
+
+  if (normalizedUserMessage?.attachments?.length) {
+    const nextAttachments: AgentAttachment[] = [];
+    const transcripts: string[] = [];
+
+    for (const attachment of normalizedUserMessage.attachments) {
+      if (getAttachmentKind(attachment) !== "audio") {
+        nextAttachments.push({ ...attachment, kind: getAttachmentKind(attachment) });
+        continue;
+      }
+
+      try {
+        const transcript = await transcribeAudioAttachment(attachment);
+        if (transcript) {
+          transcripts.push(transcript);
+        }
+        nextAttachments.push({
+          ...attachment,
+          kind: "audio",
+          transcript: transcript || undefined,
+          status: transcript ? "transcribed" : "failed",
+        });
+      } catch {
+        nextAttachments.push({
+          ...attachment,
+          kind: "audio",
+          status: "failed",
+        });
+      }
+    }
+
+    const typedContent = normalizedUserMessage.content.trim();
+    const transcriptBlock = transcripts.join("\n").trim();
+    const hasOnlyAudioPlaceholder = typedContent === AUDIO_PLACEHOLDER || typedContent === "Adjunto una imagen para escanear.";
+
+    normalizedUserMessage = {
+      ...normalizedUserMessage,
+      content: transcriptBlock
+        ? hasOnlyAudioPlaceholder || !typedContent
+          ? transcriptBlock
+          : `${typedContent}\n\nNota de voz transcrita: ${transcriptBlock}`
+        : typedContent,
+      attachments: nextAttachments,
+    };
+    latestAttachments = nextAttachments;
+
+    if (!transcriptBlock && nextAttachments.some((attachment) => attachment.kind === "audio") && (hasOnlyAudioPlaceholder || !typedContent)) {
+      return Response.json({
+        message: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "No pude transcribir la nota de voz. Intenta grabarla otra vez o escribe el pedido.",
+        },
+        draft: workingDraft,
+        userMessage: normalizedUserMessage,
+      });
+    }
+  }
+
+  const normalizedMessages = normalizedUserMessage
+    ? messages.map((message) => (message.id === normalizedUserMessage?.id ? normalizedUserMessage : message))
+    : messages;
+
   let storeProductsCache: StoreProduct[] | null = null;
 
   const getStoreProducts = async () => {
@@ -235,7 +368,7 @@ export async function POST(request: Request) {
     `Estado actual del pedido:\n${describeDraft(workingDraft)}`,
   ].join("\n\n");
 
-  const transcript = messages
+  const transcript = normalizedMessages
     .map((message: AgentMessage) => {
       const attachmentLabel = message.attachments?.length ? `\nAdjuntos: ${message.attachments.map((file) => file.name).join(", ")}` : "";
       return `${message.role === "assistant" ? "Asistente" : "Tendero"}: ${message.content}${attachmentLabel}`;
@@ -428,6 +561,7 @@ export async function POST(request: Request) {
       role: "assistant",
       content: result.text,
     },
+    userMessage: normalizedUserMessage,
     draft: workingDraft,
   });
 }
