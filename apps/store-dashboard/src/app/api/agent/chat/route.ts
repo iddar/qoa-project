@@ -106,6 +106,11 @@ type StoreProduct = {
   price: number;
 };
 
+type RankedStoreProduct = {
+  product: StoreProduct;
+  score: number;
+};
+
 const cloneDraft = (draft: StorePosDraft): StorePosDraft => ({
   items: draft.items.map((item) => ({ ...item })),
   customer: draft.customer ? { ...draft.customer } : null,
@@ -133,6 +138,100 @@ const buildDraftSummary = (draft: StorePosDraft) => ({
 const describeDraft = (draft: StorePosDraft) => {
   const summary = buildDraftSummary(draft);
   return JSON.stringify(summary, null, 2);
+};
+
+const normalizeText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const levenshteinDistance = (left: string, right: string) => {
+  if (left === right) {
+    return 0;
+  }
+
+  if (!left.length) {
+    return right.length;
+  }
+
+  if (!right.length) {
+    return left.length;
+  }
+
+  const matrix = Array.from({ length: left.length + 1 }, () => new Array<number>(right.length + 1).fill(0));
+  for (let row = 0; row <= left.length; row += 1) {
+    matrix[row]![0] = row;
+  }
+  for (let column = 0; column <= right.length; column += 1) {
+    matrix[0]![column] = column;
+  }
+
+  for (let row = 1; row <= left.length; row += 1) {
+    for (let column = 1; column <= right.length; column += 1) {
+      const cost = left[row - 1] === right[column - 1] ? 0 : 1;
+      matrix[row]![column] = Math.min(
+        matrix[row - 1]![column]! + 1,
+        matrix[row]![column - 1]! + 1,
+        matrix[row - 1]![column - 1]! + cost,
+      );
+    }
+  }
+
+  return matrix[left.length]![right.length]!;
+};
+
+const similarityScore = (left: string, right: string) => {
+  if (!left || !right) {
+    return 0;
+  }
+
+  const longest = Math.max(left.length, right.length);
+  return 1 - levenshteinDistance(left, right) / longest;
+};
+
+const getProductMatchScore = (query: string, product: StoreProduct) => {
+  const normalizedQuery = normalizeText(query);
+  const normalizedName = normalizeText(product.name);
+  const normalizedSku = normalizeText(product.sku ?? "");
+
+  if (!normalizedQuery) {
+    return 0;
+  }
+
+  let score = similarityScore(normalizedQuery, normalizedName);
+
+  if (normalizedName.includes(normalizedQuery)) {
+    score = Math.max(score, Math.min(1, 0.82 + normalizedQuery.length / Math.max(normalizedName.length, 1) * 0.12));
+  }
+
+  if (normalizedSku && normalizedSku.includes(normalizedQuery)) {
+    score = Math.max(score, 0.93);
+  }
+
+  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+  const nameTokens = normalizedName.split(" ").filter(Boolean);
+  if (queryTokens.length > 0 && nameTokens.length > 0) {
+    let tokenHits = 0;
+    for (const token of queryTokens) {
+      const bestTokenScore = nameTokens.reduce((best, candidate) => Math.max(best, similarityScore(token, candidate)), 0);
+      if (bestTokenScore >= 0.72) {
+        tokenHits += 1;
+      }
+      score = Math.max(score, bestTokenScore * 0.92);
+    }
+
+    if (tokenHits === queryTokens.length) {
+      score = Math.max(score, 0.88);
+    } else if (tokenHits > 0) {
+      score = Math.max(score, 0.7 + tokenHits / queryTokens.length * 0.14);
+    }
+  }
+
+  return score;
 };
 
 const decodeQrPixels = (data: Buffer<ArrayBufferLike>, width: number, height: number) => {
@@ -367,13 +466,53 @@ export async function POST(request: Request) {
     return products.find((product) => product.id === storeProductId) ?? null;
   };
 
+  const rankStoreProducts = async (query: string) => {
+    const products = await getStoreProducts();
+
+    return products
+      .map((product) => ({
+        product,
+        score: getProductMatchScore(query, product),
+      }))
+      .filter((entry) => entry.score >= 0.45)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 8) as RankedStoreProduct[];
+  };
+
+  const addProductToDraftById = async (storeProductId: string, quantity: number) => {
+    const product = await findStoreProductById(storeProductId);
+    if (!product) {
+      throw new Error("STORE_PRODUCT_NOT_FOUND");
+    }
+
+    const existing = workingDraft.items.find((item) => item.storeProductId === storeProductId);
+    if (existing) {
+      existing.quantity += quantity;
+    } else {
+      workingDraft.items.push({
+        storeProductId: product.id,
+        productId: product.productId,
+        name: product.name,
+        sku: product.sku,
+        unitType: product.unitType,
+        price: Number(product.price),
+        quantity,
+      });
+    }
+
+    return product;
+  };
+
   const systemPrompt = [
     "Eres un asistente de POS para tenderos en Qoa.",
     "Responde siempre en espanol claro y breve.",
     "Usa herramientas para cambiar el pedido, ligar clientes y confirmar ventas.",
     "No digas que una venta fue registrada si no ejecutaste confirmDraftTransaction.",
     "Si el usuario pide escanear una imagen, usa resolveCustomerCard sin input y toma el adjunto mas reciente.",
-    "Si hay ambiguedad en un producto, pide una sola aclaracion corta.",
+    "Tolera errores pequenos de transcripcion o dictado en nombres de producto.",
+    "Cuando el tendero pida agregar un producto por nombre, intenta primero addProductToDraftByQuery.",
+    "Si solo hay una coincidencia claramente probable para un producto, agregala sin pedir aclaracion.",
+    "Solo pide aclaracion cuando haya varias coincidencias plausibles o la confianza sea baja.",
     `Estado actual del pedido:\n${describeDraft(workingDraft)}`,
   ].join("\n\n");
 
@@ -396,21 +535,89 @@ export async function POST(request: Request) {
           query: z.string().min(2),
         }),
         execute: async ({ query }) => {
-          const { data, error } = await api.v1.stores[storeId]["products-search"].get({
+          const apiResults = await api.v1.stores[storeId]["products-search"].get({
             query: { q: query, limit: "8" },
             headers: { authorization },
           });
-          if (error) {
+          const fuzzyResults = await rankStoreProducts(query);
+
+          if (apiResults.error && fuzzyResults.length === 0) {
             throw new Error("PRODUCT_SEARCH_FAILED");
           }
 
-          return {
-            products: ((data?.data?.storeProducts ?? []) as StoreProduct[]).map((product) => ({
+          const merged = new Map<string, { storeProductId: string; name: string; sku?: string; price: number; score?: number }>();
+          for (const product of ((apiResults.data?.data?.storeProducts ?? []) as StoreProduct[])) {
+            merged.set(product.id, {
               storeProductId: product.id,
               name: product.name,
               sku: product.sku,
               price: Number(product.price),
-            })),
+              score: 1,
+            });
+          }
+
+          for (const entry of fuzzyResults) {
+            if (!merged.has(entry.product.id)) {
+              merged.set(entry.product.id, {
+                storeProductId: entry.product.id,
+                name: entry.product.name,
+                sku: entry.product.sku,
+                price: Number(entry.product.price),
+                score: Number(entry.score.toFixed(3)),
+              });
+            }
+          }
+
+          return {
+            products: [...merged.values()],
+          };
+        },
+      }),
+      addProductToDraftByQuery: tool({
+        description: "Busca el producto mas probable por nombre hablado o con errores y lo agrega si la coincidencia es suficientemente clara.",
+        inputSchema: z.object({
+          query: z.string().min(2),
+          quantity: z.number().int().min(1).default(1),
+        }),
+        execute: async ({ query, quantity }) => {
+          const ranked = await rankStoreProducts(query);
+          const best = ranked[0];
+          const second = ranked[1];
+
+          if (!best) {
+            return {
+              added: false,
+              reason: "no_match",
+              candidates: [],
+            };
+          }
+
+          const confidentSingleMatch = best.score >= 0.72 && (!second || best.score - second.score >= 0.12 || second.score < 0.6);
+          if (!confidentSingleMatch) {
+            return {
+              added: false,
+              reason: "needs_confirmation",
+              candidates: ranked.slice(0, 3).map((entry) => ({
+                storeProductId: entry.product.id,
+                name: entry.product.name,
+                price: Number(entry.product.price),
+                score: Number(entry.score.toFixed(3)),
+              })),
+            };
+          }
+
+          const addedProduct = await addProductToDraftById(best.product.id, quantity);
+
+          return {
+            added: true,
+            matchedQuery: query,
+            product: {
+              storeProductId: addedProduct.id,
+              name: addedProduct.name,
+              price: Number(addedProduct.price),
+              score: Number(best.score.toFixed(3)),
+            },
+            draft: buildDraftSummary(workingDraft),
           };
         },
       }),
@@ -421,25 +628,7 @@ export async function POST(request: Request) {
           quantity: z.number().int().min(1).default(1),
         }),
         execute: async ({ storeProductId, quantity }) => {
-          const product = await findStoreProductById(storeProductId);
-          if (!product) {
-            throw new Error("STORE_PRODUCT_NOT_FOUND");
-          }
-
-          const existing = workingDraft.items.find((item) => item.storeProductId === storeProductId);
-          if (existing) {
-            existing.quantity += quantity;
-          } else {
-            workingDraft.items.push({
-              storeProductId: product.id,
-              productId: product.productId,
-              name: product.name,
-              sku: product.sku,
-              unitType: product.unitType,
-              price: Number(product.price),
-              quantity,
-            });
-          }
+          await addProductToDraftById(storeProductId, quantity);
 
           return buildDraftSummary(workingDraft);
         },
