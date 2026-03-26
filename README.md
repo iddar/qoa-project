@@ -114,19 +114,27 @@ Actualiza esos valores antes de desplegar en otros entornos; no compartas secret
    docker compose down
    ```
 
-Los servicios usan las credenciales definidas en `src/.env.local`. Ajusta puertos/volúmenes editando `docker-compose.yml`.
+Los servicios usan el archivo indicado por `QOA_ENV_FILE` y, si no lo defines, toman `src/.env.local`.
 
 ### Solo dependencias en Docker (Bun corriendo en tu máquina)
+
+Atajos desde la raíz:
+
+```bash
+bun run dev:env
+bun run dev:rebuild
+bun run dev:down
+```
 
 Cuando quieras aprovechar hot-reload de `bun run dev` pero mantener la misma base de datos/caché de Docker:
 
 1. Levanta únicamente las dependencias:
 
    ```bash
-   docker compose up -d postgres redis
+   QOA_ENV_FILE=src/.env.development docker compose --env-file src/.env.development up -d postgres postgres_test
    ```
 
-2. Usa las variables de `src/.env.development` (Bun ya carga `.env.development` cuando `bun run dev` establece `BUN_ENV=development`). Asegúrate de que `POSTGRES_HOST` y `REDIS_HOST` apunten a `127.0.0.1`, tal como viene en ese archivo.
+2. Usa las variables de `src/.env.development`. En este modo, Bun corre en tu host y consume Postgres/Redis publicados por Docker en `127.0.0.1`.
 3. Ejecuta la app local:
 
    ```bash
@@ -138,7 +146,7 @@ Cuando quieras aprovechar hot-reload de `bun run dev` pero mantener la misma bas
 4. Cuando termines, detén los contenedores (los volúmenes persisten):
 
    ```bash
-   docker compose stop postgres redis
+   docker compose stop postgres postgres_test
    ```
 
 ### Flujo de desarrollo local (sin contenedores)
@@ -152,6 +160,48 @@ bun test spec # ejecuta las pruebas existentes
 ```
 
 Los comandos anteriores respetan el principio de “Bun-first” (sin npm, node, ni ts-node).
+
+### Local en Docker
+
+Atajos desde la raíz:
+
+```bash
+bun run local:env
+bun run local:rebuild
+bun run local:down
+```
+
+`local:env` levanta la pila Docker con `src/.env.local`; `local:rebuild` rehace migraciones y seed dentro del contenedor `app`.
+
+### Staging en Docker
+
+Archivos y scripts nuevos para staging:
+
+```bash
+bun run staging:backup-legacy
+bun run staging:remove-legacy
+bun run staging:setup-host
+bun run staging:deploy
+bun run staging:rollback
+bun run staging:smoke
+```
+
+- `docker-compose.staging.yml` levanta API, Postgres y los cuatro frontends en Docker.
+- `deploy/staging/staging.env.example` define las variables requeridas del host.
+- `scripts/staging/render-caddy.sh` genera el bloque Caddy para los nuevos dominios sin prefijo `qoa-`.
+- `scripts/staging/deploy-staging.sh` despliega desde `git` y reconstruye staging desde cero con seeds.
+
+### Test aislado
+
+Atajos desde la raíz:
+
+```bash
+bun run test:env
+bun run test:rebuild
+bun run test:down
+```
+
+`test:env` ejecuta `scripts/test.sh` y por defecto hace `up + rebuild + tests` sobre `qoa_test`.
 
 ### Contrato de API y tests
 
@@ -173,6 +223,15 @@ bun run db:seed:test
 
 Cada seed también crea un CPG de prueba llamado `Acme CPG (<entorno>)` y lo vincula al usuario `cpg_admin`.
 
+Para dejar una base totalmente reconstruida por entorno:
+
+```bash
+cd src
+bun run db:rebuild:development
+bun run db:rebuild:local
+bun run db:rebuild:test
+```
+
 En `development` y `local`, el seed ahora incluye dataset enriquecido para demos:
 
 - 2 tiendas activas de prueba
@@ -182,7 +241,7 @@ En `development` y `local`, el seed ahora incluye dataset enriquecido para demos
 - recompensas activas por campaña
 - actividad histórica de 30 días (transacciones, acumulaciones y canjes)
 
-`test` conserva un seed ligero para mantener velocidad en CI.
+`test` usa una base separada (`qoa_test` en `127.0.0.1:5434`), conserva un seed ligero y se recrea en cada `bun run test`.
 
 Credenciales de prueba (password compartido: `Password123!`):
 
@@ -218,7 +277,7 @@ Ambas apps comparten el mismo backend (`@qoa/core` en el puerto `3000`) y usan t
    ```
 
    Esto produce archivos en `src/drizzle/` (ej. `0000_red_shockwave.sql`) siguiendo la guía oficial de [Drizzle migrations](https://orm.drizzle.team/docs/migrations).
-3. Aplica las migraciones al Postgres que tengas configurado mediante `DATABASE_URL` (usa `.env.local` o `.env.development` según el flujo):
+3. Aplica las migraciones al Postgres que tengas configurado mediante `DATABASE_URL` (usa `.env.local`, `.env.development` o `.env.test` según el flujo):
 
    ```bash
    cd src
@@ -228,7 +287,7 @@ Ambas apps comparten el mismo backend (`@qoa/core` en el puerto `3000`) y usan t
 4. En entornos Docker, ejecuta las migraciones dentro del contenedor de la app antes de exponer tráfico:
 
    ```bash
-   docker compose run --rm app bun run db:migrate
+   QOA_ENV_FILE=src/.env.local docker compose --env-file src/.env.local run --rm app bun run db:migrate
    ```
 
 Todas las migraciones y snapshots (`src/drizzle/meta`) se deben versionar en Git para garantizar reproducibilidad.

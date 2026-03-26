@@ -7,6 +7,7 @@ Esta carpeta contiene la documentación operativa, incluyendo runbooks, SLOs, in
 - `infraestructura.md`: base de arquitectura y ambientes.
 - `slos.md`: objetivos operativos iniciales y politica de alertamiento.
 - `runbooks/despliegue.md`: procedimiento de despliegue y rollback.
+- `runbooks/staging-docker.md`: migracion y operacion del staging dockerizado.
 - `monitoring-alertas.md`: senales, dashboards y umbrales de alerta.
 - `staging.md`: alcance, reglas y smoke tests del ambiente de pre-produccion.
 - `runbooks/escalado.md`: escalado tecnico/operativo por trigger y severidad.

@@ -6,6 +6,11 @@
 # Dependencies
 node_modules
 src/node_modules
+apps/*/node_modules
+packages/*/node_modules
+
+# Frontend build outputs
+apps/*/.next
 
 # Bun caches & test outputs
 src/.bun

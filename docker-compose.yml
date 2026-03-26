@@ -1,29 +1,25 @@
-version: "3.11"
-
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - src/.env.local
+      - ${QOA_ENV_FILE:-src/.env.local}
     ports:
       - "${PORT:-3000}:3000"
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     restart: unless-stopped
 
   postgres:
     image: postgres:18-alpine
     env_file:
-      - src/.env.local
+      - ${QOA_ENV_FILE:-src/.env.local}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/docker
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test:
         [
@@ -34,21 +30,24 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
+  postgres_test:
+    image: postgres:18-alpine
     env_file:
-      - src/.env.local
+      - src/.env.test
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "5434:5432"
     volumes:
-      - redis_data:/data
+      - postgres_test_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h localhost",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
 
 volumes:
   postgres_data:
-  redis_data:
+  postgres_test_data:

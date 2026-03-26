@@ -38,7 +38,21 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
-      
+
+      postgres_test:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: qoa_test
+          POSTGRES_USER: qoa
+          POSTGRES_PASSWORD: supersecret
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd="pg_isready -U qoa -d qoa_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
       redis:
         image: redis:7-alpine
         ports:
@@ -64,10 +78,10 @@ jobs:
       - name: Run database migrations
         working-directory: ./src
         env:
-          DATABASE_URL: postgres://qoa:supersecret@localhost:5432/qoa_local
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: qoa_local
+          DATABASE_URL: postgres://qoa:supersecret@127.0.0.1:5434/qoa_test
+          POSTGRES_HOST: 127.0.0.1
+          POSTGRES_PORT: 5434
+          POSTGRES_DB: qoa_test
           POSTGRES_USER: qoa
           POSTGRES_PASSWORD: supersecret
         run: bun run db:migrate
@@ -89,16 +103,16 @@ jobs:
           AUTH_ACCESS_TTL_SECONDS: 900
           AUTH_REFRESH_TTL_DAYS: 30
           AUTH_DEV_MODE: true
-          DATABASE_URL: postgres://qoa:supersecret@localhost:5432/qoa_local
-          POSTGRES_HOST: localhost
-          POSTGRES_PORT: 5432
-          POSTGRES_DB: qoa_local
+          DATABASE_URL: postgres://qoa:supersecret@127.0.0.1:5434/qoa_test
+          POSTGRES_HOST: 127.0.0.1
+          POSTGRES_PORT: 5434
+          POSTGRES_DB: qoa_test
           POSTGRES_USER: qoa
           POSTGRES_PASSWORD: supersecret
-          REDIS_HOST: localhost
+          REDIS_HOST: 127.0.0.1
           REDIS_PORT: 6379
-          REDIS_URL: redis://localhost:6379/0
-        run: bun test spec
+          REDIS_URL: redis://127.0.0.1:6379/1
+        run: bun run test
 
   frontends:
     name: Frontends Lint

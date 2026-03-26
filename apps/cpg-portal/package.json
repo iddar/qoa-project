@@ -6,7 +6,7 @@
     "scripts": {
         "dev": "next dev --port 3002 -H 0.0.0.0",
         "build": "next build",
-        "start": "next start",
+        "start": "next start --hostname 0.0.0.0 --port ${PORT:-3002}",
         "lint": "eslint"
     },
     "dependencies": {

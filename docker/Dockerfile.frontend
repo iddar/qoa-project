@@ -1,0 +1,58 @@
+# syntax=docker/dockerfile:1.7
+
+FROM oven/bun:1.3.11-alpine AS deps
+WORKDIR /repo
+
+COPY package.json bun.lock tsconfig.base.json ./
+COPY src/package.json src/package.json
+COPY apps/backoffice/package.json apps/backoffice/package.json
+COPY apps/cpg-portal/package.json apps/cpg-portal/package.json
+COPY apps/store-dashboard/package.json apps/store-dashboard/package.json
+COPY apps/digital-wallet/package.json apps/digital-wallet/package.json
+COPY packages/api-client/package.json packages/api-client/package.json
+COPY packages/auth-client/package.json packages/auth-client/package.json
+COPY packages/ui/package.json packages/ui/package.json
+
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+  bun install --frozen-lockfile
+
+FROM deps AS builder
+WORKDIR /repo
+
+ARG APP_DIR
+ARG APP_PORT
+ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_CPG_PORTAL_URL
+ARG NEXT_PUBLIC_STORE_DASHBOARD_URL
+ARG NEXT_PUBLIC_WALLET_URL
+
+ENV NODE_ENV=production
+ENV PORT=${APP_PORT}
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_CPG_PORTAL_URL=${NEXT_PUBLIC_CPG_PORTAL_URL}
+ENV NEXT_PUBLIC_STORE_DASHBOARD_URL=${NEXT_PUBLIC_STORE_DASHBOARD_URL}
+ENV NEXT_PUBLIC_WALLET_URL=${NEXT_PUBLIC_WALLET_URL}
+
+COPY . .
+
+RUN mkdir -p ${APP_DIR}/public
+RUN bun run --cwd ${APP_DIR} build
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+
+ARG APP_DIR
+ARG APP_PORT
+
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+ENV PORT=${APP_PORT}
+ENV APP_DIR=${APP_DIR}
+
+COPY --from=builder /repo/${APP_DIR}/.next/standalone ./
+COPY --from=builder /repo/${APP_DIR}/.next/static ./${APP_DIR}/.next/static
+COPY --from=builder /repo/${APP_DIR}/public ./${APP_DIR}/public
+
+EXPOSE ${APP_PORT}
+
+CMD ["sh", "-c", "node ${APP_DIR}/server.js"]

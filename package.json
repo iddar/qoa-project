@@ -1,20 +1,36 @@
 {
-    "name": "qoa",
-    "private": true,
-    "workspaces": [
-        "src",
-        "apps/*",
-        "packages/*"
-    ],
-    "scripts": {
-        "e2e": "bunx playwright test --config=global/e2e/playwright.config.ts",
-        "e2e:headed": "bunx playwright test --config=global/e2e/playwright.config.ts --headed",
-        "e2e:ui": "bunx playwright test --config=global/e2e/playwright.config.ts --ui",
-        "e2e:video": "bunx playwright test --config=global/e2e/playwright.video.config.ts"
-    },
-    "devDependencies": {
-        "@playwright/test": "^1.58.2",
-        "eslint": "^9",
-        "eslint-config-next": "16.1.6"
-    }
+  "name": "qoa",
+  "private": true,
+  "workspaces": [
+    "src",
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:env": "bash scripts/dev.sh",
+    "dev:down": "bash scripts/dev.sh down",
+    "dev:rebuild": "bash scripts/dev.sh rebuild",
+    "local:env": "bash scripts/local.sh",
+    "local:down": "bash scripts/local.sh down",
+    "local:rebuild": "bash scripts/local.sh rebuild",
+    "staging:backup-legacy": "bash scripts/staging/backup-legacy.sh",
+    "staging:remove-legacy": "bash scripts/staging/remove-legacy.sh",
+    "staging:setup-host": "bash scripts/staging/setup-host.sh",
+    "staging:deploy": "bash scripts/staging/deploy-staging.sh",
+    "staging:rollback": "bash scripts/staging/rollback-staging.sh",
+    "staging:smoke": "bash scripts/staging/smoke-test.sh",
+    "test:env": "bash scripts/test.sh",
+    "test:down": "bash scripts/test.sh down",
+    "test:rebuild": "bash scripts/test.sh rebuild",
+    "e2e": "bunx playwright test --config=global/e2e/playwright.config.ts",
+    "e2e:headed": "bunx playwright test --config=global/e2e/playwright.config.ts --headed",
+    "e2e:ui": "bunx playwright test --config=global/e2e/playwright.config.ts --ui",
+    "e2e:video": "bunx playwright test --config=global/e2e/playwright.video.config.ts",
+    "deploy:staging": "bash scripts/staging/deploy-staging.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6"
+  }
 }

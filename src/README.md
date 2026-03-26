@@ -12,10 +12,23 @@ bun install
 bun --env-file=.env.development run dev
 ```
 
+- `development`: corre Bun en tu host y usa solo Postgres/Redis de Docker.
+- `local`: corre la app dentro de Docker para aproximar el entorno Linux externo.
+- `test`: usa una base independiente y se reconstruye en cada corrida.
+
 ## Migrations
 
 ```bash
 bun run db:migrate
+```
+
+## Rebuild per environment
+
+```bash
+bun run db:rebuild:development
+bun run db:rebuild:local
+bun run db:rebuild:staging
+bun run db:rebuild:test
 ```
 
 ## Seed users for app testing
@@ -23,6 +36,7 @@ bun run db:migrate
 ```bash
 bun run db:seed:development
 bun run db:seed:local
+bun run db:seed:staging
 bun run db:seed:test
 ```
 

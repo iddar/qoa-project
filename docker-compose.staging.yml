@@ -1,0 +1,125 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    env_file:
+      - ${QOA_SERVICE_ENV_FILE:-./deploy/staging/staging.env}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - qoa_staging_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\" -h localhost",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - ${QOA_SERVICE_ENV_FILE:-./deploy/staging/staging.env}
+    environment:
+      PORT: ${API_INTERNAL_PORT:-3000}
+    ports:
+      - "${API_HOST_PORT:-3000}:${API_INTERNAL_PORT:-3000}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  backoffice:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        APP_DIR: apps/backoffice
+        APP_PORT: 3001
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_CPG_PORTAL_URL: ${NEXT_PUBLIC_CPG_PORTAL_URL}
+        NEXT_PUBLIC_STORE_DASHBOARD_URL: ${NEXT_PUBLIC_STORE_DASHBOARD_URL}
+        NEXT_PUBLIC_WALLET_URL: ${NEXT_PUBLIC_WALLET_URL}
+    env_file:
+      - ${QOA_SERVICE_ENV_FILE:-./deploy/staging/staging.env}
+    environment:
+      PORT: 3001
+    ports:
+      - "${BACKOFFICE_HOST_PORT:-3001}:3001"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  cpg-portal:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        APP_DIR: apps/cpg-portal
+        APP_PORT: 3002
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_CPG_PORTAL_URL: ${NEXT_PUBLIC_CPG_PORTAL_URL}
+        NEXT_PUBLIC_STORE_DASHBOARD_URL: ${NEXT_PUBLIC_STORE_DASHBOARD_URL}
+        NEXT_PUBLIC_WALLET_URL: ${NEXT_PUBLIC_WALLET_URL}
+    env_file:
+      - ${QOA_SERVICE_ENV_FILE:-./deploy/staging/staging.env}
+    environment:
+      PORT: 3002
+    ports:
+      - "${CPG_HOST_PORT:-3002}:3002"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  store-dashboard:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        APP_DIR: apps/store-dashboard
+        APP_PORT: 3003
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_CPG_PORTAL_URL: ${NEXT_PUBLIC_CPG_PORTAL_URL}
+        NEXT_PUBLIC_STORE_DASHBOARD_URL: ${NEXT_PUBLIC_STORE_DASHBOARD_URL}
+        NEXT_PUBLIC_WALLET_URL: ${NEXT_PUBLIC_WALLET_URL}
+    env_file:
+      - ${QOA_SERVICE_ENV_FILE:-./deploy/staging/staging.env}
+    environment:
+      PORT: 3003
+    ports:
+      - "${STORE_HOST_PORT:-3003}:3003"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  digital-wallet:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        APP_DIR: apps/digital-wallet
+        APP_PORT: 3004
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_CPG_PORTAL_URL: ${NEXT_PUBLIC_CPG_PORTAL_URL}
+        NEXT_PUBLIC_STORE_DASHBOARD_URL: ${NEXT_PUBLIC_STORE_DASHBOARD_URL}
+        NEXT_PUBLIC_WALLET_URL: ${NEXT_PUBLIC_WALLET_URL}
+    env_file:
+      - ${QOA_SERVICE_ENV_FILE:-./deploy/staging/staging.env}
+    environment:
+      PORT: 3004
+    ports:
+      - "${WALLET_HOST_PORT:-3004}:3004"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  qoa_staging_postgres_data:

@@ -795,7 +795,7 @@ const upsertSeedStore = async (scope: string): Promise<string> => {
         name,
         type: addr.type,
         address: buildAddress(addr),
-        phone: `+52155888000${scope === "test" ? "01" : scope === "local" ? "02" : "03"}`,
+        phone: `+52155888000${scope === "test" ? "01" : scope === "local" ? "02" : scope === "staging" ? "04" : "03"}`,
         street: addr.street,
         exteriorNumber: addr.exteriorNumber,
         interiorNumber: addr.interiorNumber,
@@ -820,7 +820,7 @@ const upsertSeedStore = async (scope: string): Promise<string> => {
       name,
       type: addr.type,
       address: buildAddress(addr),
-      phone: `+52155888000${scope === "test" ? "01" : scope === "local" ? "02" : "03"}`,
+      phone: `+52155888000${scope === "test" ? "01" : scope === "local" ? "02" : scope === "staging" ? "04" : "03"}`,
       street: addr.street,
       exteriorNumber: addr.exteriorNumber,
       interiorNumber: addr.interiorNumber,
@@ -1575,7 +1575,7 @@ const addPoints = async (payload: {
 };
 
 const seedDemoActivity = async (payload: {
-  scope: "development" | "local";
+  scope: "development" | "local" | "staging";
   consumerUserId: string;
   consumerCardId: string;
   primaryStoreId: string;
@@ -1846,21 +1846,21 @@ const seedDemoActivity = async (payload: {
 const baseUsers = (scope: string, cpgId: string, storeId: string): SeedUser[] => [
   {
     email: `admin.${scope}@qoa.local`,
-    phone: `+52155100000${scope === "test" ? "01" : scope === "local" ? "02" : "03"}`,
+    phone: `+52155100000${scope === "test" ? "01" : scope === "local" ? "02" : scope === "staging" ? "04" : "03"}`,
     name: `Qoa Admin (${scope})`,
     role: "qoa_admin",
     password: DEFAULT_PASSWORD,
   },
   {
     email: `support.${scope}@qoa.local`,
-    phone: `+52155100000${scope === "test" ? "11" : scope === "local" ? "12" : "13"}`,
+    phone: `+52155100000${scope === "test" ? "11" : scope === "local" ? "12" : scope === "staging" ? "14" : "13"}`,
     name: `Qoa Support (${scope})`,
     role: "qoa_support",
     password: DEFAULT_PASSWORD,
   },
   {
     email: `store.${scope}@qoa.local`,
-    phone: `+52155100000${scope === "test" ? "21" : scope === "local" ? "22" : "23"}`,
+    phone: `+52155100000${scope === "test" ? "21" : scope === "local" ? "22" : scope === "staging" ? "24" : "23"}`,
     name: `Store Admin (${scope})`,
     role: "store_admin",
     password: DEFAULT_PASSWORD,
@@ -1869,14 +1869,14 @@ const baseUsers = (scope: string, cpgId: string, storeId: string): SeedUser[] =>
   },
   {
     email: `consumer.${scope}@qoa.local`,
-    phone: `+52155100000${scope === "test" ? "31" : scope === "local" ? "32" : "33"}`,
+    phone: `+52155100000${scope === "test" ? "31" : scope === "local" ? "32" : scope === "staging" ? "34" : "33"}`,
     name: `Consumer (${scope})`,
     role: "consumer",
     password: DEFAULT_PASSWORD,
   },
   {
     email: `cpg.${scope}@qoa.local`,
-    phone: `+52155100000${scope === "test" ? "41" : scope === "local" ? "42" : "43"}`,
+    phone: `+52155100000${scope === "test" ? "41" : scope === "local" ? "42" : scope === "staging" ? "44" : "43"}`,
     name: `CPG Admin (${scope})`,
     role: "cpg_admin",
     password: DEFAULT_PASSWORD,
@@ -1885,7 +1885,7 @@ const baseUsers = (scope: string, cpgId: string, storeId: string): SeedUser[] =>
   },
 ];
 
-export const seedUsers = async (scope: "development" | "local" | "test") => {
+export const seedUsers = async (scope: "development" | "local" | "staging" | "test") => {
   const cpgId = await upsertSeedCpg(scope);
   const storeId = await upsertSeedStore(scope);
   const brandId = await upsertSeedBrand(scope, cpgId);
@@ -1951,14 +1951,14 @@ export const seedUsers = async (scope: "development" | "local" | "test") => {
     }
   }
 
-  if (scope === "development" || scope === "local") {
+  if (scope === "development" || scope === "local" || scope === "staging") {
     const addrB = SEED_STORE_ADDRESSES[1]!;
     const secondaryStoreId = await upsertStoreByCode({
       code: `seed_store_b_${scope}`,
       name: `Tienda Seed B (${scope})`,
       type: addrB.type,
       address: buildAddress(addrB),
-      phone: `+52155899000${scope === "local" ? "12" : "13"}`,
+      phone: `+52155899000${scope === "local" ? "12" : scope === "staging" ? "14" : "13"}`,
       street: addrB.street,
       exteriorNumber: addrB.exteriorNumber,
       interiorNumber: addrB.interiorNumber,
@@ -2189,7 +2189,7 @@ export const seedUsers = async (scope: "development" | "local" | "test") => {
   console.log(`[seed:${scope}] Product seed: ${productId}`);
   console.log(`[seed:${scope}] Campaign seed: ${campaignId} (qoa_seed_reto_${scope})`);
   console.log(`[seed:${scope}] Reward seed: ${rewardId}`);
-  if (scope === "development" || scope === "local") {
+  if (scope === "development" || scope === "local" || scope === "staging") {
     console.log(
       `[seed:${scope}] Demo data: 30 días de transacciones + campañas/recompensas extra + ${RELATED_SEED_STORES} tiendas relacionadas de ${TOTAL_SEED_STORES} disponibles`,
     );
