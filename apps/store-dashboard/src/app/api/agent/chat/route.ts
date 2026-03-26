@@ -129,6 +129,20 @@ const describeDraft = (draft: StorePosDraft) => {
   return JSON.stringify(summary, null, 2);
 };
 
+const decodeQrPixels = (data: Buffer<ArrayBufferLike>, width: number, height: number) => {
+  const decoded = jsQR(new Uint8ClampedArray(data), width, height, {
+    inversionAttempts: "attemptBoth",
+  });
+
+  return decoded?.data ?? null;
+};
+
+const decodeQrWithPipeline = async (buffer: Buffer, transform?: (image: sharp.Sharp) => sharp.Sharp) => {
+  const image = transform ? transform(sharp(buffer)) : sharp(buffer);
+  const { data, info } = await image.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  return decodeQrPixels(data, info.width, info.height);
+};
+
 const decodeQrFromAttachment = async (attachment: AgentAttachment) => {
   const [, encoded] = attachment.dataUrl.split(",");
   if (!encoded) {
@@ -136,9 +150,26 @@ const decodeQrFromAttachment = async (attachment: AgentAttachment) => {
   }
 
   const imageBuffer = Buffer.from(encoded, "base64");
-  const { data, info } = await sharp(imageBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  const qr = jsQR(new Uint8ClampedArray(data), info.width, info.height);
-  return qr?.data ?? null;
+  const attempts = [
+    () => decodeQrWithPipeline(imageBuffer),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize().threshold(150)),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize().threshold(180)),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.resize({ width: 1600, withoutEnlargement: false }).grayscale().normalize()),
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      const decoded = await attempt();
+      if (decoded) {
+        return decoded;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
 };
 
 export async function POST(request: Request) {

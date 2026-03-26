@@ -40,7 +40,27 @@ type SeedUser = {
   tenantType?: "cpg" | "store";
 };
 
+type SeedCatalogItem = {
+  brandName: string;
+  sku: string;
+  name: string;
+  price: number;
+};
+
 const DEFAULT_PASSWORD = "Password123!";
+
+const SEED_CATALOG: SeedCatalogItem[] = [
+  { brandName: "Refrescos Monte", sku: "QOA-COLA-600", name: "Refresco Cola 600 ml", price: 18 },
+  { brandName: "Refrescos Monte", sku: "QOA-LIMA-600", name: "Refresco Lima-Limon 600 ml", price: 18 },
+  { brandName: "Refrescos Monte", sku: "QOA-NARANJA-600", name: "Refresco Naranja 600 ml", price: 18 },
+  { brandName: "Botanas Barrio", sku: "QOA-PAPAS-45", name: "Papas Clasicas 45 g", price: 17 },
+  { brandName: "Botanas Barrio", sku: "QOA-CHILE-45", name: "Papas Chile y Limon 45 g", price: 17 },
+  { brandName: "Botanas Barrio", sku: "QOA-MANI-50", name: "Cacahuates Enchilados 50 g", price: 16 },
+  { brandName: "Despensa Sol", sku: "QOA-AGUA-1L", name: "Agua Natural 1 L", price: 14 },
+  { brandName: "Despensa Sol", sku: "QOA-GALLETA-90", name: "Galletas Vainilla 90 g", price: 22 },
+  { brandName: "Despensa Sol", sku: "QOA-CHOCOLATE-40", name: "Barra de Chocolate 40 g", price: 20 },
+  { brandName: "Despensa Sol", sku: "QOA-ENERGIA-473", name: "Bebida Energetica 473 ml", price: 32 },
+];
 
 // ── Direcciones realistas CDMX / Estado de México ───────────────────────────
 type SeedStoreAddress = {
@@ -869,6 +889,7 @@ const upsertSeedBrand = async (scope: string, cpgId: string): Promise<string> =>
 
 const upsertSeedProduct = async (scope: string, brandId: string): Promise<string> => {
   const sku = `SEED-${scope.toUpperCase()}-001`;
+  const seedProduct = SEED_CATALOG[0]!;
 
   const [existing] = (await db
     .select({ id: products.id })
@@ -883,7 +904,7 @@ const upsertSeedProduct = async (scope: string, brandId: string): Promise<string
       .update(products)
       .set({
         brandId,
-        name: `Producto Seed (${scope})`,
+        name: seedProduct.name,
         status: "active",
         updatedAt: new Date(),
       })
@@ -896,7 +917,7 @@ const upsertSeedProduct = async (scope: string, brandId: string): Promise<string
     .values({
       brandId,
       sku,
-      name: `Producto Seed (${scope})`,
+      name: seedProduct.name,
       status: "active",
     })
     .returning({ id: products.id })) as Array<{ id: string }>;
@@ -904,20 +925,17 @@ const upsertSeedProduct = async (scope: string, brandId: string): Promise<string
   return inserted!.id;
 };
 
-const upsertSeedStoreProducts = async (scope: string, storeId: string) => {
-  const allProducts = (await db
-    .select({ id: products.id, brandId: products.brandId, name: products.name })
-    .from(products)
-    .where(eq(products.status, "active"))) as Array<{ id: string; brandId: string; name: string }>;
-
-  for (const product of allProducts) {
+const upsertSeedStoreProducts = async (
+  scope: string,
+  storeId: string,
+  catalog: Array<{ productId: string; brandId: string; sku: string; name: string; price: number }>,
+) => {
+  for (const product of catalog) {
     const [existing] = (await db
       .select({ id: storeProducts.id })
       .from(storeProducts)
-      .where(and(eq(storeProducts.storeId, storeId), eq(storeProducts.productId, product.id)))
+      .where(and(eq(storeProducts.storeId, storeId), eq(storeProducts.productId, product.productId)))
       .limit(1)) as Array<{ id: string }>;
-
-    if (existing) continue;
 
     const [brandRow] = (await db
       .select({ cpgId: brands.cpgId })
@@ -925,16 +943,29 @@ const upsertSeedStoreProducts = async (scope: string, storeId: string) => {
       .where(eq(brands.id, product.brandId))
       .limit(1)) as Array<{ cpgId: string | null }>;
 
-    const price = Math.floor(Math.random() * 20000) + 1000;
-    const sku = `STORE-${product.id}`;
+    if (existing) {
+      await db
+        .update(storeProducts)
+        .set({
+          cpgId: brandRow?.cpgId ?? null,
+          name: product.name,
+          sku: product.sku,
+          price: product.price.toString(),
+          unitType: "piece",
+          status: "active",
+          updatedAt: new Date(),
+        })
+        .where(eq(storeProducts.id, existing.id));
+      continue;
+    }
 
     await db.insert(storeProducts).values({
       storeId,
-      productId: product.id,
+      productId: product.productId,
       cpgId: brandRow?.cpgId ?? null,
       name: product.name,
-      sku,
-      price: price.toString(),
+      sku: product.sku,
+      price: product.price.toString(),
       unitType: "piece",
       status: "active",
     });
@@ -1213,6 +1244,31 @@ const upsertProductBySku = async (brandId: string, sku: string, name: string): P
     .returning({ id: products.id })) as Array<{ id: string }>;
 
   return created!.id;
+};
+
+const upsertSeedCatalog = async (scope: string, cpgId: string) => {
+  const catalogEntries: Array<{
+    productId: string;
+    brandId: string;
+    sku: string;
+    name: string;
+    price: number;
+  }> = [];
+
+  for (const item of SEED_CATALOG) {
+    const brandId = await upsertBrandByName(cpgId, `${item.brandName} (${scope})`);
+    const productId = await upsertProductBySku(brandId, `${item.sku}-${scope.toUpperCase()}`, `${item.name} (${scope})`);
+
+    catalogEntries.push({
+      productId,
+      brandId,
+      sku: `${item.sku}-${scope.toUpperCase()}`,
+      name: `${item.name} (${scope})`,
+      price: item.price,
+    });
+  }
+
+  return catalogEntries;
 };
 
 const upsertCampaignByKey = async (payload: {
@@ -1888,9 +1944,10 @@ const baseUsers = (scope: string, cpgId: string, storeId: string): SeedUser[] =>
 export const seedUsers = async (scope: "development" | "local" | "staging" | "test") => {
   const cpgId = await upsertSeedCpg(scope);
   const storeId = await upsertSeedStore(scope);
-  const brandId = await upsertSeedBrand(scope, cpgId);
-  const productId = await upsertSeedProduct(scope, brandId);
-  await upsertSeedStoreProducts(scope, storeId);
+  const seededCatalog = await upsertSeedCatalog(scope, cpgId);
+  const brandId = seededCatalog[0]?.brandId ?? await upsertSeedBrand(scope, cpgId);
+  const productId = seededCatalog[0]?.productId ?? await upsertSeedProduct(scope, brandId);
+  await upsertSeedStoreProducts(scope, storeId, seededCatalog);
   const campaignId = await upsertSeedCampaign(scope, cpgId);
   const rewardId = await upsertSeedReward(scope, campaignId);
   const definitions = baseUsers(scope, cpgId, storeId);
@@ -1993,40 +2050,11 @@ export const seedUsers = async (scope: "development" | "local" | "staging" | "te
       });
     }
 
-    const brandIds = [
-      await upsertBrandByName(cpgId, `Brand Plus (${scope})`),
-      await upsertBrandByName(cpgId, `Brand Max (${scope})`),
-      await upsertBrandByName(cpgId, `Brand Flex (${scope})`),
-    ];
+    const productIds = seededCatalog.map((entry) => entry.productId);
 
-    const productIds = [
-      productId,
-      await upsertProductBySku(
-        brandIds[0]!,
-        `SEED-${scope.toUpperCase()}-002`,
-        `Producto Plus 2 (${scope})`,
-      ),
-      await upsertProductBySku(
-        brandIds[1]!,
-        `SEED-${scope.toUpperCase()}-003`,
-        `Producto Max 3 (${scope})`,
-      ),
-      await upsertProductBySku(
-        brandIds[2]!,
-        `SEED-${scope.toUpperCase()}-004`,
-        `Producto Flex 4 (${scope})`,
-      ),
-      await upsertProductBySku(
-        brandIds[0]!,
-        `SEED-${scope.toUpperCase()}-005`,
-        `Producto Plus 5 (${scope})`,
-      ),
-      await upsertProductBySku(
-        brandIds[1]!,
-        `SEED-${scope.toUpperCase()}-006`,
-        `Producto Max 6 (${scope})`,
-      ),
-    ];
+    for (const managedStoreId of managedStoreIds) {
+      await upsertSeedStoreProducts(scope, managedStoreId, seededCatalog);
+    }
 
     const openCampaignId = await upsertCampaignByKey({
       key: `qoa_seed_open_${scope}`,
