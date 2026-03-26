@@ -746,6 +746,16 @@ export default function CampaignDetailPage() {
             longitude: number;
         }
     >;
+    const targetedStoreIdSet = new Set(targetedStores.map((store) => store.storeId));
+    const targetedGeoStores = geoRelatedStoreOptions.filter((store) =>
+        targetedStoreIdSet.has(store.storeId),
+    );
+    const coverageMapStores =
+        campaign?.storeAccessMode === "all_related_stores" ? geoRelatedStoreOptions : targetedGeoStores;
+    const coverageStoresWithoutCoordinates =
+        campaign?.storeAccessMode === "all_related_stores"
+            ? relatedStoreOptions.length - geoRelatedStoreOptions.length
+            : targetedStores.length - targetedGeoStores.length;
 
     const openStoreCoverageModal = () => {
         setStoreAccessModeDraft(
@@ -980,6 +990,43 @@ export default function CampaignDetailPage() {
                             </button>
                         </div>
                         <div className="mt-3 space-y-3 text-xs">
+                            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="text-zinc-500 dark:text-zinc-400">
+                                            Mapa de tiendas participantes
+                                        </p>
+                                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                            {coverageMapStores.length > 0
+                                                ? `${coverageMapStores.length} tienda(s) con coordenadas visibles`
+                                                : "Sin tiendas con coordenadas para mostrar"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="mt-3">
+                                    {coverageMapStores.length > 0 ? (
+                                        <CampaignStoreSelectionMap
+                                            stores={coverageMapStores}
+                                            selectedStoreIds={coverageMapStores.map(
+                                                (store) => store.storeId,
+                                            )}
+                                            onSelectionChange={() => {}}
+                                            interactive={false}
+                                            autoFitToStores
+                                        />
+                                    ) : (
+                                        <div className="flex h-[360px] items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-white px-4 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
+                                            No hay tiendas con coordenadas disponibles para pintar el mapa de esta campaña.
+                                        </div>
+                                    )}
+                                </div>
+                                {coverageStoresWithoutCoordinates > 0 && (
+                                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                                        {coverageStoresWithoutCoordinates} tienda(s) activas de este alcance no aparecen en el mapa porque no tienen coordenadas.
+                                    </p>
+                                )}
+                            </div>
+
                             <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900">
                                 <p className="text-zinc-500 dark:text-zinc-400">
                                     Modo de cobertura

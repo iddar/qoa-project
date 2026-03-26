@@ -121,6 +121,24 @@ Los servicios usan el archivo indicado por `QOA_ENV_FILE` y, si no lo defines, t
 Atajos desde la raíz:
 
 ```bash
+bun run setup:local
+```
+
+Bootstrap inicial del entorno local:
+
+```bash
+bun run setup:local
+```
+
+Chequeo rápido de herramientas/config:
+
+```bash
+bun run doctor:local
+```
+
+Trabajo diario:
+
+```bash
 bun run dev:env
 bun run dev:rebuild
 bun run dev:down

@@ -7,6 +7,8 @@
     "packages/*"
   ],
   "scripts": {
+    "setup:local": "bash scripts/setup-local.sh",
+    "doctor:local": "bash scripts/setup-local.sh doctor",
     "dev:env": "bash scripts/dev.sh",
     "dev:down": "bash scripts/dev.sh down",
     "dev:rebuild": "bash scripts/dev.sh rebuild",

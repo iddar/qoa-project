@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type SelectableStore = {
     storeId: string;
@@ -24,6 +24,8 @@ type CampaignStoreSelectionMapProps = {
     stores: SelectableStore[];
     selectedStoreIds: string[];
     onSelectionChange: (storeIds: string[]) => void;
+    interactive?: boolean;
+    autoFitToStores?: boolean;
 };
 
 type LeafletModule = typeof import("leaflet");
@@ -69,6 +71,8 @@ export function CampaignStoreSelectionMap({
     stores,
     selectedStoreIds,
     onSelectionChange,
+    interactive = true,
+    autoFitToStores = false,
 }: CampaignStoreSelectionMapProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<LeafletMap | null>(null);
@@ -107,18 +111,18 @@ export function CampaignStoreSelectionMap({
         draftPointsRef.current = draftPoints;
     }, [draftPoints]);
 
-    const resetDraft = () => {
+    const resetDraft = useCallback(() => {
         draftPointsRef.current = [];
         setDraftPoints([]);
-    };
+    }, []);
 
-    const appendSelection = (storeIds: string[]) => {
+    const appendSelection = useCallback((storeIds: string[]) => {
         onSelectionChangeRef.current(
             Array.from(new Set([...selectedStoreIdsRef.current, ...storeIds])),
         );
-    };
+    }, []);
 
-    const completeRectangle = (first: MapPoint, second: MapPoint) => {
+    const completeRectangle = useCallback((first: MapPoint, second: MapPoint) => {
         const bounds = normalizeRectangleBounds(first, second);
         const insideIds = storesRef.current
             .filter(
@@ -132,9 +136,9 @@ export function CampaignStoreSelectionMap({
 
         setOverlay({ kind: "rectangle", bounds });
         appendSelection(insideIds);
-    };
+    }, [appendSelection]);
 
-    const completeCircle = (center: MapPoint, edgePoint: MapPoint) => {
+    const completeCircle = useCallback((center: MapPoint, edgePoint: MapPoint) => {
         const L = leafletRef.current;
         const map = mapRef.current;
 
@@ -153,9 +157,9 @@ export function CampaignStoreSelectionMap({
 
         setOverlay({ kind: "circle", center, radiusMeters });
         appendSelection(insideIds);
-    };
+    }, [appendSelection]);
 
-    const completePolygon = (points: MapPoint[]) => {
+    const completePolygon = useCallback((points: MapPoint[]) => {
         if (points.length < 3) {
             return;
         }
@@ -166,7 +170,7 @@ export function CampaignStoreSelectionMap({
 
         setOverlay({ kind: "polygon", points });
         appendSelection(insideIds);
-    };
+    }, [appendSelection]);
 
     useEffect(() => {
         let cancelled = false;
@@ -287,6 +291,8 @@ export function CampaignStoreSelectionMap({
             cancelled = true;
             cleanup();
         };
+        // The map instance is created once; interaction reads current values from refs.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     useEffect(() => {
@@ -323,6 +329,32 @@ export function CampaignStoreSelectionMap({
             marker.addTo(markerLayer);
         });
     }, [mapReady, selectedStoreIds, stores]);
+
+    useEffect(() => {
+        const L = leafletRef.current;
+        const map = mapRef.current;
+
+        if (!L || !map || !mapReady || !autoFitToStores) {
+            return;
+        }
+
+        if (stores.length === 0) {
+            map.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate: false });
+            return;
+        }
+
+        const bounds = L.latLngBounds(stores.map((store) => [store.latitude, store.longitude]));
+        if (!bounds.isValid()) {
+            return;
+        }
+
+        if (stores.length === 1) {
+            map.setView(bounds.getCenter(), 13, { animate: false });
+            return;
+        }
+
+        map.fitBounds(bounds.pad(0.18), { animate: false });
+    }, [autoFitToStores, mapReady, stores]);
 
     useEffect(() => {
         const L = leafletRef.current;
@@ -459,68 +491,72 @@ export function CampaignStoreSelectionMap({
 
     return (
         <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                <p>
-                    Navega el mapa libremente y luego elige cómo quieres delimitar el área de
-                    selección.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={() => activateMode("rectangle")}
-                        className={modeButtonClass("rectangle")}
-                    >
-                        Área rectangular
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => activateMode("circle")}
-                        className={modeButtonClass("circle")}
-                    >
-                        Área circular
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => activateMode("polygon")}
-                        className={modeButtonClass("polygon")}
-                    >
-                        Área multi-puntos
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM)}
-                        className="rounded-full border border-zinc-200 px-3 py-1.5 font-semibold text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                    >
-                        Centrar CDMX
-                    </button>
-                    {(draftPoints.length > 0 || overlay) && (
-                        <button
-                            type="button"
-                            onClick={clearOverlay}
-                            className="rounded-full border border-zinc-200 px-3 py-1.5 font-semibold text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                        >
-                            Limpiar área
-                        </button>
-                    )}
-                    {drawMode === "polygon" && draftPoints.length >= 3 && (
-                        <button
-                            type="button"
-                            onClick={finishPolygon}
-                            className="rounded-full bg-zinc-900 px-3 py-1.5 font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-                        >
-                            Cerrar polígono
-                        </button>
-                    )}
-                </div>
-            </div>
+            {interactive && (
+                <>
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        <p>
+                            Navega el mapa libremente y luego elige cómo quieres delimitar el área de
+                            selección.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => activateMode("rectangle")}
+                                className={modeButtonClass("rectangle")}
+                            >
+                                Área rectangular
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => activateMode("circle")}
+                                className={modeButtonClass("circle")}
+                            >
+                                Área circular
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => activateMode("polygon")}
+                                className={modeButtonClass("polygon")}
+                            >
+                                Área multi-puntos
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => mapRef.current?.setView(DEFAULT_CENTER, DEFAULT_ZOOM)}
+                                className="rounded-full border border-zinc-200 px-3 py-1.5 font-semibold text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                            >
+                                Centrar CDMX
+                            </button>
+                            {(draftPoints.length > 0 || overlay) && (
+                                <button
+                                    type="button"
+                                    onClick={clearOverlay}
+                                    className="rounded-full border border-zinc-200 px-3 py-1.5 font-semibold text-zinc-600 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                                >
+                                    Limpiar área
+                                </button>
+                            )}
+                            {drawMode === "polygon" && draftPoints.length >= 3 && (
+                                <button
+                                    type="button"
+                                    onClick={finishPolygon}
+                                    className="rounded-full bg-zinc-900 px-3 py-1.5 font-semibold text-white transition hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                                >
+                                    Cerrar polígono
+                                </button>
+                            )}
+                        </div>
+                    </div>
 
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-950/40 dark:bg-emerald-950/20 dark:text-emerald-200">
-                {helperText}
-            </div>
+                    <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-950/40 dark:bg-emerald-950/20 dark:text-emerald-200">
+                        {helperText}
+                    </div>
+                </>
+            )}
 
             <div
                 className={`h-[360px] w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700 ${
-                    drawMode ? "cursor-crosshair" : ""
+                    interactive && drawMode ? "cursor-crosshair" : ""
                 }`}
             >
                 <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
