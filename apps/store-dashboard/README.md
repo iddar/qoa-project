@@ -7,11 +7,19 @@ Dashboard operativo para tienda (tenderos y soporte) construido con Next.js + Re
 - `bun run dev` - Inicia la app en `http://localhost:3003`
 - `bun run lint` - Ejecuta lint
 
+La app ya escucha en `0.0.0.0`, así que también la puedes abrir desde otros dispositivos usando la IP LAN de tu máquina, por ejemplo `http://192.168.1.203:3003`.
+
 ## Variables
 
 - `NEXT_PUBLIC_API_URL` (opcional) - URL del backend, por defecto `http://localhost:3000`
 - `MINIMAX_API_KEY` - API key de MiniMax para el asistente POS server-side
 - `CHOUGH_URL` - URL del servidor de transcripción de voz, por ejemplo `http://127.0.0.1:8080`
+
+Para probar desde otros dispositivos en tu red local, levanta el dashboard con la URL pública del API:
+
+```sh
+NEXT_PUBLIC_API_URL=http://192.168.1.203:3000 bun run dev
+```
 
 ## Usuarios sugeridos (segun seed)
 
