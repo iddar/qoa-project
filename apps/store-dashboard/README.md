@@ -9,6 +9,14 @@ Dashboard operativo para tienda (tenderos y soporte) construido con Next.js + Re
 
 La app ya escucha en `0.0.0.0`, así que también la puedes abrir desde otros dispositivos usando la IP LAN de tu máquina, por ejemplo `http://192.168.1.203:3003`.
 
+Si quieres levantar todo el entorno de desarrollo listo para dispositivos en red local desde la raíz del monorepo, usa:
+
+```sh
+bun run dev:env:public
+```
+
+Ese comando expone API y frontends para LAN, y publica las URLs usando tu IP detectada o `PUBLIC_HOST` si la defines manualmente.
+
 ## Variables
 
 - `NEXT_PUBLIC_API_URL` (opcional) - URL del backend, por defecto `http://localhost:3000`
