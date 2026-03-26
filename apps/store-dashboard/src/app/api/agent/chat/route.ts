@@ -471,6 +471,9 @@ export async function POST(request: Request) {
 
           if (!resolvedInput) {
             for (const attachment of latestAttachments) {
+              if (getAttachmentKind(attachment) !== "image") {
+                continue;
+              }
               resolvedInput = (await decodeQrFromAttachment(attachment)) ?? "";
               if (resolvedInput) {
                 break;

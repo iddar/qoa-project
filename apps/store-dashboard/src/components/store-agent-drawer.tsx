@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowDown, Bot, LoaderCircle, MessageSquarePlus, Paperclip, SendHorizontal, Sparkles, X } from "lucide-react";
+import { ArrowDown, Bot, LoaderCircle, MessageSquarePlus, Mic, Paperclip, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type StorePosDraft } from "@/lib/store-pos";
 import { useStorePos } from "@/providers/store-pos-provider";
+
+const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-MX", {
@@ -21,13 +23,45 @@ const quickPrompts = [
   "Confirma la venta actual",
 ];
 
-const readFileAsDataUrl = (file: File) =>
+const readFileAsDataUrl = (file: Blob) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+
+const AUDIO_MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/mp4;codecs=mp4a.40.2",
+  "audio/ogg;codecs=opus",
+];
+
+const getSupportedAudioMimeType = () => {
+  if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
+    return null;
+  }
+
+  return AUDIO_MIME_CANDIDATES.find((mimeType) => MediaRecorder.isTypeSupported(mimeType)) ?? null;
+};
+
+const getAudioExtension = (contentType: string) => {
+  if (contentType.includes("webm")) return "webm";
+  if (contentType.includes("ogg")) return "ogg";
+  if (contentType.includes("mp4") || contentType.includes("m4a") || contentType.includes("aac")) return "m4a";
+  if (contentType.includes("mpeg")) return "mp3";
+  if (contentType.includes("wav")) return "wav";
+  return "webm";
+};
+
+const formatDuration = (durationMs: number) => {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
 
 export function StoreAgentDrawer() {
   const pathname = usePathname();
@@ -45,13 +79,30 @@ export function StoreAgentDrawer() {
   const [pending, setPending] = useState(false);
   const [attachments, setAttachments] = useState<AgentAttachment[]>([]);
   const [showScrollToLatest, setShowScrollToLatest] = useState(false);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const recordingTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (pathname.startsWith("/pos")) {
       setAgentOpen(true);
     }
   }, [pathname, setAgentOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        window.clearInterval(recordingTimerRef.current);
+      }
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -89,11 +140,18 @@ export function StoreAgentDrawer() {
       return;
     }
 
+    const preparedAttachments = outgoingAttachments.map((attachment) =>
+      attachment.kind === "audio"
+        ? { ...attachment, status: "processing" as const }
+        : attachment,
+    );
+
     const userMessage: AgentMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: trimmed || "Adjunto una imagen para escanear.",
-      attachments: outgoingAttachments,
+      content:
+        trimmed || (preparedAttachments.some((attachment) => attachment.kind === "audio") ? AUDIO_PLACEHOLDER : "Adjunto una imagen para escanear."),
+      attachments: preparedAttachments,
     };
 
     setMessages((current) => [...current, userMessage]);
@@ -121,10 +179,16 @@ export function StoreAgentDrawer() {
       const data = (await response.json()) as {
         message: AgentMessage;
         draft: StorePosDraft;
+        userMessage?: AgentMessage;
       };
 
       replaceDraft(data.draft);
-      setMessages((current) => [...current, data.message]);
+      setMessages((current) => {
+        const withUpdatedUserMessage = data.userMessage
+          ? current.map((message) => (message.id === data.userMessage?.id ? data.userMessage : message))
+          : current;
+        return [...withUpdatedUserMessage, data.message];
+      });
     } catch {
       setMessages((current) => [
         ...current,
@@ -137,6 +201,93 @@ export function StoreAgentDrawer() {
     } finally {
       setPending(false);
     }
+  };
+
+  const removeAttachment = (attachmentId: string) => {
+    setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+  };
+
+  const startRecording = async () => {
+    if (pending || isRecording || typeof window === "undefined" || typeof navigator === "undefined") {
+      return;
+    }
+
+    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setRecordingError("Tu navegador no permite grabar notas de voz aquí.");
+      return;
+    }
+
+    try {
+      setRecordingError(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const mimeType = getSupportedAudioMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+      audioChunksRef.current = [];
+      recordingStartedAtRef.current = Date.now();
+      setRecordingDurationMs(0);
+      setIsRecording(true);
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const contentType = recorder.mimeType || mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type: contentType });
+        const durationMs = recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : recordingDurationMs;
+
+        if (recordingTimerRef.current) {
+          window.clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+        audioChunksRef.current = [];
+        recordingStartedAtRef.current = null;
+        setIsRecording(false);
+
+        if (blob.size === 0) {
+          setRecordingError("La nota de voz salió vacía. Intenta grabar otra vez.");
+          return;
+        }
+
+        const dataUrl = await readFileAsDataUrl(blob);
+        const attachment: AgentAttachment = {
+          id: crypto.randomUUID(),
+          name: `nota-de-voz.${getAudioExtension(contentType)}`,
+          contentType,
+          dataUrl,
+          kind: "audio",
+          durationMs,
+          status: "ready",
+        };
+
+        setAttachments((current) => [...current.filter((entry) => entry.kind !== "audio"), attachment]);
+      };
+
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      recordingTimerRef.current = window.setInterval(() => {
+        if (recordingStartedAtRef.current) {
+          setRecordingDurationMs(Date.now() - recordingStartedAtRef.current);
+        }
+      }, 250);
+    } catch {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      setIsRecording(false);
+      setRecordingError("No pude acceder al micrófono. Revisa los permisos e intenta nuevamente.");
+    }
+  };
+
+  const stopRecording = () => {
+    mediaRecorderRef.current?.stop();
   };
 
   const panelContent = (
@@ -214,7 +365,17 @@ export function StoreAgentDrawer() {
             </div>
             <p className="whitespace-pre-wrap">{message.content}</p>
             {message.attachments?.length ? (
-              <p className="mt-2 text-xs opacity-70">Adjuntos: {message.attachments.map((file) => file.name).join(", ")}</p>
+              <div className="mt-2 space-y-2 text-xs opacity-80">
+                {message.attachments.map((file) => (
+                  <div key={file.id} className="rounded-2xl border border-current/10 px-3 py-2">
+                    <p>{file.kind === "audio" ? "Nota de voz" : "Adjunto"}: {file.name}</p>
+                    {file.durationMs ? <p>Duración: {formatDuration(file.durationMs)}</p> : null}
+                    {file.status === "processing" ? <p>Transcribiendo...</p> : null}
+                    {file.status === "failed" ? <p>No se pudo transcribir.</p> : null}
+                    {file.transcript ? <p className="mt-1 whitespace-pre-wrap">Transcripción: {file.transcript}</p> : null}
+                  </div>
+                ))}
+              </div>
             ) : null}
           </article>
         ))}
@@ -244,9 +405,29 @@ export function StoreAgentDrawer() {
             {attachments.map((attachment) => (
               <div key={attachment.id} className="inline-flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                 <Paperclip className="h-3 w-3" />
-                {attachment.name}
+                <span>
+                  {attachment.kind === "audio" ? `Nota de voz ${attachment.durationMs ? `(${formatDuration(attachment.durationMs)})` : ""}` : attachment.name}
+                </span>
+                <button type="button" onClick={() => removeAttachment(attachment.id)} className="rounded-full p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700">
+                  <X className="h-3 w-3" />
+                </button>
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {recordingError ? <p className="mb-3 text-xs text-red-500">{recordingError}</p> : null}
+
+        {isRecording ? (
+          <div className="mb-3 flex items-center justify-between rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
+            <div className="flex items-center gap-3">
+              <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
+              <span>Grabando nota de voz {formatDuration(recordingDurationMs)}</span>
+            </div>
+            <button type="button" onClick={stopRecording} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white">
+              <Square className="h-3.5 w-3.5" />
+              Detener
+            </button>
           </div>
         ) : null}
 
@@ -266,31 +447,56 @@ export function StoreAgentDrawer() {
           />
 
           <div className="flex items-center justify-between gap-3">
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50">
-              <Paperclip className="h-3.5 w-3.5" />
-              Adjuntar QR
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={async (event) => {
-                  const files = Array.from(event.target.files ?? []);
-                  const nextAttachments = await Promise.all(
-                    files.map(async (file) => ({
-                      id: crypto.randomUUID(),
-                      name: file.name,
-                      contentType: file.type || "image/png",
-                      dataUrl: await readFileAsDataUrl(file),
-                    })),
-                  );
-                  setAttachments(nextAttachments);
-                }}
-              />
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50">
+                <Paperclip className="h-3.5 w-3.5" />
+                Adjuntar QR
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (event) => {
+                    const files = Array.from(event.target.files ?? []);
+                    const nextAttachments = await Promise.all(
+                      files.map(async (file) => ({
+                        id: crypto.randomUUID(),
+                        name: file.name,
+                        contentType: file.type || "image/png",
+                        dataUrl: await readFileAsDataUrl(file),
+                        kind: "image" as const,
+                        status: "ready" as const,
+                      })),
+                    );
+                    setAttachments((current) => [...current.filter((attachment) => attachment.kind !== "image"), ...nextAttachments]);
+                  }}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => void startRecording()}
+                disabled={pending || isRecording}
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50"
+              >
+                <Mic className="h-3.5 w-3.5" />
+                Nota de voz
+              </button>
+
+              {attachments.some((attachment) => attachment.kind === "audio") ? (
+                <button
+                  type="button"
+                  onClick={() => setAttachments((current) => current.filter((attachment) => attachment.kind !== "audio"))}
+                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Cancelar voz
+                </button>
+              ) : null}
+            </div>
 
             <button
               type="submit"
-              disabled={pending || (!input.trim() && attachments.length === 0)}
+              disabled={pending || isRecording || (!input.trim() && attachments.length === 0)}
               className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <SendHorizontal className="h-4 w-4" />
