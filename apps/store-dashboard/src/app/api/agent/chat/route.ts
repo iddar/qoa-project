@@ -201,13 +201,22 @@ const parseDataUrl = (dataUrl: string) => {
     throw new Error("INVALID_DATA_URL");
   }
 
-  const match = meta.match(/^data:([^;]+);base64$/);
-  if (!match) {
+  if (!meta.startsWith("data:")) {
+    throw new Error("INVALID_DATA_URL");
+  }
+
+  const metaWithoutPrefix = meta.slice(5);
+  if (!metaWithoutPrefix.endsWith(";base64")) {
+    throw new Error("INVALID_DATA_URL");
+  }
+
+  const contentType = metaWithoutPrefix.slice(0, -7);
+  if (!contentType) {
     throw new Error("INVALID_DATA_URL");
   }
 
   return {
-    contentType: match[1],
+    contentType,
     buffer: Buffer.from(encoded, "base64"),
   };
 };

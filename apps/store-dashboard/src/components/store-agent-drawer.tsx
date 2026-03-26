@@ -370,6 +370,9 @@ export function StoreAgentDrawer() {
                   <div key={file.id} className="rounded-2xl border border-current/10 px-3 py-2">
                     <p>{file.kind === "audio" ? "Nota de voz" : "Adjunto"}: {file.name}</p>
                     {file.durationMs ? <p>Duración: {formatDuration(file.durationMs)}</p> : null}
+                    {file.kind === "audio" ? (
+                      <audio controls preload="metadata" src={file.dataUrl} className="mt-2 w-full max-w-full" />
+                    ) : null}
                     {file.status === "processing" ? <p>Transcribiendo...</p> : null}
                     {file.status === "failed" ? <p>No se pudo transcribir.</p> : null}
                     {file.transcript ? <p className="mt-1 whitespace-pre-wrap">Transcripción: {file.transcript}</p> : null}
@@ -401,7 +404,8 @@ export function StoreAgentDrawer() {
 
       <div className="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
         {attachments.length ? (
-          <div className="mb-3 flex flex-wrap gap-2">
+          <div className="mb-3 space-y-3">
+            <div className="flex flex-wrap gap-2">
             {attachments.map((attachment) => (
               <div key={attachment.id} className="inline-flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                 <Paperclip className="h-3 w-3" />
@@ -411,6 +415,14 @@ export function StoreAgentDrawer() {
                 <button type="button" onClick={() => removeAttachment(attachment.id)} className="rounded-full p-0.5 hover:bg-zinc-200 dark:hover:bg-zinc-700">
                   <X className="h-3 w-3" />
                 </button>
+              </div>
+            ))}
+            </div>
+
+            {attachments.filter((attachment) => attachment.kind === "audio").map((attachment) => (
+              <div key={`${attachment.id}-preview`} className="rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Preview de nota de voz</p>
+                <audio controls preload="metadata" src={attachment.dataUrl} className="w-full max-w-full" />
               </div>
             ))}
           </div>
