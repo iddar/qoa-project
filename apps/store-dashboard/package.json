@@ -17,10 +17,15 @@
         "@qoa/core": "workspace:*",
         "@qoa/ui": "workspace:*",
         "@tanstack/react-query": "^5",
+        "ai": "^6.0.138",
+        "jsqr": "^1.4.0",
         "lucide-react": "^0.577.0",
         "next": "16.1.6",
         "react": "19.2.3",
-        "react-dom": "19.2.3"
+        "react-dom": "19.2.3",
+        "sharp": "^0.34.5",
+        "vercel-minimax-ai-provider": "^0.0.2",
+        "zod": "^4.3.6"
     },
     "devDependencies": {
         "@tailwindcss/postcss": "^4",
