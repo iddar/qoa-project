@@ -264,7 +264,9 @@ export function StoreAgentDrawer() {
       <button
         type="button"
         onClick={() => setAgentOpen(true)}
-        className="fixed right-5 bottom-5 z-40 inline-flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-950/20 transition hover:-translate-y-0.5 dark:bg-white dark:text-zinc-950"
+        className={`fixed right-5 bottom-5 z-40 inline-flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-950/20 transition hover:-translate-y-0.5 dark:bg-white dark:text-zinc-950 ${
+          isAgentOpen ? "pointer-events-none opacity-0" : "opacity-100"
+        }`}
       >
         <Sparkles className="h-4 w-4" />
         Asistente POS
