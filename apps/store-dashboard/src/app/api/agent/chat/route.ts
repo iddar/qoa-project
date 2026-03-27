@@ -400,6 +400,7 @@ export async function POST(request: Request) {
   }
 
   let workingDraft = cloneDraft(draft ?? createEmptyDraft());
+  const initialDraftItems = (draft?.items ?? []).map((item) => ({ ...item }));
   const previousCustomerCardId = draft?.customer?.cardId ?? null;
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
   let latestAttachments = latestUserMessage?.attachments ?? [];
@@ -548,6 +549,28 @@ export async function POST(request: Request) {
 
     const lines = addedItems.map((item) => `- **${item.quantity} x ${item.name}** · $${item.lineTotal}`);
     return `Listo, agregué estos productos al pedido:\n${lines.join("\n")}`;
+  };
+
+  const collectAddedItemsFromDraftDiff = () => {
+    const previousItemsById = new Map(initialDraftItems.map((item) => [item.storeProductId, item]));
+    const addedItems: AgentAddedItem[] = [];
+
+    for (const currentItem of workingDraft.items) {
+      const previousItem = previousItemsById.get(currentItem.storeProductId);
+      const quantityDelta = currentItem.quantity - (previousItem?.quantity ?? 0);
+
+      if (quantityDelta > 0) {
+        addedItems.push({
+          storeProductId: currentItem.storeProductId,
+          name: currentItem.name,
+          quantity: quantityDelta,
+          unitPrice: currentItem.price,
+          lineTotal: currentItem.price * quantityDelta,
+        });
+      }
+    }
+
+    return addedItems;
   };
 
   const tryHandleDeterministicCartBuild = async () => {
@@ -887,6 +910,7 @@ export async function POST(request: Request) {
   const customerCard = workingDraft.customer?.cardId && workingDraft.customer.cardId !== previousCustomerCardId
     ? workingDraft.customer
     : undefined;
+  const addedItems = collectAddedItemsFromDraftDiff();
 
   return Response.json({
     message: {
@@ -895,6 +919,7 @@ export async function POST(request: Request) {
       content: result.text,
       renderedHtml: renderedHtml || undefined,
       customerCard,
+      addedItems: addedItems.length > 0 ? addedItems : undefined,
       actions: buildCopilotActions(workingDraft),
     },
     userMessage: normalizedUserMessage,
