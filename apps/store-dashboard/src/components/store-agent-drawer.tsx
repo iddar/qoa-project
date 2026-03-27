@@ -479,9 +479,9 @@ export function StoreAgentDrawer() {
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
-              rows={4}
+              rows={2}
               placeholder="Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"
-              className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pb-16 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 sm:pb-14"
+              className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pb-14 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 sm:pb-12"
             />
 
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
