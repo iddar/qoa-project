@@ -97,6 +97,27 @@ export function StoreAgentDrawer() {
   }, [pathname, setAgentOpen]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const isMobileViewport = window.matchMedia("(max-width: 1023px)").matches;
+    if (!isMobileViewport || !isAgentOpen) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    const originalTouchAction = document.body.style.touchAction;
+    document.body.style.overflow = "hidden";
+    document.body.style.touchAction = "none";
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.touchAction = originalTouchAction;
+    };
+  }, [isAgentOpen]);
+
+  useEffect(() => {
     return () => {
       if (recordingTimerRef.current) {
         window.clearInterval(recordingTimerRef.current);
@@ -292,7 +313,7 @@ export function StoreAgentDrawer() {
   };
 
   const panelContent = (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <header className="border-b border-zinc-200 bg-linear-to-br from-amber-50 via-white to-emerald-50 px-5 py-4 dark:border-zinc-800 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -349,7 +370,7 @@ export function StoreAgentDrawer() {
           const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
           setShowScrollToLatest(distanceToBottom > 120);
         }}
-        className="relative flex-1 space-y-3 overflow-y-auto px-4 py-4"
+        className="relative min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4 touch-pan-y"
       >
         {messages.map((message) => (
           <article
@@ -535,15 +556,22 @@ export function StoreAgentDrawer() {
       </button>
 
       <aside
-        className={`hidden h-screen shrink-0 border-l border-zinc-200 bg-white/95 shadow-2xl backdrop-blur transition-[width,opacity] duration-200 lg:block dark:border-zinc-800 dark:bg-zinc-950/95 ${
+        className={`hidden h-screen min-h-0 shrink-0 border-l border-zinc-200 bg-white/95 shadow-2xl backdrop-blur transition-[width,opacity] duration-200 lg:block dark:border-zinc-800 dark:bg-zinc-950/95 ${
           isAgentOpen ? "w-[28rem] opacity-100" : "w-0 overflow-hidden border-l-0 opacity-0"
         }`}
       >
         {panelContent}
       </aside>
 
+      <button
+        type="button"
+        aria-label="Cerrar asistente"
+        onClick={() => setAgentOpen(false)}
+        className={`fixed inset-0 z-40 bg-black/30 transition lg:hidden ${isAgentOpen ? "opacity-100" : "pointer-events-none opacity-0"}`}
+      />
+
       <div
-        className={`fixed inset-y-0 right-0 z-50 w-full max-w-[28rem] transform border-l border-zinc-200 bg-white/95 shadow-2xl backdrop-blur transition duration-200 lg:hidden dark:border-zinc-800 dark:bg-zinc-950/95 ${
+        className={`fixed inset-0 z-50 h-[100dvh] w-full min-h-0 transform bg-white/95 shadow-2xl backdrop-blur transition duration-200 lg:hidden dark:bg-zinc-950/95 ${
           isAgentOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
