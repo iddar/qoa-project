@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowDown, Bot, LoaderCircle, MessageSquarePlus, Mic, Paperclip, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, AudioLines, Bot, LoaderCircle, MessageSquarePlus, Mic, Paperclip, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
 import { getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type StorePosDraft } from "@/lib/store-pos";
@@ -69,6 +69,26 @@ const formatDuration = (durationMs: number) => {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
+
+const getRecordingSupportMessage = () => {
+  if (typeof window === "undefined" || typeof navigator === "undefined") {
+    return "La grabación solo está disponible en el navegador.";
+  }
+
+  if (!window.isSecureContext && window.location.hostname !== "localhost") {
+    return "En iPhone Safari y otros navegadores móviles el micrófono en vivo solo funciona con HTTPS o localhost. Usa HTTPS o adjunta un audio.";
+  }
+
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return "Este navegador no expone acceso directo al micrófono. Adjunta un audio en su lugar.";
+  }
+
+  if (typeof MediaRecorder === "undefined") {
+    return "Este navegador no soporta grabación directa con MediaRecorder. Adjunta un audio en su lugar.";
+  }
+
+  return null;
 };
 
 export function StoreAgentDrawer() {
@@ -229,13 +249,34 @@ export function StoreAgentDrawer() {
     setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
   };
 
+  const attachAudioBlob = async (blob: Blob, contentType: string, durationMs?: number) => {
+    if (blob.size === 0) {
+      setRecordingError("La nota de voz salió vacía. Intenta grabar otra vez.");
+      return;
+    }
+
+    const dataUrl = await readFileAsDataUrl(blob);
+    const attachment: AgentAttachment = {
+      id: createClientId(),
+      name: `nota-de-voz.${getAudioExtension(contentType)}`,
+      contentType,
+      dataUrl,
+      kind: "audio",
+      durationMs,
+      status: "ready",
+    };
+
+    setAttachments((current) => [...current.filter((entry) => entry.kind !== "audio"), attachment]);
+  };
+
   const startRecording = async () => {
     if (pending || isRecording || typeof window === "undefined" || typeof navigator === "undefined") {
       return;
     }
 
-    if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      setRecordingError("Tu navegador no permite grabar notas de voz aquí.");
+    const recordingSupportMessage = getRecordingSupportMessage();
+    if (recordingSupportMessage) {
+      setRecordingError(recordingSupportMessage);
       return;
     }
 
@@ -274,23 +315,7 @@ export function StoreAgentDrawer() {
         recordingStartedAtRef.current = null;
         setIsRecording(false);
 
-        if (blob.size === 0) {
-          setRecordingError("La nota de voz salió vacía. Intenta grabar otra vez.");
-          return;
-        }
-
-        const dataUrl = await readFileAsDataUrl(blob);
-        const attachment: AgentAttachment = {
-          id: createClientId(),
-          name: `nota-de-voz.${getAudioExtension(contentType)}`,
-          contentType,
-          dataUrl,
-          kind: "audio",
-          durationMs,
-          status: "ready",
-        };
-
-        setAttachments((current) => [...current.filter((entry) => entry.kind !== "audio"), attachment]);
+        await attachAudioBlob(blob, contentType, durationMs);
       };
 
       mediaRecorderRef.current = recorder;
@@ -502,6 +527,27 @@ export function StoreAgentDrawer() {
                       })),
                     );
                     setAttachments((current) => [...current.filter((attachment) => attachment.kind !== "image"), ...nextAttachments]);
+                  }}
+                />
+              </label>
+
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50">
+                <AudioLines className="h-3.5 w-3.5" />
+                Adjuntar audio
+                <input
+                  type="file"
+                  accept="audio/*"
+                  capture
+                  className="hidden"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) {
+                      return;
+                    }
+
+                    setRecordingError(null);
+                    await attachAudioBlob(file, file.type || "audio/m4a");
+                    event.currentTarget.value = "";
                   }}
                 />
               </label>

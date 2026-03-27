@@ -86,3 +86,5 @@ CHOUGH_URL=http://127.0.0.1:8080 bun run dev
 4. El dashboard manda el audio a `chough`, recibe la transcripción y usa ese texto como mensaje del tendero.
 
 `chough` usa `ffmpeg`, así que formatos comunes de navegador y móvil como `webm`, `mp4`, `m4a`, `mpeg`, `wav` y `ogg` pueden atravesar el flujo siempre que el navegador permita capturarlos o adjuntarlos.
+
+Nota importante para iPhone/Safari: la grabación directa con micrófono (`getUserMedia`/`MediaRecorder`) exige contexto seguro (`HTTPS` o `localhost`). Si abres el portal por IP LAN en `http://192.168.x.x`, Safari puede bloquear el micrófono en vivo. En ese caso usa `Adjuntar audio` o expón el entorno con HTTPS.
