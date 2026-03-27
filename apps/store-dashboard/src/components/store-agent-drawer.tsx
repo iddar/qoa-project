@@ -475,15 +475,7 @@ export function StoreAgentDrawer() {
             void sendMessage(input);
           }}
         >
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            rows={4}
-            placeholder="Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"
-            className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
-          />
-
-          <div className="flex items-center gap-2">
+          <div className="flex items-end justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
               <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium">
                 <Paperclip className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
@@ -564,6 +556,14 @@ export function StoreAgentDrawer() {
               <span className="hidden sm:inline">Enviar</span>
             </button>
           </div>
+
+          <textarea
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            rows={4}
+            placeholder="Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"
+            className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+          />
         </form>
       </div>
     </div>
