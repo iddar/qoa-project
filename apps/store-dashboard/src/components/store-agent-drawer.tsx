@@ -202,6 +202,7 @@ export function StoreAgentDrawer() {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const qrCaptureInputRef = useRef<HTMLInputElement | null>(null);
   const audioUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const qrScannerContainerRef = useRef<HTMLDivElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -475,11 +476,21 @@ export function StoreAgentDrawer() {
         setQrScannerState("starting");
         setQrScannerError(null);
         const regionElement = document.getElementById(qrScannerRegionIdRef.current);
+        const containerElement = qrScannerContainerRef.current;
+        const containerWidth = containerElement?.clientWidth ?? 0;
+        const containerHeight = containerElement?.clientHeight ?? 0;
+        if (regionElement instanceof HTMLDivElement) {
+          regionElement.style.width = `${Math.max(containerWidth, 280)}px`;
+          regionElement.style.height = `${Math.max(containerHeight, 320)}px`;
+          regionElement.style.minHeight = `${Math.max(containerHeight, 320)}px`;
+        }
         logLiveQrDebug("boot-start", {
           regionId: qrScannerRegionIdRef.current,
           regionExists: Boolean(regionElement),
           regionClientWidth: regionElement?.clientWidth,
           regionClientHeight: regionElement?.clientHeight,
+          containerClientWidth: containerWidth,
+          containerClientHeight: containerHeight,
         });
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
         if (!isActive) {
@@ -542,6 +553,8 @@ export function StoreAgentDrawer() {
           const video = currentRegion?.querySelector("video") as HTMLVideoElement | null;
           const canvas = currentRegion?.querySelector("canvas") as HTMLCanvasElement | null;
           if (video) {
+            video.style.width = "100%";
+            video.style.height = "320px";
             video.setAttribute("autoplay", "true");
             video.setAttribute("playsinline", "true");
             video.muted = true;
@@ -1009,10 +1022,10 @@ export function StoreAgentDrawer() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="relative min-h-[320px] overflow-hidden rounded-2xl bg-black">
+            <div ref={qrScannerContainerRef} className="relative h-[320px] w-full overflow-hidden rounded-2xl bg-black">
               <div
                 id={qrScannerRegionIdRef.current}
-                className="min-h-[320px] [&_video]:h-[320px] [&_video]:w-full [&_video]:object-cover [&_canvas]:h-[320px] [&_canvas]:w-full [&_canvas]:object-cover"
+                className="h-[320px] w-full [&_video]:h-[320px] [&_video]:w-full [&_video]:object-cover [&_canvas]:h-[320px] [&_canvas]:w-full [&_canvas]:object-cover"
               />
               {qrScannerState !== "ready" ? (
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white/80">
