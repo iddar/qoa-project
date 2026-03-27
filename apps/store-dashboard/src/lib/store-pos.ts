@@ -70,6 +70,14 @@ export type AgentAttachment = {
   durationMs?: number;
   transcript?: string;
   status?: "pending" | "ready" | "processing" | "transcribed" | "failed";
+  debug?: {
+    source?: "live" | "upload";
+    sizeBytes?: number;
+    mimeType?: string;
+    averageLevel?: number;
+    peakLevel?: number;
+    signalDetected?: boolean;
+  };
 };
 
 export type AgentAction = {

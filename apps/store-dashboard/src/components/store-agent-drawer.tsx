@@ -66,6 +66,18 @@ const formatDuration = (durationMs: number) => {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 const getRecordingSupportMessage = () => {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return "La grabación solo está disponible en el navegador.";
@@ -127,6 +139,7 @@ export function StoreAgentDrawer() {
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const [recordingLiveLevel, setRecordingLiveLevel] = useState(0);
   const [canUseLiveQrScanner, setCanUseLiveQrScanner] = useState(false);
   const [canUseLiveAudio, setCanUseLiveAudio] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
@@ -141,6 +154,12 @@ export function StoreAgentDrawer() {
   const recordingStartedAtRef = useRef<number | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
   const qrScannerRegionIdRef = useRef(`store-agent-live-qr-${createClientId()}`);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioLevelAnimationFrameRef = useRef<number | null>(null);
+  const recordingPeakLevelRef = useRef(0);
+  const recordingAverageAccumulatorRef = useRef(0);
+  const recordingSampleCountRef = useRef(0);
   const liveQrScannerRef = useRef<{
     start: (...args: unknown[]) => Promise<unknown>;
     stop: () => Promise<void>;
@@ -178,6 +197,11 @@ export function StoreAgentDrawer() {
       if (recordingTimerRef.current) {
         window.clearInterval(recordingTimerRef.current);
       }
+      if (audioLevelAnimationFrameRef.current) {
+        window.cancelAnimationFrame(audioLevelAnimationFrameRef.current);
+      }
+      analyserRef.current?.disconnect();
+      audioContextRef.current?.close().catch(() => undefined);
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
@@ -428,9 +452,19 @@ export function StoreAgentDrawer() {
   }, [showQrScanner]);
 
   const attachAudioBlob = async (blob: Blob, contentType: string, durationMs?: number) => {
+    const averageLevel = recordingSampleCountRef.current > 0
+      ? recordingAverageAccumulatorRef.current / recordingSampleCountRef.current
+      : 0;
+    const peakLevel = recordingPeakLevelRef.current;
+    const signalDetected = peakLevel > 0.015 || averageLevel > 0.008;
+
     if (blob.size === 0) {
       setRecordingError("La nota de voz salió vacía. Intenta grabar otra vez.");
       return;
+    }
+
+    if (!signalDetected && durationMs && durationMs > 1500) {
+      setRecordingError("Grabé el archivo, pero casi no detecté señal del micrófono. Revisa permisos, volumen o intenta Adjuntar audio.");
     }
 
     const dataUrl = await readFileAsDataUrl(blob);
@@ -442,6 +476,14 @@ export function StoreAgentDrawer() {
       kind: "audio",
       durationMs,
       status: "ready",
+      debug: {
+        source: "live",
+        sizeBytes: blob.size,
+        mimeType: contentType,
+        averageLevel,
+        peakLevel,
+        signalDetected,
+      },
     };
 
     setAttachments((current) => [...current.filter((entry) => entry.kind !== "audio"), attachment]);
@@ -460,15 +502,69 @@ export function StoreAgentDrawer() {
 
     try {
       setRecordingError(null);
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       mediaStreamRef.current = stream;
       const mimeType = getSupportedAudioMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const recorderOptions = mimeType
+        ? {
+            mimeType,
+            audioBitsPerSecond: 128000,
+          }
+        : undefined;
+      const recorder = recorderOptions ? new MediaRecorder(stream, recorderOptions) : new MediaRecorder(stream);
 
       audioChunksRef.current = [];
       recordingStartedAtRef.current = Date.now();
+      recordingPeakLevelRef.current = 0;
+      recordingAverageAccumulatorRef.current = 0;
+      recordingSampleCountRef.current = 0;
       setRecordingDurationMs(0);
+      setRecordingLiveLevel(0);
       setIsRecording(true);
+
+      const AudioContextCtor = window.AudioContext ?? (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextCtor) {
+        const audioContext = new AudioContextCtor();
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 1024;
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
+
+        const sampleLevel = () => {
+          const activeAnalyser = analyserRef.current;
+          if (!activeAnalyser) {
+            return;
+          }
+
+          const data = new Uint8Array(activeAnalyser.fftSize);
+          activeAnalyser.getByteTimeDomainData(data);
+          let sumSquares = 0;
+          let peak = 0;
+          for (const value of data) {
+            const normalized = (value - 128) / 128;
+            sumSquares += normalized * normalized;
+            peak = Math.max(peak, Math.abs(normalized));
+          }
+
+          const rms = Math.sqrt(sumSquares / data.length);
+          recordingPeakLevelRef.current = Math.max(recordingPeakLevelRef.current, peak);
+          recordingAverageAccumulatorRef.current += rms;
+          recordingSampleCountRef.current += 1;
+          setRecordingLiveLevel(Math.min(1, peak * 2.6));
+          audioLevelAnimationFrameRef.current = window.requestAnimationFrame(sampleLevel);
+        };
+
+        audioLevelAnimationFrameRef.current = window.requestAnimationFrame(sampleLevel);
+      }
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -492,6 +588,15 @@ export function StoreAgentDrawer() {
         audioChunksRef.current = [];
         recordingStartedAtRef.current = null;
         setIsRecording(false);
+        if (audioLevelAnimationFrameRef.current) {
+          window.cancelAnimationFrame(audioLevelAnimationFrameRef.current);
+          audioLevelAnimationFrameRef.current = null;
+        }
+        analyserRef.current?.disconnect();
+        analyserRef.current = null;
+        audioContextRef.current?.close().catch(() => undefined);
+        audioContextRef.current = null;
+        setRecordingLiveLevel(0);
 
         await attachAudioBlob(blob, contentType, durationMs);
       };
@@ -507,6 +612,15 @@ export function StoreAgentDrawer() {
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       mediaStreamRef.current = null;
       setIsRecording(false);
+      if (audioLevelAnimationFrameRef.current) {
+        window.cancelAnimationFrame(audioLevelAnimationFrameRef.current);
+        audioLevelAnimationFrameRef.current = null;
+      }
+      analyserRef.current?.disconnect();
+      analyserRef.current = null;
+      audioContextRef.current?.close().catch(() => undefined);
+      audioContextRef.current = null;
+      setRecordingLiveLevel(0);
       setRecordingError("No pude acceder al micrófono. Revisa los permisos e intenta nuevamente.");
     }
   };
@@ -732,6 +846,17 @@ export function StoreAgentDrawer() {
               <div key={`${attachment.id}-preview`} className="rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
                 <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Preview de nota de voz</p>
                 <audio controls preload="metadata" src={attachment.dataUrl} className="w-full max-w-full" />
+                {attachment.debug ? (
+                  <div className="mt-3 rounded-2xl bg-white/70 px-3 py-2 text-[11px] text-zinc-500 dark:bg-zinc-950/70 dark:text-zinc-400">
+                    <p>
+                      Formato: {attachment.debug.mimeType ?? attachment.contentType} · Tamaño: {attachment.debug.sizeBytes ? formatBytes(attachment.debug.sizeBytes) : "--"}
+                    </p>
+                    <p>
+                      Señal: {attachment.debug.signalDetected ? "detectada" : "muy baja"}
+                      {typeof attachment.debug.peakLevel === "number" ? ` · pico ${(attachment.debug.peakLevel * 100).toFixed(1)}%` : ""}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -741,9 +866,17 @@ export function StoreAgentDrawer() {
 
         {isRecording ? (
           <div className="mb-3 flex items-center justify-between rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
               <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
-              <span>Grabando nota de voz {formatDuration(recordingDurationMs)}</span>
+              <div className="min-w-0 flex-1">
+                <span>Grabando nota de voz {formatDuration(recordingDurationMs)}</span>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-red-200/80 dark:bg-red-900/40">
+                  <div
+                    className="h-full rounded-full bg-red-500 transition-all"
+                    style={{ width: `${Math.max(6, recordingLiveLevel * 100)}%` }}
+                  />
+                </div>
+              </div>
             </div>
             <button type="button" onClick={stopRecording} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white">
               <Square className="h-3.5 w-3.5" />
@@ -786,6 +919,20 @@ export function StoreAgentDrawer() {
 
               setRecordingError(null);
               await attachAudioBlob(file, file.type || "audio/m4a");
+              setAttachments((current) =>
+                current.map((attachment) =>
+                  attachment.kind === "audio"
+                    ? {
+                        ...attachment,
+                        debug: {
+                          source: "upload",
+                          sizeBytes: file.size,
+                          mimeType: file.type || "audio/m4a",
+                        },
+                      }
+                    : attachment,
+                ),
+              );
               input.value = "";
             }}
           />
