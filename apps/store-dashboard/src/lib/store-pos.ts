@@ -84,6 +84,7 @@ export type AgentMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  renderedHtml?: string;
   attachments?: AgentAttachment[];
   actions?: AgentAction[];
 };

@@ -425,7 +425,14 @@ export function StoreAgentDrawer() {
               {message.role === "assistant" ? <Bot className="h-3.5 w-3.5" /> : <MessageSquarePlus className="h-3.5 w-3.5" />}
               {message.role === "assistant" ? "Asistente" : "Tu"}
             </div>
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            {message.role === "assistant" && message.renderedHtml ? (
+              <div
+                className="whitespace-normal [&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-1 [&_strong]:font-semibold [&_code]:rounded [&_code]:bg-black/5 [&_code]:px-1.5 [&_code]:py-0.5 dark:[&_code]:bg-white/10"
+                dangerouslySetInnerHTML={{ __html: message.renderedHtml }}
+              />
+            ) : (
+              <p className="whitespace-pre-wrap">{message.content}</p>
+            )}
             {message.attachments?.length ? (
               <div className="mt-2 space-y-2 text-xs opacity-80">
                 {message.attachments.map((file) => (

@@ -4,6 +4,7 @@ import { minimax } from "vercel-minimax-ai-provider";
 import sharp from "sharp";
 import { z } from "zod";
 import { api } from "@/lib/api";
+import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { buildCopilotActions, getProductMatchScore, normalizeText, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
 import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
@@ -15,7 +16,8 @@ const requestSchema = z.object({
             id: z.string(),
             role: z.enum(["user", "assistant"]),
             content: z.string(),
-      attachments: z
+            renderedHtml: z.string().optional(),
+            attachments: z
         .array(
           z.object({
             id: z.string(),
@@ -733,11 +735,14 @@ export async function POST(request: Request) {
     },
   });
 
+  const renderedHtml = await renderAssistantMarkdownToHtml(result.text);
+
   return Response.json({
     message: {
       id: crypto.randomUUID(),
       role: "assistant",
       content: result.text,
+      renderedHtml: renderedHtml || undefined,
       actions: buildCopilotActions(workingDraft),
     },
     userMessage: normalizedUserMessage,
