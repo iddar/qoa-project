@@ -4,7 +4,7 @@ import { minimax } from "vercel-minimax-ai-provider";
 import sharp from "sharp";
 import { z } from "zod";
 import { api } from "@/lib/api";
-import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
+import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 
@@ -94,6 +94,16 @@ const requestSchema = z.object({
         ),
       })
       .nullable(),
+    pendingProductChoices: z
+      .array(
+        z.object({
+          storeProductId: z.string(),
+          name: z.string(),
+          price: z.number(),
+          score: z.number(),
+        }),
+      )
+      .optional(),
   }),
 });
 
@@ -121,6 +131,7 @@ const cloneDraft = (draft: StorePosDraft): StorePosDraft => ({
         items: draft.lastTransaction.items.map((entry) => ({ ...entry })),
       }
     : null,
+  pendingProductChoices: draft.pendingProductChoices?.map((entry) => ({ ...entry })) ?? [],
 });
 
 const buildDraftSummary = (draft: StorePosDraft) => ({
@@ -133,6 +144,7 @@ const buildDraftSummary = (draft: StorePosDraft) => ({
     quantity: item.quantity,
     price: item.price,
   })),
+  pendingProductChoices: draft.pendingProductChoices ?? [],
 });
 
 const describeDraft = (draft: StorePosDraft) => {
@@ -479,6 +491,14 @@ export async function POST(request: Request) {
       .slice(0, 8) as RankedStoreProduct[];
   };
 
+  const clearPendingProductChoices = () => {
+    workingDraft.pendingProductChoices = [];
+  };
+
+  const setPendingProductChoices = (choices: DraftPendingProductChoice[]) => {
+    workingDraft.pendingProductChoices = choices;
+  };
+
   const addProductToDraftById = async (storeProductId: string, quantity: number) => {
     const product = await findStoreProductById(storeProductId);
     if (!product) {
@@ -500,7 +520,65 @@ export async function POST(request: Request) {
       });
     }
 
+    clearPendingProductChoices();
+
     return product;
+  };
+
+  const resolvePendingProductChoice = async (selection: string, quantity: number) => {
+    const choices = workingDraft.pendingProductChoices ?? [];
+    if (choices.length === 0) {
+      return {
+        resolved: false,
+        reason: "no_pending_choices",
+        candidates: [],
+      };
+    }
+
+    const rankedChoices = choices
+      .map((choice) => ({
+        choice,
+        score: Math.max(
+          similarityScore(normalizeText(selection), normalizeText(choice.name)),
+          ...normalizeText(choice.name)
+            .split(" ")
+            .filter(Boolean)
+            .map((token) => similarityScore(normalizeText(selection), token)),
+        ),
+      }))
+      .sort((left, right) => right.score - left.score);
+
+    const best = rankedChoices[0];
+    const second = rankedChoices[1];
+
+    if (!best || best.score < 0.55) {
+      return {
+        resolved: false,
+        reason: "no_match",
+        candidates: choices,
+      };
+    }
+
+    const confidentChoice = !second || best.score - second.score >= 0.12 || second.score < 0.58;
+    if (!confidentChoice) {
+      return {
+        resolved: false,
+        reason: "needs_confirmation",
+        candidates: rankedChoices.slice(0, 3).map((entry) => entry.choice),
+      };
+    }
+
+    const addedProduct = await addProductToDraftById(best.choice.storeProductId, quantity);
+
+    return {
+      resolved: true,
+      product: {
+        storeProductId: addedProduct.id,
+        name: addedProduct.name,
+        price: Number(addedProduct.price),
+      },
+      draft: buildDraftSummary(workingDraft),
+    };
   };
 
   const systemPrompt = [
@@ -511,6 +589,7 @@ export async function POST(request: Request) {
     "Si el usuario pide escanear una imagen, usa resolveCustomerCard sin input y toma el adjunto mas reciente.",
     "Tolera errores pequenos de transcripcion o dictado en nombres de producto.",
     "Cuando el tendero pida agregar un producto por nombre, intenta primero addProductToDraftByQuery.",
+    "Si acabas de ofrecer opciones de producto y el tendero responde con una palabra corta como un sabor, marca o variante, intenta primero resolvePendingProductChoice.",
     "Si solo hay una coincidencia claramente probable para un producto, agregala sin pedir aclaracion.",
     "Solo pide aclaracion cuando haya varias coincidencias plausibles o la confianza sea baja.",
     `Estado actual del pedido:\n${describeDraft(workingDraft)}`,
@@ -594,15 +673,18 @@ export async function POST(request: Request) {
 
           const confidentSingleMatch = best.score >= 0.72 && (!second || best.score - second.score >= 0.12 || second.score < 0.6);
           if (!confidentSingleMatch) {
+            const candidates = ranked.slice(0, 3).map((entry) => ({
+              storeProductId: entry.product.id,
+              name: entry.product.name,
+              price: Number(entry.product.price),
+              score: Number(entry.score.toFixed(3)),
+            }));
+            setPendingProductChoices(candidates);
+
             return {
               added: false,
               reason: "needs_confirmation",
-              candidates: ranked.slice(0, 3).map((entry) => ({
-                storeProductId: entry.product.id,
-                name: entry.product.name,
-                price: Number(entry.product.price),
-                score: Number(entry.score.toFixed(3)),
-              })),
+              candidates,
             };
           }
 
@@ -620,6 +702,14 @@ export async function POST(request: Request) {
             draft: buildDraftSummary(workingDraft),
           };
         },
+      }),
+      resolvePendingProductChoice: tool({
+        description: "Resuelve una respuesta corta del tendero usando las opciones de producto ofrecidas en el turno anterior.",
+        inputSchema: z.object({
+          selection: z.string().min(1),
+          quantity: z.number().int().min(1).default(1),
+        }),
+        execute: async ({ selection, quantity }) => resolvePendingProductChoice(selection, quantity),
       }),
       addProductToDraft: tool({
         description: "Agrega un producto del catalogo al pedido actual.",
@@ -640,6 +730,7 @@ export async function POST(request: Request) {
           quantity: z.number().int().min(0),
         }),
         execute: async ({ storeProductId, quantity }) => {
+          clearPendingProductChoices();
           workingDraft.items = quantity === 0
             ? workingDraft.items.filter((item) => item.storeProductId !== storeProductId)
             : workingDraft.items.map((item) =>
@@ -655,6 +746,7 @@ export async function POST(request: Request) {
           storeProductId: z.string(),
         }),
         execute: async ({ storeProductId }) => {
+          clearPendingProductChoices();
           workingDraft.items = workingDraft.items.filter((item) => item.storeProductId !== storeProductId);
           return buildDraftSummary(workingDraft);
         },
@@ -702,6 +794,7 @@ export async function POST(request: Request) {
         description: "Quita el cliente ligado al pedido actual.",
         inputSchema: z.object({}),
         execute: async () => {
+          clearPendingProductChoices();
           workingDraft.customer = null;
           return buildDraftSummary(workingDraft);
         },
@@ -744,6 +837,7 @@ export async function POST(request: Request) {
             items: [],
             customer: null,
             lastTransaction: transaction,
+            pendingProductChoices: [],
           };
 
           return {
