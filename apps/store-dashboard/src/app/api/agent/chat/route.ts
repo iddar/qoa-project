@@ -181,19 +181,89 @@ const decodeQrWithPipeline = async (buffer: Buffer, transform?: (image: sharp.Sh
   return decodeQrPixels(data, info.width, info.height);
 };
 
-const decodeQrFromAttachment = async (attachment: AgentAttachment) => {
-  const [, encoded] = attachment.dataUrl.split(",");
-  if (!encoded) {
+const buildCropRegions = (width: number, height: number) => {
+  const shortestSide = Math.min(width, height);
+  const cropSizes = [1, 0.88, 0.72, 0.6]
+    .map((ratio) => Math.floor(shortestSide * ratio))
+    .filter((size, index, all) => size > 48 && all.indexOf(size) === index);
+
+  const regions = cropSizes.flatMap((size) => {
+    const maxLeft = Math.max(width - size, 0);
+    const maxTop = Math.max(height - size, 0);
+    const horizontalPositions = [...new Set([0, Math.floor(maxLeft / 2), maxLeft])];
+    const verticalPositions = [...new Set([0, Math.floor(maxTop / 2), maxTop])];
+
+    return horizontalPositions.flatMap((left) =>
+      verticalPositions.map((top) => ({
+        left,
+        top,
+        width: Math.min(size, width - left),
+        height: Math.min(size, height - top),
+      })),
+    );
+  });
+
+  return regions.filter((region, index, all) =>
+    all.findIndex(
+      (candidate) =>
+        candidate.left === region.left &&
+        candidate.top === region.top &&
+        candidate.width === region.width &&
+        candidate.height === region.height,
+    ) === index,
+  );
+};
+
+const decodeQrFromCrops = async (buffer: Buffer) => {
+  const baseImage = sharp(buffer, { failOn: "none" }).rotate();
+  const metadata = await baseImage.metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+
+  if (width <= 0 || height <= 0) {
     return null;
   }
 
-  const imageBuffer = Buffer.from(encoded, "base64");
+  const cropRegions = buildCropRegions(width, height);
+  const variants = [
+    (image: sharp.Sharp) => image,
+    (image: sharp.Sharp) => image.grayscale().normalize(),
+    (image: sharp.Sharp) => image.grayscale().normalize().threshold(150),
+    (image: sharp.Sharp) => image.grayscale().normalize().threshold(180),
+  ];
+
+  for (const region of cropRegions) {
+    for (const variant of variants) {
+      try {
+        const cropped = await baseImage
+          .clone()
+          .extract(region)
+          .resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: false })
+          .toBuffer();
+
+        const decoded = await decodeQrWithPipeline(cropped, variant);
+        if (decoded) {
+          return decoded;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return null;
+};
+
+const decodeQrFromAttachment = async (attachment: AgentAttachment) => {
+  const { buffer: imageBuffer } = parseDataUrl(attachment.dataUrl);
   const attempts = [
-    () => decodeQrWithPipeline(imageBuffer),
-    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize()),
-    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize().threshold(150)),
-    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize().threshold(180)),
-    () => decodeQrWithPipeline(imageBuffer, (image) => image.resize({ width: 1600, withoutEnlargement: false }).grayscale().normalize()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().grayscale().normalize()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().grayscale().normalize().threshold(150)),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().grayscale().normalize().threshold(180)),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().resize({ width: 1600, withoutEnlargement: false }).grayscale().normalize()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().resize({ width: 2200, withoutEnlargement: false }).grayscale().normalize()),
+    () => decodeQrFromCrops(imageBuffer),
   ];
 
   for (const attempt of attempts) {
