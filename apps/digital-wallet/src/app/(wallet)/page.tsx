@@ -104,12 +104,7 @@ export default function WalletHomePage() {
     return selected;
   }, [campaigns, rewardQueries]);
 
-  const qrValue = qrQuery.data
-    ? JSON.stringify({
-        code: qrQuery.data.data.code,
-        payload: qrQuery.data.data.payload,
-      })
-    : "";
+  const qrValue = qrQuery.data?.data.code ?? "";
   const currentTier = walletQuery.data?.data.card.currentTier as WalletCurrentTier | undefined;
   const tierState = walletQuery.data?.data.card.tierState as "unqualified" | "qualified" | "at_risk" | undefined;
 

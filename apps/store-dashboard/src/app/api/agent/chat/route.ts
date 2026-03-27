@@ -17,6 +17,16 @@ const requestSchema = z.object({
             role: z.enum(["user", "assistant"]),
             content: z.string(),
             renderedHtml: z.string().optional(),
+            customerCard: z
+              .object({
+                userId: z.string(),
+                cardId: z.string().optional(),
+                cardCode: z.string().optional(),
+                name: z.string().optional(),
+                phone: z.string(),
+                email: z.string().optional(),
+              })
+              .optional(),
             attachments: z
         .array(
           z.object({
@@ -379,6 +389,7 @@ export async function POST(request: Request) {
   }
 
   let workingDraft = cloneDraft(draft ?? createEmptyDraft());
+  const previousCustomerCardId = draft?.customer?.cardId ?? null;
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
   let latestAttachments = latestUserMessage?.attachments ?? [];
   let normalizedUserMessage = latestUserMessage ? { ...latestUserMessage } : null;
@@ -545,6 +556,8 @@ export async function POST(request: Request) {
     "Tolera errores pequenos de transcripcion o dictado en nombres de producto.",
     "Cuando el tendero pida agregar un producto por nombre, intenta primero addProductToDraftByQuery.",
     "Si acabas de ofrecer opciones de producto y el tendero responde con una palabra corta como un sabor, marca o variante, intenta primero resolvePendingProductChoice.",
+    "Si una tool ya tiene suficiente informacion para agregar el producto o ligar al cliente, ejecutala sin pedir confirmacion adicional.",
+    "Minimiza interacciones innecesarias: solo pide aclaracion cuando una tool devuelva varias opciones plausibles o baja confianza.",
     "Si solo hay una coincidencia claramente probable para un producto, agregala sin pedir aclaracion.",
     "Solo pide aclaracion cuando haya varias coincidencias plausibles o la confianza sea baja.",
     `Estado actual del pedido:\n${describeDraft(workingDraft)}`,
@@ -626,7 +639,7 @@ export async function POST(request: Request) {
             };
           }
 
-          const confidentSingleMatch = best.score >= 0.72 && (!second || best.score - second.score >= 0.12 || second.score < 0.6);
+          const confidentSingleMatch = best.score >= 0.68 && (!second || best.score - second.score >= 0.1 || second.score < 0.58);
           if (!confidentSingleMatch) {
             const candidates = ranked.slice(0, 3).map((entry) => ({
               storeProductId: entry.product.id,
@@ -806,6 +819,9 @@ export async function POST(request: Request) {
   });
 
   const renderedHtml = await renderAssistantMarkdownToHtml(result.text);
+  const customerCard = workingDraft.customer?.cardId && workingDraft.customer.cardId !== previousCustomerCardId
+    ? workingDraft.customer
+    : undefined;
 
   return Response.json({
     message: {
@@ -813,6 +829,7 @@ export async function POST(request: Request) {
       role: "assistant",
       content: result.text,
       renderedHtml: renderedHtml || undefined,
+      customerCard,
       actions: buildCopilotActions(workingDraft),
     },
     userMessage: normalizedUserMessage,

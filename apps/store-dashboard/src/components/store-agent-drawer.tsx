@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowDown, AudioLines, Bot, LoaderCircle, MessageSquarePlus, Mic, Paperclip, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, AudioLines, Bot, Camera, LoaderCircle, MessageSquarePlus, Mic, Paperclip, QrCode, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
 import { getInitialCopilotActions } from "@/lib/store-copilot";
@@ -84,6 +84,35 @@ const getRecordingSupportMessage = () => {
   }
 
   return null;
+};
+
+const decodeQrFile = async (file: File) => {
+  const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+  const regionId = `store-agent-qr-reader-${createClientId()}`;
+  const region = document.createElement("div");
+  region.id = regionId;
+  region.style.position = "fixed";
+  region.style.left = "-99999px";
+  region.style.top = "-99999px";
+  region.style.width = "1px";
+  region.style.height = "1px";
+  document.body.appendChild(region);
+
+  const scanner = new Html5Qrcode(regionId, {
+    formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+    verbose: false,
+  });
+
+  try {
+    return await scanner.scanFile(file, false);
+  } finally {
+    try {
+      scanner.clear();
+    } catch {
+      // ignore cleanup failures
+    }
+    region.remove();
+  }
 };
 
 export function StoreAgentDrawer() {
@@ -260,6 +289,22 @@ export function StoreAgentDrawer() {
     const fileList = Array.from(files ?? []);
     if (fileList.length === 0) {
       return;
+    }
+
+    const [primaryFile] = fileList;
+    if (!primaryFile) {
+      return;
+    }
+
+    try {
+      setRecordingError(null);
+      const decodedText = await decodeQrFile(primaryFile);
+      if (decodedText) {
+        await sendMessage(`Quiero ligar la tarjeta del cliente con este QR: ${decodedText}`, []);
+        return;
+      }
+    } catch {
+      // Fallback to server-side image decoding below.
     }
 
     const nextAttachments = await Promise.all(
@@ -449,6 +494,21 @@ export function StoreAgentDrawer() {
                 ))}
               </div>
             ) : null}
+            {message.role === "assistant" && message.customerCard ? (
+              <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-100">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 rounded-full bg-white/80 p-2 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                    <QrCode className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold">Cliente ligado al pedido</p>
+                    <p className="mt-1 truncate">{message.customerCard.name ?? message.customerCard.phone}</p>
+                    <p className="mt-1 text-xs opacity-80">Tarjeta {message.customerCard.cardCode ?? message.customerCard.cardId}</p>
+                    {message.customerCard.email ? <p className="mt-1 text-xs opacity-80">{message.customerCard.email}</p> : null}
+                  </div>
+                </div>
+              </div>
+            ) : null}
             {message.role === "assistant" && message.actions?.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 {message.actions.map((action) => (
@@ -565,12 +625,13 @@ export function StoreAgentDrawer() {
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
               <div className="pointer-events-auto flex min-w-0 items-center gap-2">
                 <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9">
-                  <Paperclip className="h-4 w-4" />
+                  <Camera className="h-4 w-4" />
                   <span className="sr-only">Adjuntar QR</span>
                   <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
+                   type="file"
+                   accept="image/*"
+                   capture="environment"
+                   className="hidden"
                   onChange={async (event) => {
                       const input = event.currentTarget;
                       const files = input.files ?? [];

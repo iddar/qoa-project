@@ -19,6 +19,7 @@
         "@qoa/ui": "workspace:*",
         "@tanstack/react-query": "^5",
         "ai": "^6.0.138",
+        "html5-qrcode": "^2.3.8",
         "jsqr": "^1.4.0",
         "lucide-react": "^0.577.0",
         "md4x": "^0.0.25",

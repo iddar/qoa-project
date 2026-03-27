@@ -88,3 +88,10 @@ CHOUGH_URL=http://127.0.0.1:8080 bun run dev
 `chough` usa `ffmpeg`, así que formatos comunes de navegador y móvil como `webm`, `mp4`, `m4a`, `mpeg`, `wav` y `ogg` pueden atravesar el flujo siempre que el navegador permita capturarlos o adjuntarlos.
 
 Nota importante para iPhone/Safari: la grabación directa con micrófono (`getUserMedia`/`MediaRecorder`) exige contexto seguro (`HTTPS` o `localhost`). Si abres el portal por IP LAN en `http://192.168.x.x`, Safari puede bloquear el micrófono en vivo. En ese caso usa `Adjuntar audio` o expón el entorno con HTTPS.
+
+## Escaneo de QR
+
+- `Ligar tarjeta` abre la cámara trasera por defecto en móvil cuando el navegador lo permite.
+- El dashboard intenta decodificar el QR del lado cliente con `html5-qrcode` antes de mandar el dato al backend.
+- Si la lectura local falla, cae al flujo de imagen para que el servidor intente resolverlo como fallback.
+- La wallet muestra un QR compacto basado en `card.code` para mejorar la lectura en cámara real.
