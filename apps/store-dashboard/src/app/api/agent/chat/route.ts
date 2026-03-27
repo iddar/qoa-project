@@ -639,7 +639,7 @@ export async function POST(request: Request) {
             };
           }
 
-          const confidentSingleMatch = best.score >= 0.68 && (!second || best.score - second.score >= 0.1 || second.score < 0.58);
+          const confidentSingleMatch = best.score >= 0.64 && (!second || best.score - second.score >= 0.08 || second.score < 0.56);
           if (!confidentSingleMatch) {
             const candidates = ranked.slice(0, 3).map((entry) => ({
               storeProductId: entry.product.id,

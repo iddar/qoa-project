@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowDown, AudioLines, Bot, LoaderCircle, MessageSquarePlus, Mic, QrCode, ScanLine, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, AudioLines, Bot, Camera, LoaderCircle, MessageSquarePlus, Mic, QrCode, ScanLine, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
 import { getInitialCopilotActions } from "@/lib/store-copilot";
@@ -127,13 +127,18 @@ export function StoreAgentDrawer() {
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const [canUseLiveQrScanner, setCanUseLiveQrScanner] = useState(false);
+  const [canUseLiveAudio, setCanUseLiveAudio] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const qrCaptureInputRef = useRef<HTMLInputElement | null>(null);
+  const audioUploadInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingStartedAtRef = useRef<number | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
+  const qrScannerRegionIdRef = useRef(`store-agent-live-qr-${createClientId()}`);
 
   useEffect(() => {
     if (pathname.startsWith("/pos")) {
@@ -172,6 +177,16 @@ export function StoreAgentDrawer() {
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return;
+    }
+
+    const secureContext = window.isSecureContext || window.location.hostname === "localhost";
+    setCanUseLiveQrScanner(secureContext && Boolean(navigator.mediaDevices?.getUserMedia));
+    setCanUseLiveAudio(!getRecordingSupportMessage());
+  }, []);
+
+  useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) {
       return;
@@ -197,7 +212,11 @@ export function StoreAgentDrawer() {
 
   const triggerAction = async (action: NonNullable<AgentMessage["actions"]>[number]) => {
     if (action.kind === "capture-qr") {
-      qrCaptureInputRef.current?.click();
+      if (canUseLiveQrScanner) {
+        setShowQrScanner(true);
+      } else {
+        qrCaptureInputRef.current?.click();
+      }
       return;
     }
 
@@ -324,6 +343,77 @@ export function StoreAgentDrawer() {
     ]);
   };
 
+  useEffect(() => {
+    if (!showQrScanner || typeof window === "undefined") {
+      return;
+    }
+
+    let isActive = true;
+    let scannerInstance: {
+      start: (...args: unknown[]) => Promise<unknown>;
+      stop: () => Promise<void>;
+      clear: () => void;
+    } | null = null;
+    let hasResolved = false;
+
+    const bootScanner = async () => {
+      try {
+        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+        if (!isActive) {
+          return;
+        }
+
+        const scanner = new Html5Qrcode(qrScannerRegionIdRef.current, {
+          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+          verbose: false,
+        });
+        scannerInstance = scanner;
+
+        const onSuccess = async (decodedText: string) => {
+          if (hasResolved) {
+            return;
+          }
+
+          hasResolved = true;
+          setShowQrScanner(false);
+          await sendMessage(`Quiero ligar la tarjeta del cliente con este QR: ${decodedText}`, []);
+        };
+
+        const scannerConfig = {
+          fps: 10,
+          qrbox: { width: 240, height: 240 },
+          aspectRatio: 1,
+        };
+
+        try {
+          await scanner.start({ facingMode: { exact: "environment" } }, scannerConfig, onSuccess, () => undefined);
+        } catch {
+          await scanner.start({ facingMode: "environment" }, scannerConfig, onSuccess, () => undefined);
+        }
+      } catch {
+        setShowQrScanner(false);
+        qrCaptureInputRef.current?.click();
+      }
+    };
+
+    void bootScanner();
+
+    return () => {
+      isActive = false;
+      if (!scannerInstance) {
+        return;
+      }
+
+      void scannerInstance.stop().catch(() => undefined).finally(() => {
+        try {
+          scannerInstance?.clear();
+        } catch {
+          // ignore scanner cleanup issues
+        }
+      });
+    };
+  }, [showQrScanner]);
+
   const attachAudioBlob = async (blob: Blob, contentType: string, durationMs?: number) => {
     if (blob.size === 0) {
       setRecordingError("La nota de voz salió vacía. Intenta grabar otra vez.");
@@ -410,6 +500,24 @@ export function StoreAgentDrawer() {
 
   const stopRecording = () => {
     mediaRecorderRef.current?.stop();
+  };
+
+  const handleQrButtonClick = () => {
+    if (canUseLiveQrScanner) {
+      setShowQrScanner(true);
+      return;
+    }
+
+    qrCaptureInputRef.current?.click();
+  };
+
+  const handleAudioButtonClick = () => {
+    if (canUseLiveAudio) {
+      void startRecording();
+      return;
+    }
+
+    audioUploadInputRef.current?.click();
   };
 
   const panelContent = (
@@ -554,6 +662,25 @@ export function StoreAgentDrawer() {
       </div>
 
       <div className="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
+        {showQrScanner ? (
+          <div className="mb-3 rounded-3xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Escaneando QR</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">Apunta con la cámara trasera al código de la tarjeta.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowQrScanner(false)}
+                className="rounded-full border border-zinc-200 p-2 text-zinc-500 dark:border-zinc-700 dark:text-zinc-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div id={qrScannerRegionIdRef.current} className="overflow-hidden rounded-2xl bg-black" />
+          </div>
+        ) : null}
+
         {attachments.length ? (
           <div className="mb-3 space-y-3">
             <div className="flex flex-wrap gap-2">
@@ -613,6 +740,24 @@ export function StoreAgentDrawer() {
               input.value = "";
             }}
           />
+          <input
+            ref={audioUploadInputRef}
+            type="file"
+            accept="audio/*"
+            capture
+            className="hidden"
+            onChange={async (event) => {
+              const input = event.currentTarget;
+              const file = input.files?.[0];
+              if (!file) {
+                return;
+              }
+
+              setRecordingError(null);
+              await attachAudioBlob(file, file.type || "audio/m4a");
+              input.value = "";
+            }}
+          />
 
           <div className="relative">
             <textarea
@@ -625,67 +770,24 @@ export function StoreAgentDrawer() {
 
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
               <div className="pointer-events-auto flex min-w-0 items-center gap-2">
-                <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9">
-                  <ScanLine className="h-4 w-4" />
-                  <span className="sr-only">Escanear QR</span>
-                  <input
-                   type="file"
-                   accept="image/*"
-                   capture="environment"
-                   className="hidden"
-                  onChange={async (event) => {
-                      const input = event.currentTarget;
-                      const files = input.files ?? [];
-                      if (files.length === 0) {
-                        return;
-                      }
-
-                      const nextAttachments = await Promise.all(
-                        Array.from(files).map(async (file) => ({
-                          id: createClientId(),
-                          name: file.name,
-                          contentType: file.type || "image/png",
-                          dataUrl: await readFileAsDataUrl(file),
-                          kind: "image" as const,
-                          status: "ready" as const,
-                        })),
-                      );
-                      setAttachments((current) => [...current.filter((attachment) => attachment.kind !== "image"), ...nextAttachments]);
-                      input.value = "";
-                    }}
-                  />
-                </label>
-
-                <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9">
-                  <AudioLines className="h-4 w-4" />
-                  <span className="sr-only">Adjuntar audio</span>
-                  <input
-                    type="file"
-                    accept="audio/*"
-                    capture
-                    className="hidden"
-                    onChange={async (event) => {
-                      const input = event.currentTarget;
-                      const file = event.target.files?.[0];
-                      if (!file) {
-                        return;
-                      }
-
-                      setRecordingError(null);
-                      await attachAudioBlob(file, file.type || "audio/m4a");
-                      input.value = "";
-                    }}
-                  />
-                </label>
+                <button
+                  type="button"
+                  onClick={handleQrButtonClick}
+                  disabled={pending || showQrScanner}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
+                  aria-label={canUseLiveQrScanner ? "Escanear QR en vivo" : "Adjuntar foto del QR"}
+                >
+                  {canUseLiveQrScanner ? <ScanLine className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                </button>
 
                 <button
                   type="button"
-                  onClick={() => void startRecording()}
+                  onClick={handleAudioButtonClick}
                   disabled={pending || isRecording}
                   className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
-                  aria-label="Grabar nota de voz"
+                  aria-label={canUseLiveAudio ? "Grabar nota de voz" : "Adjuntar audio"}
                 >
-                  <Mic className="h-4 w-4" />
+                  {canUseLiveAudio ? <Mic className="h-4 w-4" /> : <AudioLines className="h-4 w-4" />}
                 </button>
 
                 {attachments.some((attachment) => attachment.kind === "audio") ? (
