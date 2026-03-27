@@ -99,6 +99,7 @@ export function StoreAgentDrawer() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const qrCaptureInputRef = useRef<HTMLInputElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -147,10 +148,12 @@ export function StoreAgentDrawer() {
       return;
     }
 
-    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 96;
-    if (isNearBottom) {
+    const rafId = window.requestAnimationFrame(() => {
       container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-    }
+      setShowScrollToLatest(false);
+    });
+
+    return () => window.cancelAnimationFrame(rafId);
   }, [messages, pending]);
 
   const scrollToLatest = () => {
@@ -163,8 +166,13 @@ export function StoreAgentDrawer() {
     setShowScrollToLatest(false);
   };
 
-  const triggerAction = async (prompt: string) => {
-    await sendMessage(prompt, []);
+  const triggerAction = async (action: NonNullable<AgentMessage["actions"]>[number]) => {
+    if (action.kind === "capture-qr") {
+      qrCaptureInputRef.current?.click();
+      return;
+    }
+
+    await sendMessage(action.prompt, []);
   };
 
   const summary = useMemo(
@@ -246,6 +254,29 @@ export function StoreAgentDrawer() {
 
   const removeAttachment = (attachmentId: string) => {
     setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+  };
+
+  const attachQrImages = async (files: FileList | File[]) => {
+    const fileList = Array.from(files ?? []);
+    if (fileList.length === 0) {
+      return;
+    }
+
+    const nextAttachments = await Promise.all(
+      fileList.map(async (file) => ({
+        id: createClientId(),
+        name: file.name,
+        contentType: file.type || "image/png",
+        dataUrl: await readFileAsDataUrl(file),
+        kind: "image" as const,
+        status: "ready" as const,
+      })),
+    );
+
+    await sendMessage("Quiero ligar la tarjeta del cliente.", [
+      ...attachments.filter((attachment) => attachment.kind !== "image"),
+      ...nextAttachments,
+    ]);
   };
 
   const attachAudioBlob = async (blob: Blob, contentType: string, durationMs?: number) => {
@@ -418,7 +449,7 @@ export function StoreAgentDrawer() {
                     key={action.id}
                     type="button"
                     disabled={pending}
-                    onClick={() => void triggerAction(action.prompt)}
+                    onClick={() => void triggerAction(action)}
                     className={`rounded-full px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
                       action.variant === "primary"
                         ? "bg-emerald-600 text-white hover:bg-emerald-500"
@@ -502,6 +533,19 @@ export function StoreAgentDrawer() {
             void sendMessage(input);
           }}
         >
+          <input
+            ref={qrCaptureInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={async (event) => {
+              const input = event.currentTarget;
+              await attachQrImages(input.files ?? []);
+              input.value = "";
+            }}
+          />
+
           <div className="relative">
             <textarea
               value={input}
@@ -521,9 +565,13 @@ export function StoreAgentDrawer() {
                     accept="image/*"
                     className="hidden"
                     onChange={async (event) => {
-                      const files = Array.from(event.target.files ?? []);
+                      const files = event.currentTarget.files ?? [];
+                      if (files.length === 0) {
+                        return;
+                      }
+
                       const nextAttachments = await Promise.all(
-                        files.map(async (file) => ({
+                        Array.from(files).map(async (file) => ({
                           id: createClientId(),
                           name: file.name,
                           contentType: file.type || "image/png",
@@ -533,6 +581,7 @@ export function StoreAgentDrawer() {
                         })),
                       );
                       setAttachments((current) => [...current.filter((attachment) => attachment.kind !== "image"), ...nextAttachments]);
+                      event.currentTarget.value = "";
                     }}
                   />
                 </label>

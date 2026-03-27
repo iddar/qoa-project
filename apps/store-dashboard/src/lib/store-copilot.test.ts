@@ -84,6 +84,9 @@ describe("store copilot product matching", () => {
   });
 
   test("returns welcome actions for the first assistant message", () => {
-    expect(getInitialCopilotActions()).toHaveLength(4);
+    const actions = getInitialCopilotActions();
+    expect(actions).toHaveLength(3);
+    expect(actions.some((action) => action.label === "Confirmar venta")).toBe(false);
+    expect(actions.find((action) => action.label === "Ligar tarjeta")?.kind).toBe("capture-qr");
   });
 });

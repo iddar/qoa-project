@@ -76,6 +76,7 @@ export type AgentAction = {
   id: string;
   label: string;
   prompt: string;
+  kind?: "prompt" | "capture-qr";
   variant?: "primary" | "secondary" | "danger";
 };
 

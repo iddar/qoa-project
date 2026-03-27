@@ -167,13 +167,8 @@ export const getInitialCopilotActions = (): AgentAction[] => [
     id: "welcome-scan-card",
     label: "Ligar tarjeta",
     prompt: "Quiero ligar la tarjeta del cliente.",
+    kind: "capture-qr",
     variant: "secondary",
-  },
-  {
-    id: "welcome-confirm-sale",
-    label: "Confirmar venta",
-    prompt: "Confirma la venta actual.",
-    variant: "primary",
   },
 ];
 
@@ -195,6 +190,7 @@ export const buildCopilotActions = (draft: StorePosDraft): AgentAction[] => {
         id: "draft-link-customer",
         label: "Ligar tarjeta",
         prompt: "Quiero ligar la tarjeta del cliente.",
+        kind: "capture-qr",
         variant: "secondary",
       });
     } else {

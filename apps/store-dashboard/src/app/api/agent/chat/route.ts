@@ -35,6 +35,7 @@ const requestSchema = z.object({
             id: z.string(),
             label: z.string(),
             prompt: z.string(),
+            kind: z.enum(["prompt", "capture-qr"]).optional(),
             variant: z.enum(["primary", "secondary", "danger"]).optional(),
           }),
         )
