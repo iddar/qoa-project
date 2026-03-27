@@ -29,9 +29,7 @@ export const transactions = pgTable(
     id: uuid('id')
       .primaryKey()
       .default(sql`uuidv7()`),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
     storeId: uuid('store_id')
       .notNull()
       .references(() => stores.id, { onDelete: 'restrict' }),

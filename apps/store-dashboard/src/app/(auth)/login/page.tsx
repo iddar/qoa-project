@@ -20,7 +20,7 @@ export default function LoginPage() {
 
   if (isLoading || isAuthenticated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-100 dark:bg-zinc-950">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-zinc-100 dark:bg-zinc-950 lg:min-h-screen">
         <p className="text-sm text-zinc-500">Cargando...</p>
       </div>
     );
@@ -48,7 +48,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="grid min-h-[100dvh] overflow-hidden lg:min-h-screen lg:grid-cols-2">
       <div className="relative hidden overflow-hidden bg-amber-100 p-12 lg:block dark:bg-zinc-900">
         <div className="absolute -right-16 -top-16 h-64 w-64 rounded-full bg-amber-300/60 blur-3xl" />
         <div className="absolute -bottom-12 left-8 h-56 w-56 rounded-full bg-orange-300/60 blur-3xl" />
@@ -65,14 +65,15 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center bg-white px-6 py-12 dark:bg-zinc-950">
-        <div className="w-full max-w-sm space-y-6">
+      <div className="flex min-h-[100dvh] items-center justify-center bg-white px-5 py-6 dark:bg-zinc-950 sm:px-6 sm:py-8 lg:min-h-screen lg:px-6 lg:py-12">
+        <div className="w-full max-w-sm rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-6 lg:border-none lg:bg-transparent lg:p-0 lg:shadow-none">
           <div>
-            <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Dashboard Tienda</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-600 dark:text-amber-400 lg:hidden">Qoa Retail Ops</p>
+            <h2 className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-100 lg:mt-0">Dashboard Tienda</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Inicia sesión para continuar.</p>
-            <p className="mt-2 text-xs text-zinc-400">Usuario sugerido (seed development): store.development@qoa.local / Password123!</p>
+            <p className="mt-2 text-xs leading-5 text-zinc-400">Usuario sugerido: `store.development@qoa.local` / `Password123!`</p>
           </div>
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">{error}</p>}
             <label className="block text-sm">
               <span className="mb-1 block text-zinc-600 dark:text-zinc-400">Email</span>
@@ -81,7 +82,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                className="w-full rounded-lg border border-zinc-200 px-3 py-3 text-base dark:border-zinc-700 dark:bg-zinc-900"
               />
             </label>
             <label className="block text-sm">
@@ -91,13 +92,13 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                className="w-full rounded-lg border border-zinc-200 px-3 py-3 text-base dark:border-zinc-700 dark:bg-zinc-900"
               />
             </label>
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              className="w-full rounded-lg bg-zinc-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
               {submitting ? "Ingresando..." : "Entrar"}
             </button>

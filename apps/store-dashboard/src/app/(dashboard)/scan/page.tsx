@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { createClientId } from "@/lib/id";
 import { useAuth } from "@/providers/auth-provider";
 
 type StoreItem = { id: string; name: string; code: string };
@@ -88,7 +89,7 @@ export default function StoreScanPage() {
               amount,
             },
           ],
-          idempotencyKey: `store-scan-${crypto.randomUUID()}`,
+          idempotencyKey: `store-scan-${createClientId()}`,
         },
         {
           headers: { authorization: `Bearer ${token}` },

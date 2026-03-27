@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, lt, or } from "drizzle-orm";
 import { sql } from "drizzle-orm/sql";
 import { authGuard, authPlugin } from "../../app/plugins/auth";
 import type { AuthContext } from "../../app/plugins/auth";
@@ -8,6 +8,7 @@ import { generateCode } from "../../app/utils/generateCode";
 import { db } from "../../db/client";
 import { stores, cpgs, cpgStoreRelations, storeProducts, products, brands, cards, users, transactions, transactionItems } from "../../db/schema";
 import { generateStoreQrPayload } from "../../services/stores";
+import { createStorePosTransaction, toDetailPayload } from "../transactions";
 import {
   getRelatedCpgIdsForStore,
   getRelatedStoreIdsForCpg,
@@ -34,6 +35,8 @@ import {
   storeTransactionListQuery,
   storeTransactionListResponse,
   storeBrandListResponse,
+  storeCustomerResolveRequest,
+  storeCustomerResolveResponse,
 } from "./model";
 
 const getAuthRole = (auth: AuthContext): string | null => {
@@ -146,6 +149,96 @@ const canAccessStore = (auth: AuthContext, storeId: string) => {
   }
 
   return auth.tenantType === "store" && auth.tenantId === storeId;
+};
+
+const parseCardLookupInput = (value: string) => {
+  const trimmed = value
+    .trim()
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/”/g, '"');
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const tryParsePayload = (candidate: string) => {
+    try {
+      const payload = JSON.parse(candidate) as {
+        entityType?: string;
+        entityId?: string;
+        code?: string;
+        payload?: { entityType?: string; entityId?: string; code?: string };
+      };
+      const resolvedPayload = payload.payload ?? payload;
+      if (resolvedPayload.entityType === "card" && typeof resolvedPayload.entityId === "string") {
+        return {
+          kind: "cardId" as const,
+          value: resolvedPayload.entityId,
+        };
+      }
+      if (resolvedPayload.entityType === "card" && typeof resolvedPayload.code === "string") {
+        return {
+          kind: "cardCode" as const,
+          value: resolvedPayload.code,
+        };
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  };
+
+  if (trimmed.startsWith("{")) {
+    const parsed = tryParsePayload(trimmed) ?? (trimmed.endsWith("}") ? null : tryParsePayload(`${trimmed}"}`));
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  const jsonBlockMatch = trimmed.match(/\{[\s\S]*\}/);
+  if (jsonBlockMatch) {
+    const parsed = tryParsePayload(jsonBlockMatch[0]);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (uuidPattern.test(trimmed)) {
+    return {
+      kind: "cardId" as const,
+      value: trimmed,
+    };
+  }
+
+  return {
+    kind: "cardCode" as const,
+    value: trimmed,
+  };
+};
+
+const parseStoreTransactionItemMetadata = (metadata: string | null) => {
+  if (!metadata) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(metadata) as {
+      source?: string;
+      storeProductId?: string;
+      displayName?: string;
+    };
+
+    if (parsed.source !== "store_pos" || !parsed.storeProductId) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
 };
 
 const serializeStore = (store: StoreRow) => ({
@@ -1350,6 +1443,75 @@ export const storesModule = new Elysia({
       detail: { summary: "Listar marcas disponibles para la tienda" },
     },
   )
+  .post(
+    "/:storeId/customer-resolve",
+    async ({
+      auth,
+      params,
+      body,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      body: { input: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const parsed = parseCardLookupInput(body.input);
+      if (!parsed) {
+        return status(400, { error: { code: "INVALID_ARGUMENT", message: "Código de tarjeta inválido" } });
+      }
+
+      const [resolved] = (await db
+        .select({
+          cardId: cards.id,
+          cardCode: cards.code,
+          userId: cards.userId,
+          name: users.name,
+          phone: users.phone,
+          email: users.email,
+        })
+        .from(cards)
+        .innerJoin(users, eq(users.id, cards.userId))
+        .where(parsed.kind === "cardId" ? eq(cards.id, parsed.value) : eq(cards.code, parsed.value))
+        .limit(1)) as Array<{
+        cardId: string;
+        cardCode: string;
+        userId: string;
+        name: string | null;
+        phone: string;
+        email: string | null;
+      }>;
+
+      if (!resolved) {
+        return status(404, { error: { code: "CARD_NOT_FOUND", message: "Tarjeta no encontrada" } });
+      }
+
+      return {
+        data: {
+          userId: resolved.userId,
+          cardId: resolved.cardId,
+          cardCode: resolved.cardCode,
+          name: resolved.name ?? undefined,
+          phone: resolved.phone,
+          email: resolved.email ?? undefined,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      body: storeCustomerResolveRequest,
+      response: { 200: storeCustomerResolveResponse },
+      detail: { summary: "Resolver cliente por QR o código de tarjeta" },
+    },
+  )
   // ========== STORE TRANSACTIONS ==========
   .post(
     "/:storeId/transactions",
@@ -1376,30 +1538,83 @@ export const storesModule = new Elysia({
         return status(400, { error: { code: "INVALID_ARGUMENT", message: "Debes enviar al menos un item" } });
       }
 
-      const guestFlag = !body.userId;
+      let resolvedCustomer:
+        | {
+            userId: string;
+            cardId?: string;
+            cardCode?: string;
+            name?: string;
+            phone: string;
+            email?: string;
+          }
+        | null = null;
 
-      if (body.userId) {
-        const [user] = (await db
-          .select({ id: users.id })
-          .from(users)
-          .where(eq(users.id, body.userId))
-          .limit(1)) as Array<{ id: string }>;
-        if (!user) {
-          return status(404, { error: { code: "USER_NOT_FOUND", message: "Usuario no encontrado" } });
-        }
-      }
+      if (body.userId || body.cardId) {
+        if (body.cardId) {
+          const [customerByCard] = (await db
+            .select({
+              userId: users.id,
+              cardId: cards.id,
+              cardCode: cards.code,
+              name: users.name,
+              phone: users.phone,
+              email: users.email,
+            })
+            .from(cards)
+            .innerJoin(users, eq(users.id, cards.userId))
+            .where(eq(cards.id, body.cardId))
+            .limit(1)) as Array<{
+            userId: string;
+            cardId: string;
+            cardCode: string;
+            name: string | null;
+            phone: string;
+            email: string | null;
+          }>;
 
-      if (body.cardId) {
-        const [card] = (await db
-          .select({ id: cards.id, userId: cards.userId })
-          .from(cards)
-          .where(eq(cards.id, body.cardId))
-          .limit(1)) as Array<{ id: string; userId: string }>;
-        if (!card) {
-          return status(404, { error: { code: "CARD_NOT_FOUND", message: "Tarjeta no encontrada" } });
-        }
-        if (body.userId && card.userId !== body.userId) {
-          return status(400, { error: { code: "CARD_USER_MISMATCH", message: "La tarjeta no pertenece al usuario indicado" } });
+          if (!customerByCard) {
+            return status(404, { error: { code: "CARD_NOT_FOUND", message: "Tarjeta no encontrada" } });
+          }
+
+          if (body.userId && customerByCard.userId !== body.userId) {
+            return status(400, { error: { code: "CARD_USER_MISMATCH", message: "La tarjeta no pertenece al usuario indicado" } });
+          }
+
+          resolvedCustomer = {
+            userId: customerByCard.userId,
+            cardId: customerByCard.cardId,
+            cardCode: customerByCard.cardCode,
+            name: customerByCard.name ?? undefined,
+            phone: customerByCard.phone,
+            email: customerByCard.email ?? undefined,
+          };
+        } else if (body.userId) {
+          const [customerByUser] = (await db
+            .select({
+              userId: users.id,
+              name: users.name,
+              phone: users.phone,
+              email: users.email,
+            })
+            .from(users)
+            .where(eq(users.id, body.userId))
+            .limit(1)) as Array<{
+            userId: string;
+            name: string | null;
+            phone: string;
+            email: string | null;
+          }>;
+
+          if (!customerByUser) {
+            return status(404, { error: { code: "USER_NOT_FOUND", message: "Usuario no encontrado" } });
+          }
+
+          resolvedCustomer = {
+            userId: customerByUser.userId,
+            name: customerByUser.name ?? undefined,
+            phone: customerByUser.phone,
+            email: customerByUser.email ?? undefined,
+          };
         }
       }
 
@@ -1407,7 +1622,7 @@ export const storesModule = new Elysia({
       const storeProductsRows = (await db
         .select()
         .from(storeProducts)
-        .where(and(sql`${storeProducts.id} = any(${storeProductIds})`, eq(storeProducts.storeId, params.storeId)))) as Array<{
+        .where(and(or(...storeProductIds.map((id) => eq(storeProducts.id, id))), eq(storeProducts.storeId, params.storeId)))) as Array<{
         id: string;
         productId: string | null;
         cpgId: string | null;
@@ -1423,27 +1638,24 @@ export const storesModule = new Elysia({
         }
       }
 
-      const totalAmount = body.items.reduce((sum, item) => sum + item.amount, 0);
+      const outcome = await createStorePosTransaction({
+        storeId: params.storeId,
+        userId: resolvedCustomer?.userId,
+        cardId: resolvedCustomer?.cardId,
+        idempotencyKey: body.idempotencyKey,
+        items: body.items.map((item) => {
+          const storeProduct = storeProductMap.get(item.storeProductId)!;
+          return {
+            storeProductId: item.storeProductId,
+            productId: storeProduct.productId ?? undefined,
+            name: storeProduct.name,
+            quantity: item.quantity,
+            amount: item.amount,
+          };
+        }),
+      });
 
-      const [transaction] = (await db
-        .insert(transactions)
-        .values({
-          userId: body.userId ?? null,
-          storeId: params.storeId,
-          cardId: body.cardId ?? null,
-          totalAmount,
-          idempotencyKey: body.idempotencyKey ?? null,
-        })
-        .returning()) as Array<{
-        id: string;
-        userId: string | null;
-        storeId: string;
-        cardId: string | null;
-        totalAmount: number;
-        createdAt: Date;
-      }>;
-
-      if (!transaction) {
+      if (!outcome) {
         return status(500, {
           error: {
             code: "TRANSACTION_CREATE_FAILED",
@@ -1452,48 +1664,32 @@ export const storesModule = new Elysia({
         });
       }
 
-      const transactionItemsData = body.items.map((item) => ({
-        transactionId: transaction.id,
-        productId: storeProductMap.get(item.storeProductId)!.productId ?? storeProductMap.get(item.storeProductId)!.name,
-        quantity: item.quantity,
-        amount: item.amount,
-      }));
+      const itemResponses = outcome.items.map((item) => {
+        const metadata = parseStoreTransactionItemMetadata(item.metadata);
+        const storeProduct = metadata?.storeProductId ? storeProductMap.get(metadata.storeProductId) : undefined;
+        return {
+          id: item.id,
+          storeProductId: metadata?.storeProductId ?? item.productId,
+          productId: storeProduct?.productId ?? undefined,
+          name: metadata?.displayName ?? storeProduct?.name ?? item.productId,
+          quantity: item.quantity,
+          amount: item.amount,
+        };
+      });
 
-      const items = (await db
-        .insert(transactionItems)
-        .values(transactionItemsData)
-        .returning()) as Array<{
-        id: string;
-        transactionId: string;
-        productId: string;
-        quantity: number;
-        amount: number;
-      }>;
-
-      return status(201, {
+      return status(outcome.statusCode, {
         data: {
-          id: transaction.id,
-          userId: transaction.userId ?? undefined,
-          storeId: transaction.storeId,
-          cardId: transaction.cardId ?? undefined,
-          items: items.map((item) => ({
-            id: item.id,
-            storeProductId: body.items.find((bi) => bi.storeProductId && storeProductMap.get(bi.storeProductId)?.productId === item.productId)?.storeProductId ?? item.productId,
-            productId: storeProductMap.get(item.productId)?.productId ?? undefined,
-            name: storeProductMap.get(item.productId)?.name ?? item.productId,
-            quantity: item.quantity,
-            amount: item.amount,
-          })),
-          totalAmount: transaction.totalAmount,
-          guestFlag,
-          createdAt: transaction.createdAt.toISOString(),
+          ...toDetailPayload(outcome.transaction, outcome.items, outcome.accumulations),
+          items: itemResponses,
+          guestFlag: !outcome.transaction.userId,
+          customer: resolvedCustomer,
         },
       });
     },
     {
       beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
       body: storeTransactionCreateRequest,
-      response: { 201: storeTransactionResponse },
+      response: { 200: storeTransactionResponse, 201: storeTransactionResponse },
       detail: { summary: "Registrar transacción desde POS" },
     },
   )
@@ -1558,7 +1754,7 @@ export const storesModule = new Elysia({
       const txIds = txs.map((tx) => tx.id);
       const itemsRows = txIds.length > 0
         ? (await db.execute(sql`
-            select "id", "transaction_id", "product_id", "quantity", "amount"
+            select "id", "transaction_id", "product_id", "quantity", "amount", "metadata"
             from "transaction_items"
             where "transaction_id" = any(${txIds})
           `)) as Array<{
@@ -1567,6 +1763,7 @@ export const storesModule = new Elysia({
             product_id: string;
             quantity: number;
             amount: number;
+            metadata: string | null;
           }>
         : [];
 
@@ -1578,15 +1775,15 @@ export const storesModule = new Elysia({
         itemsByTx.get(item.transaction_id)!.push(item);
       }
 
-      const storeProductsMap = new Map<string, { name: string; storeProductId?: string }>();
+      const storeProductsMap = new Map<string, { name: string; storeProductId?: string; productId?: string }>();
       if (itemsRows.length > 0) {
         const productIds = [...new Set(itemsRows.map((i) => i.product_id))];
         const storeProductsData = (await db
           .select({ id: storeProducts.id, name: storeProducts.name, productId: storeProducts.productId })
           .from(storeProducts)
-          .where(sql`${storeProducts.id} = any(${productIds})`) as any) as Array<{ id: string; name: string; productId: string | null }>;
+          .where(or(...productIds.map((id) => eq(storeProducts.id, id)))) as any) as Array<{ id: string; name: string; productId: string | null }>;
         for (const sp of storeProductsData) {
-          storeProductsMap.set(sp.id, { name: sp.name, storeProductId: sp.id });
+          storeProductsMap.set(sp.id, { name: sp.name, storeProductId: sp.id, productId: sp.productId ?? undefined });
         }
       }
 
@@ -1599,18 +1796,20 @@ export const storesModule = new Elysia({
             storeId: tx.store_id,
             cardId: tx.card_id ?? undefined,
             items: txItems.map((item) => {
-              const spInfo = storeProductsMap.get(item.product_id);
+              const metadata = parseStoreTransactionItemMetadata(item.metadata);
+              const spInfo = metadata?.storeProductId ? storeProductsMap.get(metadata.storeProductId) : storeProductsMap.get(item.product_id);
               return {
                 id: item.id,
-                storeProductId: spInfo?.storeProductId ?? item.product_id,
-                productId: spInfo ? undefined : item.product_id,
-                name: spInfo?.name ?? item.product_id,
+                storeProductId: metadata?.storeProductId ?? spInfo?.storeProductId ?? item.product_id,
+                productId: spInfo?.productId ?? (spInfo ? undefined : item.product_id),
+                name: metadata?.displayName ?? spInfo?.name ?? item.product_id,
                 quantity: item.quantity,
                 amount: item.amount,
               };
             }),
             totalAmount: tx.total_amount,
             guestFlag: !tx.user_id,
+            accumulations: [],
             createdAt: tx.created_at.toISOString(),
           };
         }),

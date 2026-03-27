@@ -27,6 +27,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body
+        suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} bg-amber-50 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100`}
       >
         <QueryProvider>

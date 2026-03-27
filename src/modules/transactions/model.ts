@@ -17,7 +17,7 @@ export const transactionItemSchema = t.Object({
 
 export const transactionSchema = t.Object({
   id: t.String(),
-  userId: t.String(),
+  userId: t.Optional(t.String()),
   storeId: t.String(),
   cardId: t.Optional(t.String()),
   items: t.Array(transactionItemSchema),
@@ -27,7 +27,7 @@ export const transactionSchema = t.Object({
 
 export const transactionWithAccumulations = t.Object({
   id: t.String(),
-  userId: t.String(),
+  userId: t.Optional(t.String()),
   storeId: t.String(),
   cardId: t.Optional(t.String()),
   items: t.Array(transactionItemSchema),
