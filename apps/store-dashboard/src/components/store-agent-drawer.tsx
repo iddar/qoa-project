@@ -561,11 +561,12 @@ export function StoreAgentDrawer() {
                   <Paperclip className="h-4 w-4" />
                   <span className="sr-only">Adjuntar QR</span>
                   <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={async (event) => {
-                      const files = event.currentTarget.files ?? [];
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (event) => {
+                      const input = event.currentTarget;
+                      const files = input.files ?? [];
                       if (files.length === 0) {
                         return;
                       }
@@ -581,7 +582,7 @@ export function StoreAgentDrawer() {
                         })),
                       );
                       setAttachments((current) => [...current.filter((attachment) => attachment.kind !== "image"), ...nextAttachments]);
-                      event.currentTarget.value = "";
+                      input.value = "";
                     }}
                   />
                 </label>
