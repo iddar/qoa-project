@@ -83,6 +83,20 @@ const formatDuration = (durationMs: number) => {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
+const logLiveQrDebug = (event: string, details?: Record<string, unknown>) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const payload = {
+    event,
+    timestamp: new Date().toISOString(),
+    ...details,
+  };
+
+  console.info("[store-copilot][live-qr]", payload);
+};
+
 const formatBytes = (bytes: number) => {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -448,12 +462,25 @@ export function StoreAgentDrawer() {
     let hasResolved = false;
     let scannerStarted = false;
 
+    logLiveQrDebug("effect-open", {
+      regionId: qrScannerRegionIdRef.current,
+      secureContext: window.isSecureContext,
+      href: window.location.href,
+      userAgent: navigator.userAgent,
+      regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+    });
+
     const bootScanner = async () => {
       try {
         setQrScannerState("starting");
         setQrScannerError(null);
+        logLiveQrDebug("boot-start", {
+          regionId: qrScannerRegionIdRef.current,
+          regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+        });
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
         if (!isActive) {
+          logLiveQrDebug("boot-abort-inactive");
           return;
         }
 
@@ -462,16 +489,28 @@ export function StoreAgentDrawer() {
           verbose: false,
         });
         liveQrScannerRef.current = scanner;
+        logLiveQrDebug("scanner-created", {
+          regionId: qrScannerRegionIdRef.current,
+          regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+        });
 
         const onSuccess = async (decodedText: string) => {
           if (hasResolved) {
+            logLiveQrDebug("decode-ignored-duplicate", { decodedText });
             return;
           }
 
           hasResolved = true;
+          logLiveQrDebug("decode-success", {
+            decodedText,
+            scannerStarted,
+            regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+          });
           if (scannerStarted) {
+            logLiveQrDebug("decode-stop-before-close");
             await scanner.stop().catch(() => undefined);
             scannerStarted = false;
+            logLiveQrDebug("decode-stop-finished");
           }
           setShowQrScanner(false);
           await sendMessage(`Quiero ligar la tarjeta del cliente con este QR: ${decodedText}`, []);
@@ -484,16 +523,27 @@ export function StoreAgentDrawer() {
         };
 
         try {
+          logLiveQrDebug("start-attempt", { mode: "exact-environment" });
           await scanner.start({ facingMode: { exact: "environment" } }, scannerConfig, onSuccess, () => undefined);
         } catch {
+          logLiveQrDebug("start-fallback", { mode: "environment" });
           await scanner.start({ facingMode: "environment" }, scannerConfig, onSuccess, () => undefined);
         }
         scannerStarted = true;
+        logLiveQrDebug("start-success", {
+          regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+        });
 
         if (isActive) {
           setQrScannerState("ready");
         }
-      } catch {
+      } catch (error) {
+        logLiveQrDebug("boot-error", {
+          errorName: error instanceof Error ? error.name : String(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
+          regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+          scannerStarted,
+        });
         setQrScannerState("error");
         setQrScannerError("No pude abrir la cámara para escanear. Usa foto del QR como alternativa.");
         setShowQrScanner(false);
@@ -505,17 +555,67 @@ export function StoreAgentDrawer() {
 
     return () => {
       isActive = false;
+      logLiveQrDebug("effect-cleanup", {
+        scannerStarted,
+        hasScanner: Boolean(liveQrScannerRef.current),
+        regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+      });
       setQrScannerState("idle");
       setQrScannerError(null);
       const scanner = liveQrScannerRef.current;
       if (!scanner || !scannerStarted) {
+        logLiveQrDebug("cleanup-skip-stop", {
+          hasScanner: Boolean(scanner),
+          scannerStarted,
+        });
         return;
       }
 
       liveQrScannerRef.current = null;
-      void scanner.stop().catch(() => undefined);
+      void scanner
+        .stop()
+        .then(() => {
+          logLiveQrDebug("cleanup-stop-finished");
+        })
+        .catch((error) => {
+          logLiveQrDebug("cleanup-stop-error", {
+            errorName: error instanceof Error ? error.name : String(error),
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+        });
     };
   }, [showQrScanner]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleWindowError = (event: ErrorEvent) => {
+      logLiveQrDebug("window-error", {
+        message: event.message,
+        filename: event.filename,
+        line: event.lineno,
+        column: event.colno,
+      });
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      logLiveQrDebug("unhandled-rejection", {
+        reasonName: reason instanceof Error ? reason.name : String(reason),
+        reasonMessage: reason instanceof Error ? reason.message : String(reason),
+      });
+    };
+
+    window.addEventListener("error", handleWindowError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener("error", handleWindowError);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
+  }, []);
 
   const attachAudioBlob = async (blob: Blob, contentType: string, durationMs?: number) => {
     const averageLevel = recordingSampleCountRef.current > 0
