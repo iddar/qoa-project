@@ -475,95 +475,95 @@ export function StoreAgentDrawer() {
             void sendMessage(input);
           }}
         >
-          <div className="flex items-end justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2">
-              <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium">
-                <Paperclip className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Adjuntar QR</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={async (event) => {
-                    const files = Array.from(event.target.files ?? []);
-                    const nextAttachments = await Promise.all(
-                      files.map(async (file) => ({
-                        id: createClientId(),
-                        name: file.name,
-                        contentType: file.type || "image/png",
-                        dataUrl: await readFileAsDataUrl(file),
-                        kind: "image" as const,
-                        status: "ready" as const,
-                      })),
-                    );
-                    setAttachments((current) => [...current.filter((attachment) => attachment.kind !== "image"), ...nextAttachments]);
-                  }}
-                />
-              </label>
+          <div className="relative">
+            <textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              rows={4}
+              placeholder="Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"
+              className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pb-16 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 sm:pb-14"
+            />
 
-              <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium">
-                <AudioLines className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Adjuntar audio</span>
-                <input
-                  type="file"
-                  accept="audio/*"
-                  capture
-                  className="hidden"
-                  onChange={async (event) => {
-                    const input = event.currentTarget;
-                    const file = event.target.files?.[0];
-                    if (!file) {
-                      return;
-                    }
+            <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
+              <div className="pointer-events-auto flex min-w-0 items-center gap-2">
+                <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9">
+                  <Paperclip className="h-4 w-4" />
+                  <span className="sr-only">Adjuntar QR</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (event) => {
+                      const files = Array.from(event.target.files ?? []);
+                      const nextAttachments = await Promise.all(
+                        files.map(async (file) => ({
+                          id: createClientId(),
+                          name: file.name,
+                          contentType: file.type || "image/png",
+                          dataUrl: await readFileAsDataUrl(file),
+                          kind: "image" as const,
+                          status: "ready" as const,
+                        })),
+                      );
+                      setAttachments((current) => [...current.filter((attachment) => attachment.kind !== "image"), ...nextAttachments]);
+                    }}
+                  />
+                </label>
 
-                    setRecordingError(null);
-                    await attachAudioBlob(file, file.type || "audio/m4a");
-                    input.value = "";
-                  }}
-                />
-              </label>
+                <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9">
+                  <AudioLines className="h-4 w-4" />
+                  <span className="sr-only">Adjuntar audio</span>
+                  <input
+                    type="file"
+                    accept="audio/*"
+                    capture
+                    className="hidden"
+                    onChange={async (event) => {
+                      const input = event.currentTarget;
+                      const file = event.target.files?.[0];
+                      if (!file) {
+                        return;
+                      }
 
-              <button
-                type="button"
-                onClick={() => void startRecording()}
-                disabled={pending || isRecording}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium"
-                aria-label="Grabar nota de voz"
-              >
-                <Mic className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                <span className="hidden sm:inline">Nota de voz</span>
-              </button>
+                      setRecordingError(null);
+                      await attachAudioBlob(file, file.type || "audio/m4a");
+                      input.value = "";
+                    }}
+                  />
+                </label>
 
-              {attachments.some((attachment) => attachment.kind === "audio") ? (
                 <button
                   type="button"
-                  onClick={() => setAttachments((current) => current.filter((attachment) => attachment.kind !== "audio"))}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium"
-                  aria-label="Cancelar nota de voz"
+                  onClick={() => void startRecording()}
+                  disabled={pending || isRecording}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
+                  aria-label="Grabar nota de voz"
                 >
-                  <Trash2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
-                  <span className="hidden sm:inline">Cancelar voz</span>
+                  <Mic className="h-4 w-4" />
                 </button>
-              ) : null}
+
+                {attachments.some((attachment) => attachment.kind === "audio") ? (
+                  <button
+                    type="button"
+                    onClick={() => setAttachments((current) => current.filter((attachment) => attachment.kind !== "audio"))}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
+                    aria-label="Cancelar nota de voz"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+
+              <button
+                type="submit"
+                disabled={pending || isRecording || (!input.trim() && attachments.length === 0)}
+                className="pointer-events-auto inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9"
+                aria-label="Enviar mensaje"
+              >
+                <SendHorizontal className="h-4 w-4" />
+              </button>
             </div>
-
-            <button
-              type="submit"
-              disabled={pending || isRecording || (!input.trim() && attachments.length === 0)}
-              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
-            >
-              <SendHorizontal className="h-4 w-4" />
-              <span className="hidden sm:inline">Enviar</span>
-            </button>
           </div>
-
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            rows={4}
-            placeholder="Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"
-            className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
-          />
         </form>
       </div>
     </div>
