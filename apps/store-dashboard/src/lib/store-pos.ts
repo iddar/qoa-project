@@ -72,11 +72,19 @@ export type AgentAttachment = {
   status?: "pending" | "ready" | "processing" | "transcribed" | "failed";
 };
 
+export type AgentAction = {
+  id: string;
+  label: string;
+  prompt: string;
+  variant?: "primary" | "secondary" | "danger";
+};
+
 export type AgentMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   attachments?: AgentAttachment[];
+  actions?: AgentAction[];
 };
 
 export const createEmptyDraft = (): StorePosDraft => ({

@@ -1,4 +1,4 @@
-import type { DraftPendingProductChoice } from "@/lib/store-pos";
+import type { AgentAction, StorePosDraft, DraftPendingProductChoice } from "@/lib/store-pos";
 
 export type StoreProductLike = {
   id: string;
@@ -148,4 +148,77 @@ export const resolvePendingProductChoiceSelection = (choices: DraftPendingProduc
     resolved: true as const,
     choice: best.choice,
   };
+};
+
+export const getInitialCopilotActions = (): AgentAction[] => [
+  {
+    id: "welcome-add-refrescos",
+    label: "2 refrescos",
+    prompt: "Agrega 2 refrescos al pedido.",
+    variant: "secondary",
+  },
+  {
+    id: "welcome-find-botanas",
+    label: "Buscar papas",
+    prompt: "Busca unas papas para el carrito.",
+    variant: "secondary",
+  },
+  {
+    id: "welcome-scan-card",
+    label: "Ligar tarjeta",
+    prompt: "Quiero ligar la tarjeta del cliente.",
+    variant: "secondary",
+  },
+  {
+    id: "welcome-confirm-sale",
+    label: "Confirmar venta",
+    prompt: "Confirma la venta actual.",
+    variant: "primary",
+  },
+];
+
+export const buildCopilotActions = (draft: StorePosDraft): AgentAction[] => {
+  if (draft.pendingProductChoices && draft.pendingProductChoices.length > 0) {
+    return draft.pendingProductChoices.slice(0, 4).map((choice) => ({
+      id: `pending-choice-${choice.storeProductId}`,
+      label: choice.name,
+      prompt: `Elijo esta opción del pedido pendiente: ${choice.name}`,
+      variant: "secondary",
+    }));
+  }
+
+  const actions: AgentAction[] = [];
+
+  if (draft.items.length > 0) {
+    if (!draft.customer) {
+      actions.push({
+        id: "draft-link-customer",
+        label: "Ligar tarjeta",
+        prompt: "Quiero ligar la tarjeta del cliente.",
+        variant: "secondary",
+      });
+    } else {
+      actions.push({
+        id: "draft-remove-customer",
+        label: "Quitar cliente",
+        prompt: "Quita el cliente de este pedido.",
+        variant: "secondary",
+      });
+    }
+
+    actions.push({
+      id: "draft-confirm-sale",
+      label: "Confirmar venta",
+      prompt: "Confirma la venta actual.",
+      variant: "primary",
+    });
+    actions.push({
+      id: "draft-clear-cart",
+      label: "Vaciar pedido",
+      prompt: "Vacía el pedido actual.",
+      variant: "danger",
+    });
+  }
+
+  return actions;
 };

@@ -4,17 +4,17 @@ import { minimax } from "vercel-minimax-ai-provider";
 import sharp from "sharp";
 import { z } from "zod";
 import { api } from "@/lib/api";
-import { getProductMatchScore, normalizeText, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
+import { buildCopilotActions, getProductMatchScore, normalizeText, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
 import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 
 const requestSchema = z.object({
   messages: z.array(
-    z.object({
-      id: z.string(),
-      role: z.enum(["user", "assistant"]),
-      content: z.string(),
+          z.object({
+            id: z.string(),
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
       attachments: z
         .array(
           z.object({
@@ -26,6 +26,16 @@ const requestSchema = z.object({
             durationMs: z.number().optional(),
             transcript: z.string().optional(),
             status: z.enum(["pending", "ready", "processing", "transcribed", "failed"]).optional(),
+          }),
+        )
+        .optional(),
+      actions: z
+        .array(
+          z.object({
+            id: z.string(),
+            label: z.string(),
+            prompt: z.string(),
+            variant: z.enum(["primary", "secondary", "danger"]).optional(),
           }),
         )
         .optional(),
@@ -351,6 +361,7 @@ export async function POST(request: Request) {
           id: crypto.randomUUID(),
           role: "assistant",
           content: "No pude transcribir la nota de voz. Intenta grabarla otra vez o escribe el pedido.",
+          actions: buildCopilotActions(workingDraft),
         },
         draft: workingDraft,
         userMessage: normalizedUserMessage,
@@ -726,6 +737,7 @@ export async function POST(request: Request) {
       id: crypto.randomUUID(),
       role: "assistant",
       content: result.text,
+      actions: buildCopilotActions(workingDraft),
     },
     userMessage: normalizedUserMessage,
     draft: workingDraft,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { getProductMatchScore, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
+import { buildCopilotActions, getInitialCopilotActions, getProductMatchScore, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
 
 describe("store copilot product matching", () => {
   test("matches misspelled product names strongly enough", () => {
@@ -42,5 +42,48 @@ describe("store copilot product matching", () => {
       expect(result.reason).toBe("needs_confirmation");
       expect(result.candidates.length).toBe(2);
     }
+  });
+
+  test("builds variant actions when there are pending product choices", () => {
+    const actions = buildCopilotActions({
+      items: [],
+      customer: null,
+      lastTransaction: null,
+      pendingProductChoices: [
+        { storeProductId: "cola", name: "Refresco Cola 600 ml", price: 18, score: 0.88 },
+        { storeProductId: "lima", name: "Refresco Lima-Limon 600 ml", price: 18, score: 0.86 },
+      ],
+    });
+
+    expect(actions.map((action) => action.label)).toEqual([
+      "Refresco Cola 600 ml",
+      "Refresco Lima-Limon 600 ml",
+    ]);
+  });
+
+  test("builds deterministic draft actions for a non-empty cart", () => {
+    const actions = buildCopilotActions({
+      items: [
+        {
+          storeProductId: "cola",
+          name: "Refresco Cola 600 ml",
+          price: 18,
+          quantity: 2,
+        },
+      ],
+      customer: null,
+      lastTransaction: null,
+      pendingProductChoices: [],
+    });
+
+    expect(actions.map((action) => action.label)).toEqual([
+      "Ligar tarjeta",
+      "Confirmar venta",
+      "Vaciar pedido",
+    ]);
+  });
+
+  test("returns welcome actions for the first assistant message", () => {
+    expect(getInitialCopilotActions()).toHaveLength(4);
   });
 });

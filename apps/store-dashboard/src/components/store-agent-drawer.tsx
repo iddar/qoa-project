@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ArrowDown, AudioLines, Bot, LoaderCircle, MessageSquarePlus, Mic, Paperclip, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
+import { getInitialCopilotActions } from "@/lib/store-copilot";
 import { getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type StorePosDraft } from "@/lib/store-pos";
 import { useStorePos } from "@/providers/store-pos-provider";
 
@@ -22,6 +23,7 @@ const INITIAL_ASSISTANT_MESSAGE: AgentMessage = {
   role: "assistant",
   content:
     "Hola, soy tu asistente de caja. Puedo armar el pedido, ligar la tarjeta del cliente por QR y confirmar la venta cuando me lo pidas.\n\nPrueba con:\n- Agrega 2 refrescos al pedido\n- Busca unas papas para el carrito\n- Escanea la tarjeta del cliente\n- Confirma la venta actual",
+  actions: getInitialCopilotActions(),
 };
 
 const readFileAsDataUrl = (file: Blob) =>
@@ -159,6 +161,10 @@ export function StoreAgentDrawer() {
 
     container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     setShowScrollToLatest(false);
+  };
+
+  const triggerAction = async (prompt: string) => {
+    await sendMessage(prompt, []);
   };
 
   const summary = useMemo(
@@ -402,6 +408,27 @@ export function StoreAgentDrawer() {
                     {file.status === "failed" ? <p>No se pudo transcribir.</p> : null}
                     {file.transcript ? <p className="mt-1 whitespace-pre-wrap">Transcripción: {file.transcript}</p> : null}
                   </div>
+                ))}
+              </div>
+            ) : null}
+            {message.role === "assistant" && message.actions?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {message.actions.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => void triggerAction(action.prompt)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      action.variant === "primary"
+                        ? "bg-emerald-600 text-white hover:bg-emerald-500"
+                        : action.variant === "danger"
+                          ? "border border-red-200 bg-white text-red-600 hover:bg-red-50 dark:border-red-900/60 dark:bg-zinc-950 dark:text-red-300 dark:hover:bg-red-950/20"
+                          : "border border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:border-zinc-600"
+                    }`}
+                  >
+                    {action.label}
+                  </button>
                 ))}
               </div>
             ) : null}
