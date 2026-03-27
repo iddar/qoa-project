@@ -87,7 +87,7 @@ CHOUGH_URL=http://127.0.0.1:8080 bun run dev
 
 `chough` usa `ffmpeg`, así que formatos comunes de navegador y móvil como `webm`, `mp4`, `m4a`, `mpeg`, `wav` y `ogg` pueden atravesar el flujo siempre que el navegador permita capturarlos o adjuntarlos.
 
-Nota importante para iPhone/Safari: la grabación directa con micrófono (`getUserMedia`/`MediaRecorder`) exige contexto seguro (`HTTPS` o `localhost`). Si abres el portal por IP LAN en `http://192.168.x.x`, Safari puede bloquear el micrófono en vivo. En ese caso usa `Adjuntar audio` o expón el entorno con HTTPS.
+Nota importante para iPhone/Safari: aunque uses HTTPS, Safari móvil puede ser inestable con grabación y scanner QR en vivo. El dashboard prioriza `Adjuntar audio` y captura de foto del QR como fallback más confiable en esos dispositivos.
 
 ## Escaneo de QR
 
