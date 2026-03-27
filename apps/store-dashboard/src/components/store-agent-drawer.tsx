@@ -23,6 +23,13 @@ const quickPrompts = [
   "Confirma la venta actual",
 ];
 
+const INITIAL_ASSISTANT_MESSAGE: AgentMessage = {
+  id: "store-agent-welcome",
+  role: "assistant",
+  content:
+    "Hola, soy tu asistente de caja. Puedo armar el pedido, ligar la tarjeta del cliente por QR y confirmar la venta cuando me lo pidas.",
+};
+
 const readFileAsDataUrl = (file: Blob) =>
   new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -67,14 +74,7 @@ export function StoreAgentDrawer() {
   const pathname = usePathname();
   const token = getAccessToken();
   const { draft, replaceDraft, isAgentOpen, setAgentOpen } = useStorePos();
-  const [messages, setMessages] = useState<AgentMessage[]>([
-    {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content:
-        "Hola, soy tu asistente de caja. Puedo armar el pedido, ligar la tarjeta del cliente por QR y confirmar la venta cuando me lo pidas.",
-    },
-  ]);
+  const [messages, setMessages] = useState<AgentMessage[]>([INITIAL_ASSISTANT_MESSAGE]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [attachments, setAttachments] = useState<AgentAttachment[]>([]);
