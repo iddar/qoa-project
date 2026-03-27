@@ -203,6 +203,10 @@ export function StoreAgentDrawer() {
   const qrCaptureInputRef = useRef<HTMLInputElement | null>(null);
   const audioUploadInputRef = useRef<HTMLInputElement | null>(null);
   const qrScannerContainerRef = useRef<HTMLDivElement | null>(null);
+  const qrVideoRef = useRef<HTMLVideoElement | null>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const qrStreamRef = useRef<MediaStream | null>(null);
+  const qrScanFrameRef = useRef<number | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -217,10 +221,6 @@ export function StoreAgentDrawer() {
   const recordingSampleCountRef = useRef(0);
   const attachmentsRef = useRef<AgentAttachment[]>([]);
   const messagesRef = useRef<AgentMessage[]>([]);
-  const liveQrScannerRef = useRef<{
-    start: (...args: unknown[]) => Promise<unknown>;
-    stop: () => Promise<void>;
-  } | null>(null);
 
   useEffect(() => {
     attachmentsRef.current = attachments;
@@ -461,51 +461,67 @@ export function StoreAgentDrawer() {
 
     let isActive = true;
     let hasResolved = false;
-    let scannerStarted = false;
 
     logLiveQrDebug("effect-open", {
       regionId: qrScannerRegionIdRef.current,
       secureContext: window.isSecureContext,
       href: window.location.href,
       userAgent: navigator.userAgent,
-      regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+      regionExists: Boolean(qrScannerContainerRef.current),
     });
 
     const bootScanner = async () => {
       try {
         setQrScannerState("starting");
         setQrScannerError(null);
-        const regionElement = document.getElementById(qrScannerRegionIdRef.current);
         const containerElement = qrScannerContainerRef.current;
         const containerWidth = containerElement?.clientWidth ?? 0;
         const containerHeight = containerElement?.clientHeight ?? 0;
-        if (regionElement instanceof HTMLDivElement) {
-          regionElement.style.width = `${Math.max(containerWidth, 280)}px`;
-          regionElement.style.height = `${Math.max(containerHeight, 320)}px`;
-          regionElement.style.minHeight = `${Math.max(containerHeight, 320)}px`;
-        }
         logLiveQrDebug("boot-start", {
           regionId: qrScannerRegionIdRef.current,
-          regionExists: Boolean(regionElement),
-          regionClientWidth: regionElement?.clientWidth,
-          regionClientHeight: regionElement?.clientHeight,
+          regionExists: Boolean(containerElement),
+          regionClientWidth: containerElement?.clientWidth,
+          regionClientHeight: containerElement?.clientHeight,
           containerClientWidth: containerWidth,
           containerClientHeight: containerHeight,
         });
-        const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
+        const { default: jsQR } = await import("jsqr");
         if (!isActive) {
           logLiveQrDebug("boot-abort-inactive");
           return;
         }
 
-        const scanner = new Html5Qrcode(qrScannerRegionIdRef.current, {
-          formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-          verbose: false,
+        const video = qrVideoRef.current;
+        const canvas = qrCanvasRef.current;
+        if (!video || !canvas) {
+          throw new Error("QR_PREVIEW_NOT_READY");
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
         });
-        liveQrScannerRef.current = scanner;
+
+        if (!isActive) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        qrStreamRef.current = stream;
+        video.srcObject = stream;
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute("playsinline", "true");
+        video.setAttribute("autoplay", "true");
+        await video.play();
+
         logLiveQrDebug("scanner-created", {
           regionId: qrScannerRegionIdRef.current,
-          regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+          regionExists: Boolean(containerElement),
         });
 
         const onSuccess = async (decodedText: string) => {
@@ -517,64 +533,67 @@ export function StoreAgentDrawer() {
           hasResolved = true;
           logLiveQrDebug("decode-success", {
             decodedText,
-            scannerStarted,
-            regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+            regionExists: Boolean(qrScannerContainerRef.current),
           });
-          if (scannerStarted) {
-            logLiveQrDebug("decode-stop-before-close");
-            await scanner.stop().catch(() => undefined);
-            scannerStarted = false;
-            logLiveQrDebug("decode-stop-finished");
+
+          if (qrScanFrameRef.current) {
+            window.cancelAnimationFrame(qrScanFrameRef.current);
+            qrScanFrameRef.current = null;
           }
+          qrStreamRef.current?.getTracks().forEach((track) => track.stop());
+          qrStreamRef.current = null;
+          logLiveQrDebug("decode-stop-finished");
           setShowQrScanner(false);
           await sendMessage(`Quiero ligar la tarjeta del cliente con este QR: ${decodedText}`, []);
         };
 
-        const scannerConfig = {
-          fps: 10,
-          qrbox: { width: 240, height: 240 },
-          disableFlip: true,
+        const scanFrame = () => {
+          const activeVideo = qrVideoRef.current;
+          const activeCanvas = qrCanvasRef.current;
+          if (!isActive || !activeVideo || !activeCanvas) {
+            return;
+          }
+
+          if (activeVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && activeVideo.videoWidth > 0 && activeVideo.videoHeight > 0) {
+            const context = activeCanvas.getContext("2d", { willReadFrequently: true });
+            if (context) {
+              activeCanvas.width = activeVideo.videoWidth;
+              activeCanvas.height = activeVideo.videoHeight;
+              context.drawImage(activeVideo, 0, 0, activeCanvas.width, activeCanvas.height);
+              const imageData = context.getImageData(0, 0, activeCanvas.width, activeCanvas.height);
+              const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "attemptBoth",
+              });
+              if (decoded?.data) {
+                void onSuccess(decoded.data);
+                return;
+              }
+            }
+          }
+
+          qrScanFrameRef.current = window.requestAnimationFrame(scanFrame);
         };
 
-        try {
-          logLiveQrDebug("start-attempt", { mode: "exact-environment" });
-          await scanner.start({ facingMode: { exact: "environment" } }, scannerConfig, onSuccess, () => undefined);
-        } catch {
-          logLiveQrDebug("start-fallback", { mode: "environment" });
-          await scanner.start({ facingMode: "environment" }, scannerConfig, onSuccess, () => undefined);
-        }
-        scannerStarted = true;
+        qrScanFrameRef.current = window.requestAnimationFrame(scanFrame);
         logLiveQrDebug("start-success", {
-          regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+          regionExists: Boolean(qrScannerContainerRef.current),
         });
 
         window.setTimeout(() => {
-          const currentRegion = document.getElementById(qrScannerRegionIdRef.current);
-          const video = currentRegion?.querySelector("video") as HTMLVideoElement | null;
-          const canvas = currentRegion?.querySelector("canvas") as HTMLCanvasElement | null;
-          if (video) {
-            video.style.width = "100%";
-            video.style.height = "320px";
-            video.setAttribute("autoplay", "true");
-            video.setAttribute("playsinline", "true");
-            video.muted = true;
-            video.playsInline = true;
-            void video.play().catch(() => undefined);
-          }
+          const activeVideo = qrVideoRef.current;
+          const activeCanvas = qrCanvasRef.current;
 
           logLiveQrDebug("start-post-check", {
-            regionClientWidth: currentRegion?.clientWidth,
-            regionClientHeight: currentRegion?.clientHeight,
-            childCount: currentRegion?.childElementCount,
-            childTags: currentRegion ? Array.from(currentRegion.children).map((child) => child.tagName) : [],
-            hasVideo: Boolean(video),
-            hasCanvas: Boolean(canvas),
-            videoReadyState: video?.readyState,
-            videoPaused: video?.paused,
-            videoClientWidth: video?.clientWidth,
-            videoClientHeight: video?.clientHeight,
-            videoWidth: video?.videoWidth,
-            videoHeight: video?.videoHeight,
+            regionClientWidth: qrScannerContainerRef.current?.clientWidth,
+            regionClientHeight: qrScannerContainerRef.current?.clientHeight,
+            hasVideo: Boolean(activeVideo),
+            hasCanvas: Boolean(activeCanvas),
+            videoReadyState: activeVideo?.readyState,
+            videoPaused: activeVideo?.paused,
+            videoClientWidth: activeVideo?.clientWidth,
+            videoClientHeight: activeVideo?.clientHeight,
+            videoWidth: activeVideo?.videoWidth,
+            videoHeight: activeVideo?.videoHeight,
           });
         }, 500);
 
@@ -585,8 +604,7 @@ export function StoreAgentDrawer() {
         logLiveQrDebug("boot-error", {
           errorName: error instanceof Error ? error.name : String(error),
           errorMessage: error instanceof Error ? error.message : String(error),
-          regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
-          scannerStarted,
+          regionExists: Boolean(qrScannerContainerRef.current),
         });
         setQrScannerState("error");
         setQrScannerError("No pude abrir la cámara para escanear. Usa foto del QR como alternativa.");
@@ -600,33 +618,23 @@ export function StoreAgentDrawer() {
     return () => {
       isActive = false;
       logLiveQrDebug("effect-cleanup", {
-        scannerStarted,
-        hasScanner: Boolean(liveQrScannerRef.current),
-        regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+        hasStream: Boolean(qrStreamRef.current),
+        regionExists: Boolean(qrScannerContainerRef.current),
       });
       setQrScannerState("idle");
       setQrScannerError(null);
-      const scanner = liveQrScannerRef.current;
-      if (!scanner || !scannerStarted) {
-        logLiveQrDebug("cleanup-skip-stop", {
-          hasScanner: Boolean(scanner),
-          scannerStarted,
-        });
-        return;
+      if (qrScanFrameRef.current) {
+        window.cancelAnimationFrame(qrScanFrameRef.current);
+        qrScanFrameRef.current = null;
       }
 
-      liveQrScannerRef.current = null;
-      void scanner
-        .stop()
-        .then(() => {
-          logLiveQrDebug("cleanup-stop-finished");
-        })
-        .catch((error) => {
-          logLiveQrDebug("cleanup-stop-error", {
-            errorName: error instanceof Error ? error.name : String(error),
-            errorMessage: error instanceof Error ? error.message : String(error),
-          });
-        });
+      qrVideoRef.current?.pause();
+      if (qrVideoRef.current) {
+        qrVideoRef.current.srcObject = null;
+      }
+      qrStreamRef.current?.getTracks().forEach((track) => track.stop());
+      qrStreamRef.current = null;
+      logLiveQrDebug("cleanup-stop-finished");
     };
   }, [showQrScanner]);
 
@@ -1023,10 +1031,14 @@ export function StoreAgentDrawer() {
               </button>
             </div>
             <div ref={qrScannerContainerRef} className="relative h-[320px] w-full overflow-hidden rounded-2xl bg-black">
-              <div
-                id={qrScannerRegionIdRef.current}
-                className="h-[320px] w-full [&_video]:h-[320px] [&_video]:w-full [&_video]:object-cover [&_canvas]:h-[320px] [&_canvas]:w-full [&_canvas]:object-cover"
+              <video
+                ref={qrVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="h-[320px] w-full object-cover"
               />
+              <canvas ref={qrCanvasRef} className="hidden" />
               {qrScannerState !== "ready" ? (
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white/80">
                   <ScanLine className="h-8 w-8" />
