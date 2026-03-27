@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, UserRoundPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
+import { createClientId } from "@/lib/id";
 import { getDraftItemCount, getDraftTotal, type DraftTransaction } from "@/lib/store-pos";
 import { useAuth } from "@/providers/auth-provider";
 import { useStorePos } from "@/providers/store-pos-provider";
@@ -106,7 +107,7 @@ export default function StorePOSPage() {
         {
           userId: draft.customer?.userId,
           cardId: draft.customer?.cardId,
-          idempotencyKey: `store-pos-${crypto.randomUUID()}`,
+          idempotencyKey: `store-pos-${createClientId()}`,
           items: draft.items.map((item) => ({
             storeProductId: item.storeProductId,
             quantity: item.quantity,

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { ArrowDown, Bot, LoaderCircle, MessageSquarePlus, Mic, Paperclip, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
+import { createClientId } from "@/lib/id";
 import { getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type StorePosDraft } from "@/lib/store-pos";
 import { useStorePos } from "@/providers/store-pos-provider";
 
@@ -147,7 +148,7 @@ export function StoreAgentDrawer() {
     );
 
     const userMessage: AgentMessage = {
-      id: crypto.randomUUID(),
+      id: createClientId(),
       role: "user",
       content:
         trimmed || (preparedAttachments.some((attachment) => attachment.kind === "audio") ? AUDIO_PLACEHOLDER : "Adjunto una imagen para escanear."),
@@ -193,7 +194,7 @@ export function StoreAgentDrawer() {
       setMessages((current) => [
         ...current,
         {
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: "assistant",
           content: "No pude completar esa acción. Revisa la conexión o intenta nuevamente.",
         },
@@ -259,7 +260,7 @@ export function StoreAgentDrawer() {
 
         const dataUrl = await readFileAsDataUrl(blob);
         const attachment: AgentAttachment = {
-          id: crypto.randomUUID(),
+          id: createClientId(),
           name: `nota-de-voz.${getAudioExtension(contentType)}`,
           contentType,
           dataUrl,
@@ -471,7 +472,7 @@ export function StoreAgentDrawer() {
                     const files = Array.from(event.target.files ?? []);
                     const nextAttachments = await Promise.all(
                       files.map(async (file) => ({
-                        id: crypto.randomUUID(),
+                        id: createClientId(),
                         name: file.name,
                         contentType: file.type || "image/png",
                         dataUrl: await readFileAsDataUrl(file),
