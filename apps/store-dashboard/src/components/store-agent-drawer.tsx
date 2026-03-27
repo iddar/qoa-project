@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowDown, AudioLines, Bot, Camera, LoaderCircle, MessageSquarePlus, Mic, QrCode, ScanLine, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, AudioLines, Bot, Camera, LoaderCircle, MessageSquarePlus, Mic, Paperclip, QrCode, ScanLine, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
 import { getInitialCopilotActions } from "@/lib/store-copilot";
@@ -130,6 +130,8 @@ export function StoreAgentDrawer() {
   const [canUseLiveQrScanner, setCanUseLiveQrScanner] = useState(false);
   const [canUseLiveAudio, setCanUseLiveAudio] = useState(false);
   const [showQrScanner, setShowQrScanner] = useState(false);
+  const [qrScannerState, setQrScannerState] = useState<"idle" | "starting" | "ready" | "error">("idle");
+  const [qrScannerError, setQrScannerError] = useState<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const qrCaptureInputRef = useRef<HTMLInputElement | null>(null);
   const audioUploadInputRef = useRef<HTMLInputElement | null>(null);
@@ -358,6 +360,8 @@ export function StoreAgentDrawer() {
 
     const bootScanner = async () => {
       try {
+        setQrScannerState("starting");
+        setQrScannerError(null);
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
         if (!isActive) {
           return;
@@ -390,7 +394,13 @@ export function StoreAgentDrawer() {
         } catch {
           await scanner.start({ facingMode: "environment" }, scannerConfig, onSuccess, () => undefined);
         }
+
+        if (isActive) {
+          setQrScannerState("ready");
+        }
       } catch {
+        setQrScannerState("error");
+        setQrScannerError("No pude abrir la cámara para escanear. Usa foto del QR como alternativa.");
         setShowQrScanner(false);
         qrCaptureInputRef.current?.click();
       }
@@ -400,6 +410,8 @@ export function StoreAgentDrawer() {
 
     return () => {
       isActive = false;
+      setQrScannerState("idle");
+      setQrScannerError(null);
       if (!scannerInstance) {
         return;
       }
@@ -667,7 +679,11 @@ export function StoreAgentDrawer() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Escaneando QR</p>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">Apunta con la cámara trasera al código de la tarjeta.</p>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {qrScannerState === "starting"
+                    ? "Solicitando acceso a la cámara..."
+                    : "Apunta con la cámara trasera al código de la tarjeta."}
+                </p>
               </div>
               <button
                 type="button"
@@ -677,7 +693,21 @@ export function StoreAgentDrawer() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div id={qrScannerRegionIdRef.current} className="overflow-hidden rounded-2xl bg-black" />
+            <div
+              id={qrScannerRegionIdRef.current}
+              className="relative min-h-[320px] overflow-hidden rounded-2xl bg-black [&_video]:h-[320px] [&_video]:w-full [&_video]:object-cover [&_canvas]:h-[320px] [&_canvas]:w-full [&_canvas]:object-cover"
+            >
+              {qrScannerState !== "ready" ? (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white/80">
+                  <ScanLine className="h-8 w-8" />
+                  <p className="text-sm font-medium">Preparando scanner</p>
+                </div>
+              ) : null}
+            </div>
+            <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+              Mueve el QR dentro del recuadro. La lectura se envía en cuanto se detecta.
+            </p>
+            {qrScannerError ? <p className="mt-2 text-xs text-red-500">{qrScannerError}</p> : null}
           </div>
         ) : null}
 
