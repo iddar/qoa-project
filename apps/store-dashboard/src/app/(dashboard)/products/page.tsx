@@ -125,9 +125,9 @@ export default function StoreProductsPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)]">
-      <header className="mb-6">
-        <div className="flex items-center justify-between">
+    <div className="flex min-h-0 flex-col gap-4 lg:h-[calc(100vh-4rem)]">
+      <header>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Mi Catálogo</h1>
             <p className="mt-1 text-sm text-zinc-500">
@@ -137,7 +137,7 @@ export default function StoreProductsPage() {
           <button
             type="button"
             onClick={() => setShowAddModal(true)}
-            className="rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 sm:w-auto dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
           >
             Agregar Producto
           </button>
@@ -149,7 +149,7 @@ export default function StoreProductsPage() {
             placeholder="Buscar por nombre o SKU..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full max-w-md rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-2.5 text-sm sm:max-w-md dark:border-zinc-700 dark:bg-zinc-900"
           />
         </div>
       </header>
@@ -158,7 +158,7 @@ export default function StoreProductsPage() {
         <p className="text-sm text-zinc-500">Cargando productos...</p>
       )}
 
-      <div className="flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 lg:overflow-y-auto">
         {filteredProducts.length === 0 && !productsQuery.isLoading ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="mb-4 rounded-full bg-zinc-100 p-4 dark:bg-zinc-800">
@@ -183,7 +183,7 @@ export default function StoreProductsPage() {
             )}
           </div>
         ) : (
-          <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:border-zinc-700">
