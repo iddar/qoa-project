@@ -66,34 +66,6 @@ const formatDuration = (durationMs: number) => {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
-const isLikelyIosWebkit = () => {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  return /iP(ad|hone|od)/i.test(navigator.userAgent);
-};
-
-const getQrScannerSupportMessage = () => {
-  if (typeof window === "undefined" || typeof navigator === "undefined") {
-    return "El scanner QR en vivo solo está disponible en el navegador.";
-  }
-
-  if (!window.isSecureContext && window.location.hostname !== "localhost") {
-    return "El scanner QR en vivo requiere HTTPS o localhost. Usa captura de foto del QR.";
-  }
-
-  if (isLikelyIosWebkit()) {
-    return "En iPhone Safari usaremos captura de foto del QR para evitar fallos del scanner en vivo.";
-  }
-
-  if (!navigator.mediaDevices?.getUserMedia) {
-    return "Este navegador no expone cámara en vivo. Usa captura de foto del QR.";
-  }
-
-  return null;
-};
-
 const getRecordingSupportMessage = () => {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return "La grabación solo está disponible en el navegador.";
@@ -105,10 +77,6 @@ const getRecordingSupportMessage = () => {
 
   if (!navigator.mediaDevices?.getUserMedia) {
     return "Este navegador no expone acceso directo al micrófono. Adjunta un audio en su lugar.";
-  }
-
-  if (isLikelyIosWebkit()) {
-    return "En iPhone Safari usaremos adjuntar audio para evitar grabaciones silenciosas.";
   }
 
   if (typeof MediaRecorder === "undefined") {
@@ -215,7 +183,8 @@ export function StoreAgentDrawer() {
       return;
     }
 
-    setCanUseLiveQrScanner(!getQrScannerSupportMessage());
+    const secureContext = window.isSecureContext || window.location.hostname === "localhost";
+    setCanUseLiveQrScanner(secureContext && Boolean(navigator.mediaDevices?.getUserMedia));
     setCanUseLiveAudio(!getRecordingSupportMessage());
   }, []);
 
@@ -388,7 +357,6 @@ export function StoreAgentDrawer() {
       clear: () => void;
     } | null = null;
     let hasResolved = false;
-    let scannerStarted = false;
 
     const bootScanner = async () => {
       try {
@@ -426,7 +394,6 @@ export function StoreAgentDrawer() {
         } catch {
           await scanner.start({ facingMode: "environment" }, scannerConfig, onSuccess, () => undefined);
         }
-        scannerStarted = true;
 
         if (isActive) {
           setQrScannerState("ready");
@@ -445,11 +412,17 @@ export function StoreAgentDrawer() {
       isActive = false;
       setQrScannerState("idle");
       setQrScannerError(null);
-      if (!scannerInstance || !scannerStarted) {
+      if (!scannerInstance) {
         return;
       }
 
-      void scannerInstance.stop().catch(() => undefined);
+      void scannerInstance.stop().catch(() => undefined).finally(() => {
+        try {
+          scannerInstance?.clear();
+        } catch {
+          // ignore scanner cleanup issues
+        }
+      });
     };
   }, [showQrScanner]);
 
@@ -763,7 +736,7 @@ export function StoreAgentDrawer() {
           </div>
         ) : null}
 
-        {recordingError ? <p className="mb-3 text-xs text-amber-600 dark:text-amber-400">{recordingError}</p> : null}
+        {recordingError ? <p className="mb-3 text-xs text-red-500">{recordingError}</p> : null}
 
         {isRecording ? (
           <div className="mb-3 flex items-center justify-between rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
