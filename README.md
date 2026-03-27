@@ -45,14 +45,14 @@ Sistema de lealtad para el tendero, facilitado por T-Conecta (Qoa).
 ## Preguntas abiertas (para completar después)
 
 - ¿Esquema de puntos, estampas o combinación?
-El sistema debe ser capas de operar ambos, al crear una campaña se define el esquema. 
+  El sistema debe ser capas de operar ambos, al crear una campaña se define el esquema.
 - ¿Qué ofrecemos como premio al cliente final? (alinear con Comercial).
-Esto debe ser configurable por campaña.
+  Esto debe ser configurable por campaña.
 - ¿Qué tan “automático” es el escaneo en tienda (UX y tiempos reales)? ¿Qué hacemos si falla?
-Este es un punto crítico a validar en la POC, debemos de brindar toda la tecnología para que nos puean integrar fácilmente, debemos tener un buen control de errores y tiempos de respuesta.
-esto debe ir directo a la documentación técnica.
+  Este es un punto crítico a validar en la POC, debemos de brindar toda la tecnología para que nos puean integrar fácilmente, debemos tener un buen control de errores y tiempos de respuesta.
+  esto debe ir directo a la documentación técnica.
 - ¿Cuáles son los “PLI” iniciales (productos), cuántos CPGs y bajo qué reglas de campaña?
-Todo esto son parametros configurables en la creación de campañas, aun no tengo claro la estructura final de las campañas, como se introducen los PLI, sobretodo 
+  Todo esto son parametros configurables en la creación de campañas, aun no tengo claro la estructura final de las campañas, como se introducen los PLI, sobretodo
 - ¿Qué métricas mínimas definen éxito del piloto (retención, conversión, repetición, incremento de venta, etc.)?
 
 ## Documentación
@@ -80,6 +80,7 @@ Este proyecto está configurado para GitHub Codespaces, lo que permite desarroll
 - ✅ Hot-reload para desarrollo rápido
 
 Para empezar:
+
 1. Haz clic en el badge de arriba (el botón aparecerá en inglés como "Open in GitHub Codespaces")
 2. Espera a que el entorno se configure (2-3 minutos)
 3. Ejecuta `bun run dev` en la terminal
@@ -103,16 +104,16 @@ Actualiza esos valores antes de desplegar en otros entornos; no compartas secret
 
 1. Construye e inicia toda la pila (API Bun + Postgres + Redis):
 
-   ```bash
-   docker compose up --build
-   ```
+    ```bash
+    docker compose up --build
+    ```
 
 2. La app expone `http://localhost:3000/health` y la UI de OpenAPI en `/openapi`.
 3. Para apagar los servicios y conservar los datos de Postgres/Redis en volúmenes locales:
 
-   ```bash
-   docker compose down
-   ```
+    ```bash
+    docker compose down
+    ```
 
 Los servicios usan el archivo indicado por `QOA_ENV_FILE` y, si no lo defines, toman `src/.env.local`.
 
@@ -148,24 +149,24 @@ Cuando quieras aprovechar hot-reload de `bun run dev` pero mantener la misma bas
 
 1. Levanta únicamente las dependencias:
 
-   ```bash
-   QOA_ENV_FILE=src/.env.development docker compose --env-file src/.env.development up -d postgres postgres_test
-   ```
+    ```bash
+    QOA_ENV_FILE=src/.env.development docker compose --env-file src/.env.development up -d postgres postgres_test
+    ```
 
 2. Usa las variables de `src/.env.development`. En este modo, Bun corre en tu host y consume Postgres/Redis publicados por Docker en `127.0.0.1`.
 3. Ejecuta la app local:
 
-   ```bash
-   cd src
-   bun install
-   bun run dev
-   ```
+    ```bash
+    cd src
+    bun install
+    bun run dev
+    ```
 
 4. Cuando termines, detén los contenedores (los volúmenes persisten):
 
-   ```bash
-   docker compose stop postgres postgres_test
-   ```
+    ```bash
+    docker compose stop postgres postgres_test
+    ```
 
 ### Flujo de desarrollo local (sin contenedores)
 
@@ -263,13 +264,13 @@ En `development` y `local`, el seed ahora incluye dataset enriquecido para demos
 
 Credenciales de prueba (password compartido: `Password123!`):
 
-| Rol | Email | Acceso |
-|---|---|---|
-| `qoa_admin` | `admin.<entorno>@qoa.local` | Backoffice (superadmin) |
-| `qoa_support` | `support.<entorno>@qoa.local` | Backoffice (solo lectura) |
-| `store_admin` | `store.<entorno>@qoa.local` | — |
-| `consumer` | `consumer.<entorno>@qoa.local` | App cliente |
-| `cpg_admin` | `cpg.<entorno>@qoa.local` | CPG Portal |
+| Rol           | Email                          | Acceso                    |
+| ------------- | ------------------------------ | ------------------------- |
+| `qoa_admin`   | `admin.<entorno>@qoa.local`    | Backoffice (superadmin)   |
+| `qoa_support` | `support.<entorno>@qoa.local`  | Backoffice (solo lectura) |
+| `store_admin` | `store.<entorno>@qoa.local`    | —                         |
+| `consumer`    | `consumer.<entorno>@qoa.local` | App cliente               |
+| `cpg_admin`   | `cpg.<entorno>@qoa.local`      | CPG Portal                |
 
 Donde `<entorno>` puede ser `development`, `local` o `test`.
 
@@ -277,9 +278,9 @@ Donde `<entorno>` puede ser `development`, `local` o `test`.
 
 El monorepo incluye las siguientes aplicaciones bajo `apps/`:
 
-| App | Puerto | Descripción | Comando |
-|---|---|---|---|
-| `backoffice` | `3001` | Panel interno para operadores Qoa (`qoa_admin`, `qoa_support`) | `bun run dev` desde `apps/backoffice` |
+| App          | Puerto | Descripción                                                                                     | Comando                               |
+| ------------ | ------ | ----------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `backoffice` | `3001` | Panel interno para operadores Qoa (`qoa_admin`, `qoa_support`)                                  | `bun run dev` desde `apps/backoffice` |
 | `cpg-portal` | `3002` | Portal para fabricantes CPG (`cpg_admin`) — gestión de marcas, productos y métricas de campañas | `bun run dev` desde `apps/cpg-portal` |
 
 Ambas apps comparten el mismo backend (`@qoa/core` en el puerto `3000`) y usan tokens JWT independientes almacenados en `localStorage` con claves distintas para evitar colisiones de sesión.
@@ -289,24 +290,44 @@ Ambas apps comparten el mismo backend (`@qoa/core` en el puerto `3000`) y usan t
 1. Define/actualiza las tablas en `src/db/schema/*.ts` (p. ej. `tenants`).
 2. Genera el SQL versionado y los snapshots JSON:
 
-   ```bash
-   cd src
-   bun run db:generate
-   ```
+    ```bash
+    cd src
+    bun run db:generate
+    ```
 
-   Esto produce archivos en `src/drizzle/` (ej. `0000_red_shockwave.sql`) siguiendo la guía oficial de [Drizzle migrations](https://orm.drizzle.team/docs/migrations).
+    Esto produce archivos en `src/drizzle/` (ej. `0000_red_shockwave.sql`) siguiendo la guía oficial de [Drizzle migrations](https://orm.drizzle.team/docs/migrations).
+
 3. Aplica las migraciones al Postgres que tengas configurado mediante `DATABASE_URL` (usa `.env.local`, `.env.development` o `.env.test` según el flujo):
 
-   ```bash
-   cd src
-   bun run db:migrate
-   ```
+    ```bash
+    cd src
+    bun run db:migrate
+    ```
 
 4. En entornos Docker, ejecuta las migraciones dentro del contenedor de la app antes de exponer tráfico:
 
-   ```bash
-   QOA_ENV_FILE=src/.env.local docker compose --env-file src/.env.local run --rm app bun run db:migrate
-   ```
+    ```bash
+    QOA_ENV_FILE=src/.env.local docker compose --env-file src/.env.local run --rm app bun run db:migrate
+    ```
 
 Todas las migraciones y snapshots (`src/drizzle/meta`) se deben versionar en Git para garantizar reproducibilidad.
 La aplicación usa el driver nativo de Bun (`drizzle-orm/bun-sql` + [`SQL` de Bun](https://bun.sh/docs/runtime/sql)), así que no requiere adaptadores como `postgres` o `pg`.
+
+## Notas de voz para POS
+
+El asistente POS puede aceptar mensajes de voz si `chough` está corriendo en modo servidor.
+
+### Variables
+
+- `CHOUGH_URL` - URL del servidor de transcripción, por ejemplo `http://127.0.0.1:8080`
+
+### Levantar el servidor de voz
+
+En una terminal separada:
+
+```sh
+chough --server --host 127.0.0.1 --port 8080
+
+curl http://127.0.0.1:8080/health
+
+```
