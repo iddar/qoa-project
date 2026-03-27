@@ -4,6 +4,7 @@ import { minimax } from "vercel-minimax-ai-provider";
 import sharp from "sharp";
 import { z } from "zod";
 import { api } from "@/lib/api";
+import { getProductMatchScore, normalizeText, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
 import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
@@ -152,99 +153,6 @@ const describeDraft = (draft: StorePosDraft) => {
   return JSON.stringify(summary, null, 2);
 };
 
-const normalizeText = (value: string) =>
-  value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const levenshteinDistance = (left: string, right: string) => {
-  if (left === right) {
-    return 0;
-  }
-
-  if (!left.length) {
-    return right.length;
-  }
-
-  if (!right.length) {
-    return left.length;
-  }
-
-  const matrix = Array.from({ length: left.length + 1 }, () => new Array<number>(right.length + 1).fill(0));
-  for (let row = 0; row <= left.length; row += 1) {
-    matrix[row]![0] = row;
-  }
-  for (let column = 0; column <= right.length; column += 1) {
-    matrix[0]![column] = column;
-  }
-
-  for (let row = 1; row <= left.length; row += 1) {
-    for (let column = 1; column <= right.length; column += 1) {
-      const cost = left[row - 1] === right[column - 1] ? 0 : 1;
-      matrix[row]![column] = Math.min(
-        matrix[row - 1]![column]! + 1,
-        matrix[row]![column - 1]! + 1,
-        matrix[row - 1]![column - 1]! + cost,
-      );
-    }
-  }
-
-  return matrix[left.length]![right.length]!;
-};
-
-const similarityScore = (left: string, right: string) => {
-  if (!left || !right) {
-    return 0;
-  }
-
-  const longest = Math.max(left.length, right.length);
-  return 1 - levenshteinDistance(left, right) / longest;
-};
-
-const getProductMatchScore = (query: string, product: StoreProduct) => {
-  const normalizedQuery = normalizeText(query);
-  const normalizedName = normalizeText(product.name);
-  const normalizedSku = normalizeText(product.sku ?? "");
-
-  if (!normalizedQuery) {
-    return 0;
-  }
-
-  let score = similarityScore(normalizedQuery, normalizedName);
-
-  if (normalizedName.includes(normalizedQuery)) {
-    score = Math.max(score, Math.min(1, 0.82 + normalizedQuery.length / Math.max(normalizedName.length, 1) * 0.12));
-  }
-
-  if (normalizedSku && normalizedSku.includes(normalizedQuery)) {
-    score = Math.max(score, 0.93);
-  }
-
-  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
-  const nameTokens = normalizedName.split(" ").filter(Boolean);
-  if (queryTokens.length > 0 && nameTokens.length > 0) {
-    let tokenHits = 0;
-    for (const token of queryTokens) {
-      const bestTokenScore = nameTokens.reduce((best, candidate) => Math.max(best, similarityScore(token, candidate)), 0);
-      if (bestTokenScore >= 0.72) {
-        tokenHits += 1;
-      }
-      score = Math.max(score, bestTokenScore * 0.92);
-    }
-
-    if (tokenHits === queryTokens.length) {
-      score = Math.max(score, 0.88);
-    } else if (tokenHits > 0) {
-      score = Math.max(score, 0.7 + tokenHits / queryTokens.length * 0.14);
-    }
-  }
-
-  return score;
-};
 
 const decodeQrPixels = (data: Buffer<ArrayBufferLike>, width: number, height: number) => {
   const decoded = jsQR(new Uint8ClampedArray(data), width, height, {
@@ -526,49 +434,12 @@ export async function POST(request: Request) {
   };
 
   const resolvePendingProductChoice = async (selection: string, quantity: number) => {
-    const choices = workingDraft.pendingProductChoices ?? [];
-    if (choices.length === 0) {
-      return {
-        resolved: false,
-        reason: "no_pending_choices",
-        candidates: [],
-      };
+    const resolution = resolvePendingProductChoiceSelection(workingDraft.pendingProductChoices ?? [], selection);
+    if (!resolution.resolved) {
+      return resolution;
     }
 
-    const rankedChoices = choices
-      .map((choice) => ({
-        choice,
-        score: Math.max(
-          similarityScore(normalizeText(selection), normalizeText(choice.name)),
-          ...normalizeText(choice.name)
-            .split(" ")
-            .filter(Boolean)
-            .map((token) => similarityScore(normalizeText(selection), token)),
-        ),
-      }))
-      .sort((left, right) => right.score - left.score);
-
-    const best = rankedChoices[0];
-    const second = rankedChoices[1];
-
-    if (!best || best.score < 0.55) {
-      return {
-        resolved: false,
-        reason: "no_match",
-        candidates: choices,
-      };
-    }
-
-    const confidentChoice = !second || best.score - second.score >= 0.12 || second.score < 0.58;
-    if (!confidentChoice) {
-      return {
-        resolved: false,
-        reason: "needs_confirmation",
-        candidates: rankedChoices.slice(0, 3).map((entry) => entry.choice),
-      };
-    }
-
-    const addedProduct = await addProductToDraftById(best.choice.storeProductId, quantity);
+    const addedProduct = await addProductToDraftById(resolution.choice.storeProductId, quantity);
 
     return {
       resolved: true,

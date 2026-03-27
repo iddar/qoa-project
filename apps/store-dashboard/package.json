@@ -7,7 +7,8 @@
         "dev": "next dev --port 3003 -H 0.0.0.0",
         "build": "next build",
         "start": "next start --hostname 0.0.0.0 --port ${PORT:-3003}",
-        "lint": "eslint"
+        "lint": "eslint",
+        "test": "bun test"
     },
     "dependencies": {
         "@elysiajs/eden": "^1.4.2",
