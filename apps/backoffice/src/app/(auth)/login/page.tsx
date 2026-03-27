@@ -4,6 +4,18 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 
+function getLoginErrorMessage(caughtError: unknown) {
+  if (caughtError instanceof TypeError) {
+    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+  }
+
+  if (caughtError instanceof Error && /fetch|network|load failed/i.test(caughtError.message)) {
+    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+  }
+
+  return "Credenciales inválidas";
+}
+
 export default function LoginPage() {
   const { login, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -36,8 +48,8 @@ export default function LoginPage() {
     try {
       await login(email, password);
       router.replace("/");
-    } catch {
-      setError("Credenciales inválidas");
+    } catch (caughtError) {
+      setError(getLoginErrorMessage(caughtError));
     } finally {
       setSubmitting(false);
     }

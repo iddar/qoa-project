@@ -1,0 +1,33 @@
+{
+	auto_https disable_redirects
+}
+
+https://192.168.1.203:3443 {
+	tls internal
+	reverse_proxy 127.0.0.1:3000
+}
+
+https://192.168.1.203:3444 {
+	tls internal
+	reverse_proxy 127.0.0.1:3001
+}
+
+https://192.168.1.203:3445 {
+	tls internal
+	reverse_proxy 127.0.0.1:3002
+}
+
+https://192.168.1.203:3446 {
+	tls internal
+	reverse_proxy 127.0.0.1:3003
+}
+
+https://192.168.1.203:3447 {
+	tls internal
+	reverse_proxy 127.0.0.1:3004
+}
+
+https://192.168.1.203:3448 {
+	tls internal
+	reverse_proxy 127.0.0.1:8080
+}

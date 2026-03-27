@@ -3,6 +3,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_FILE="${QOA_ENV_FILE:-src/.env.development}"
+
+if [[ "$ENV_FILE" != /* ]]; then
+  ENV_FILE="$ROOT_DIR/$ENV_FILE"
+fi
 
 usage() {
   cat <<'EOF'
@@ -18,7 +23,7 @@ EOF
 command="${1:-up}"
 
 compose() {
-  docker compose --env-file src/.env.development "$@"
+  docker compose --env-file "$ENV_FILE" "$@"
 }
 
 wait_for_service() {
@@ -51,8 +56,9 @@ case "$command" in
     compose up -d --remove-orphans postgres postgres_test
     wait_for_service postgres
     wait_for_service postgres_test
-    bun run --cwd "$ROOT_DIR/src" db:rebuild:development
-    bun run --env-file=.env.development --parallel --workspaces --if-present dev
+    bun --env-file="$ENV_FILE" run --cwd "$ROOT_DIR/src" db:rebuild
+    bun --env-file="$ENV_FILE" run --cwd "$ROOT_DIR/src" db:seed:development
+    bun --env-file="$ENV_FILE" run --parallel --workspaces --if-present dev
     ;;
   down)
     compose stop postgres postgres_test
@@ -61,7 +67,8 @@ case "$command" in
     compose up -d --remove-orphans postgres postgres_test
     wait_for_service postgres
     wait_for_service postgres_test
-    bun run --cwd "$ROOT_DIR/src" db:rebuild:development
+    bun --env-file="$ENV_FILE" run --cwd "$ROOT_DIR/src" db:rebuild
+    bun --env-file="$ENV_FILE" run --cwd "$ROOT_DIR/src" db:seed:development
     ;;
   logs)
     compose logs -f postgres postgres_test

@@ -5,6 +5,30 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 
+function getLoginErrorMessage(caughtError: unknown) {
+  if (caughtError instanceof Error && caughtError.message === "not_wallet_user") {
+    return "Tu cuenta no tiene acceso a la wallet. Usa un usuario consumer/customer.";
+  }
+
+  if (caughtError instanceof Error && caughtError.message === "wallet_provision_failed") {
+    return "El usuario inicio sesion, pero no se pudo provisionar la wallet.";
+  }
+
+  if (caughtError instanceof Error && caughtError.message === "profile_fetch_failed") {
+    return "El login si respondio, pero no pudimos validar la sesion contra el API. Revisa el certificado de Caddy en tu iPhone.";
+  }
+
+  if (caughtError instanceof TypeError) {
+    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+  }
+
+  if (caughtError instanceof Error && /fetch|network|load failed/i.test(caughtError.message)) {
+    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+  }
+
+  return "No pudimos iniciar sesión con esos datos.";
+}
+
 export default function WalletLoginPage() {
   const { login, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -35,8 +59,8 @@ export default function WalletLoginPage() {
     try {
       await login(email, password);
       router.replace("/");
-    } catch {
-      setError("No pudimos iniciar sesión con esos datos.");
+    } catch (caughtError) {
+      setError(getLoginErrorMessage(caughtError));
     } finally {
       setSubmitting(false);
     }
@@ -51,6 +75,7 @@ export default function WalletLoginPage() {
         <p className="text-xs uppercase tracking-[0.2em] text-amber-600">Qoa Wallet</p>
         <h1 className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-100">Tu tarjeta digital</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Consulta QR, recompensas e historial desde el celular.</p>
+        <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">Usuario sugerido: consumer.development@qoa.local / Password123!</p>
 
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-amber-50 px-2 py-1.5 dark:bg-zinc-800/70">

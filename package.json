@@ -11,6 +11,7 @@
     "doctor:local": "bash scripts/setup-local.sh doctor",
     "dev:env": "bash scripts/dev.sh",
     "dev:env:public": "bash scripts/dev-public.sh",
+    "dev:env:ngrok:store": "bash scripts/dev-store-ngrok.sh",
     "dev:down": "bash scripts/dev.sh down",
     "dev:rebuild": "bash scripts/dev.sh rebuild",
     "local:env": "bash scripts/local.sh",

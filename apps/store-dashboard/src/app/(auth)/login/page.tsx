@@ -4,6 +4,30 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 
+function getLoginErrorMessage(caughtError: unknown) {
+  if (caughtError instanceof Error && caughtError.message === "store_tenant_required") {
+    return "Tu usuario de tienda no tiene tenant asociado. Contacta a soporte.";
+  }
+
+  if (caughtError instanceof Error && caughtError.message === "not_store_operator") {
+    return "Tu cuenta no tiene acceso al dashboard de tienda.";
+  }
+
+  if (caughtError instanceof Error && caughtError.message === "profile_fetch_failed") {
+    return "El login si respondio, pero no pudimos validar la sesion contra el API. Revisa el certificado de Caddy en tu iPhone.";
+  }
+
+  if (caughtError instanceof TypeError) {
+    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+  }
+
+  if (caughtError instanceof Error && /fetch|network|load failed/i.test(caughtError.message)) {
+    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+  }
+
+  return "Credenciales inválidas.";
+}
+
 export default function LoginPage() {
   const { login, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -35,13 +59,7 @@ export default function LoginPage() {
       await login(email, password);
       router.replace("/");
     } catch (caughtError) {
-      if (caughtError instanceof Error && caughtError.message === "store_tenant_required") {
-        setError("Tu usuario de tienda no tiene tenant asociado. Contacta a soporte.");
-      } else if (caughtError instanceof Error && caughtError.message === "not_store_operator") {
-        setError("Tu cuenta no tiene acceso al dashboard de tienda.");
-      } else {
-        setError("Credenciales inválidas.");
-      }
+      setError(getLoginErrorMessage(caughtError));
     } finally {
       setSubmitting(false);
     }
