@@ -34,13 +34,30 @@ const readFileAsDataUrl = (file: Blob) =>
     reader.readAsDataURL(file);
   });
 
-const AUDIO_MIME_CANDIDATES = [
-  "audio/webm;codecs=opus",
-  "audio/webm",
-  "audio/mp4",
-  "audio/mp4;codecs=mp4a.40.2",
-  "audio/ogg;codecs=opus",
-];
+const isAppleWebKit = () => {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  const userAgent = navigator.userAgent;
+  return /Safari/i.test(userAgent) && !/Chrome|Chromium|Android/i.test(userAgent);
+};
+
+const AUDIO_MIME_CANDIDATES = isAppleWebKit()
+  ? [
+      "audio/mp4;codecs=mp4a.40.2",
+      "audio/mp4",
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+    ]
+  : [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4;codecs=mp4a.40.2",
+      "audio/mp4",
+      "audio/ogg;codecs=opus",
+    ];
 
 const getSupportedAudioMimeType = () => {
   if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
@@ -76,6 +93,29 @@ const formatBytes = (bytes: number) => {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const revokeAttachmentPreviewUrl = (attachment: AgentAttachment) => {
+  if (attachment.previewUrl?.startsWith("blob:")) {
+    URL.revokeObjectURL(attachment.previewUrl);
+  }
+};
+
+const mergeClientAttachmentFields = (serverMessage: AgentMessage, localMessages: AgentMessage[]) => {
+  const localMessage = localMessages.find((message) => message.id === serverMessage.id);
+  if (!localMessage?.attachments?.length || !serverMessage.attachments?.length) {
+    return serverMessage;
+  }
+
+  return {
+    ...serverMessage,
+    attachments: serverMessage.attachments.map((attachment) => {
+      const localAttachment = localMessage.attachments?.find((candidate) => candidate.id === attachment.id);
+      return localAttachment?.previewUrl
+        ? { ...attachment, previewUrl: localAttachment.previewUrl }
+        : attachment;
+    }),
+  };
 };
 
 const getRecordingSupportMessage = () => {
@@ -160,10 +200,20 @@ export function StoreAgentDrawer() {
   const recordingPeakLevelRef = useRef(0);
   const recordingAverageAccumulatorRef = useRef(0);
   const recordingSampleCountRef = useRef(0);
+  const attachmentsRef = useRef<AgentAttachment[]>([]);
+  const messagesRef = useRef<AgentMessage[]>([]);
   const liveQrScannerRef = useRef<{
     start: (...args: unknown[]) => Promise<unknown>;
     stop: () => Promise<void>;
   } | null>(null);
+
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   useEffect(() => {
     if (pathname.startsWith("/pos")) {
@@ -200,6 +250,8 @@ export function StoreAgentDrawer() {
       if (audioLevelAnimationFrameRef.current) {
         window.cancelAnimationFrame(audioLevelAnimationFrameRef.current);
       }
+      messagesRef.current.forEach((message) => message.attachments?.forEach(revokeAttachmentPreviewUrl));
+      attachmentsRef.current.forEach(revokeAttachmentPreviewUrl);
       analyserRef.current?.disconnect();
       audioContextRef.current?.close().catch(() => undefined);
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -283,7 +335,14 @@ export function StoreAgentDrawer() {
 
     setMessages((current) => [...current, userMessage]);
     setInput("");
-    setAttachments([]);
+    setAttachments((current) => {
+      current.forEach((attachment) => {
+        if (!userMessage.attachments?.some((candidate) => candidate.id === attachment.id)) {
+          revokeAttachmentPreviewUrl(attachment);
+        }
+      });
+      return [];
+    });
     setPending(true);
 
     try {
@@ -311,8 +370,9 @@ export function StoreAgentDrawer() {
 
       replaceDraft(data.draft);
       setMessages((current) => {
+        const mergedUserMessage = data.userMessage ? mergeClientAttachmentFields(data.userMessage, current) : null;
         const withUpdatedUserMessage = data.userMessage
-          ? current.map((message) => (message.id === data.userMessage?.id ? data.userMessage : message))
+          ? current.map((message) => (message.id === data.userMessage?.id ? mergedUserMessage ?? data.userMessage : message))
           : current;
         return [...withUpdatedUserMessage, data.message];
       });
@@ -331,7 +391,13 @@ export function StoreAgentDrawer() {
   };
 
   const removeAttachment = (attachmentId: string) => {
-    setAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId));
+    setAttachments((current) => {
+      const nextAttachments = current.filter((attachment) => attachment.id !== attachmentId);
+      current
+        .filter((attachment) => attachment.id === attachmentId)
+        .forEach(revokeAttachmentPreviewUrl);
+      return nextAttachments;
+    });
   };
 
   const attachQrImages = async (files: FileList | File[]) => {
@@ -473,6 +539,7 @@ export function StoreAgentDrawer() {
       name: `nota-de-voz.${getAudioExtension(contentType)}`,
       contentType,
       dataUrl,
+      previewUrl: URL.createObjectURL(blob),
       kind: "audio",
       durationMs,
       status: "ready",
@@ -486,7 +553,10 @@ export function StoreAgentDrawer() {
       },
     };
 
-    setAttachments((current) => [...current.filter((entry) => entry.kind !== "audio"), attachment]);
+    setAttachments((current) => {
+      current.filter((entry) => entry.kind === "audio").forEach(revokeAttachmentPreviewUrl);
+      return [...current.filter((entry) => entry.kind !== "audio"), attachment];
+    });
   };
 
   const startRecording = async () => {
@@ -602,7 +672,7 @@ export function StoreAgentDrawer() {
       };
 
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      recorder.start(250);
       recordingTimerRef.current = window.setInterval(() => {
         if (recordingStartedAtRef.current) {
           setRecordingDurationMs(Date.now() - recordingStartedAtRef.current);
@@ -720,7 +790,7 @@ export function StoreAgentDrawer() {
                     <p>{file.kind === "audio" ? "Nota de voz" : "Adjunto"}: {file.name}</p>
                     {file.durationMs ? <p>Duración: {formatDuration(file.durationMs)}</p> : null}
                     {file.kind === "audio" ? (
-                      <audio controls preload="metadata" src={file.dataUrl} className="mt-2 w-full max-w-full" />
+                      <audio controls preload="metadata" src={file.previewUrl ?? file.dataUrl} className="mt-2 w-full max-w-full" />
                     ) : null}
                     {file.status === "processing" ? <p>Transcribiendo...</p> : null}
                     {file.status === "failed" ? <p>No se pudo transcribir.</p> : null}
@@ -845,7 +915,7 @@ export function StoreAgentDrawer() {
             {attachments.filter((attachment) => attachment.kind === "audio").map((attachment) => (
               <div key={`${attachment.id}-preview`} className="rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
                 <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Preview de nota de voz</p>
-                <audio controls preload="metadata" src={attachment.dataUrl} className="w-full max-w-full" />
+                <audio controls preload="metadata" src={attachment.previewUrl ?? attachment.dataUrl} className="mt-3 w-full max-w-full" />
                 {attachment.debug ? (
                   <div className="mt-3 rounded-2xl bg-white/70 px-3 py-2 text-[11px] text-zinc-500 dark:bg-zinc-950/70 dark:text-zinc-400">
                     <p>
