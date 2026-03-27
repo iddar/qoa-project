@@ -546,13 +546,14 @@ export function StoreAgentDrawer() {
     <>
       <button
         type="button"
+        aria-label="Abrir asistente POS"
         onClick={() => setAgentOpen(true)}
-        className={`fixed right-5 bottom-5 z-40 inline-flex items-center gap-2 rounded-full bg-zinc-950 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-950/20 transition hover:-translate-y-0.5 dark:bg-white dark:text-zinc-950 ${
+        className={`fixed right-4 bottom-24 z-40 inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-3 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-950/20 transition hover:-translate-y-0.5 lg:right-5 lg:bottom-5 lg:px-4 dark:bg-white dark:text-zinc-950 ${
           isAgentOpen ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
       >
         <Sparkles className="h-4 w-4" />
-        Asistente POS
+        <span className="hidden lg:inline">Asistente POS</span>
       </button>
 
       <aside
