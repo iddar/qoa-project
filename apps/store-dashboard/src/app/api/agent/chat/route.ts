@@ -5,8 +5,8 @@ import sharp from "sharp";
 import { z } from "zod";
 import { api } from "@/lib/api";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
-import { buildCopilotActions, getProductMatchScore, normalizeText, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
-import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
+import { buildCopilotActions, hasConfidentSingleProductMatch, planRequestedOrderItems, rankProductsByQuery, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
+import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAddedItem, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 
@@ -26,6 +26,17 @@ const requestSchema = z.object({
                 phone: z.string(),
                 email: z.string().optional(),
               })
+              .optional(),
+            addedItems: z
+              .array(
+                z.object({
+                  storeProductId: z.string(),
+                  name: z.string(),
+                  quantity: z.number(),
+                  unitPrice: z.number(),
+                  lineTotal: z.number(),
+                }),
+              )
               .optional(),
             attachments: z
         .array(
@@ -484,14 +495,7 @@ export async function POST(request: Request) {
   const rankStoreProducts = async (query: string) => {
     const products = await getStoreProducts();
 
-    return products
-      .map((product) => ({
-        product,
-        score: getProductMatchScore(query, product),
-      }))
-      .filter((entry) => entry.score >= 0.45)
-      .sort((left, right) => right.score - left.score)
-      .slice(0, 8) as RankedStoreProduct[];
+    return rankProductsByQuery(query, products) as RankedStoreProduct[];
   };
 
   const clearPendingProductChoices = () => {
@@ -528,6 +532,61 @@ export async function POST(request: Request) {
     return product;
   };
 
+  const buildAddedItem = (product: StoreProduct, quantity: number): AgentAddedItem => ({
+    storeProductId: product.id,
+    name: product.name,
+    quantity,
+    unitPrice: Number(product.price),
+    lineTotal: Number(product.price) * quantity,
+  });
+
+  const buildAddedItemsMessage = (addedItems: AgentAddedItem[]) => {
+    if (addedItems.length === 1) {
+      const [item] = addedItems;
+      return `Listo, agregué **${item?.quantity} ${item?.name}** al pedido por **$${item?.lineTotal}**.`;
+    }
+
+    const lines = addedItems.map((item) => `- **${item.quantity} x ${item.name}** · $${item.lineTotal}`);
+    return `Listo, agregué estos productos al pedido:\n${lines.join("\n")}`;
+  };
+
+  const tryHandleDeterministicCartBuild = async () => {
+    if (!normalizedUserMessage || normalizedUserMessage.role !== "user") {
+      return null;
+    }
+
+    if ((workingDraft.pendingProductChoices?.length ?? 0) > 0) {
+      return null;
+    }
+
+    const plannedOrder = planRequestedOrderItems(normalizedUserMessage.content, await getStoreProducts());
+    if (plannedOrder.requests.length === 0 || plannedOrder.resolved.length === 0 || plannedOrder.unresolved.length > 0) {
+      return null;
+    }
+
+    const addedItems: AgentAddedItem[] = [];
+    for (const entry of plannedOrder.resolved) {
+      const addedProduct = await addProductToDraftById(entry.match.product.id, entry.request.quantity);
+      addedItems.push(buildAddedItem(addedProduct, entry.request.quantity));
+    }
+
+    const content = buildAddedItemsMessage(addedItems);
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        addedItems,
+        actions: buildCopilotActions(workingDraft),
+      },
+      userMessage: normalizedUserMessage,
+      draft: workingDraft,
+    });
+  };
+
   const resolvePendingProductChoice = async (selection: string, quantity: number) => {
     const resolution = resolvePendingProductChoiceSelection(workingDraft.pendingProductChoices ?? [], selection);
     if (!resolution.resolved) {
@@ -558,10 +617,17 @@ export async function POST(request: Request) {
     "Si acabas de ofrecer opciones de producto y el tendero responde con una palabra corta como un sabor, marca o variante, intenta primero resolvePendingProductChoice.",
     "Si una tool ya tiene suficiente informacion para agregar el producto o ligar al cliente, ejecutala sin pedir confirmacion adicional.",
     "Minimiza interacciones innecesarias: solo pide aclaracion cuando una tool devuelva varias opciones plausibles o baja confianza.",
+    "Prioriza armar el pedido: si tienes suficiente informacion para agregar productos, agregalos de inmediato en vez de pedir confirmacion.",
+    "Solo muestra opciones o confirmaciones cuando la tool no tenga suficiente certeza para actuar sola.",
     "Si solo hay una coincidencia claramente probable para un producto, agregala sin pedir aclaracion.",
     "Solo pide aclaracion cuando haya varias coincidencias plausibles o la confianza sea baja.",
     `Estado actual del pedido:\n${describeDraft(workingDraft)}`,
   ].join("\n\n");
+
+  const deterministicCartBuildResponse = await tryHandleDeterministicCartBuild();
+  if (deterministicCartBuildResponse) {
+    return deterministicCartBuildResponse;
+  }
 
   const transcript = normalizedMessages
     .map((message: AgentMessage) => {
@@ -629,7 +695,6 @@ export async function POST(request: Request) {
         execute: async ({ query, quantity }) => {
           const ranked = await rankStoreProducts(query);
           const best = ranked[0];
-          const second = ranked[1];
 
           if (!best) {
             return {
@@ -639,7 +704,7 @@ export async function POST(request: Request) {
             };
           }
 
-          const confidentSingleMatch = best.score >= 0.64 && (!second || best.score - second.score >= 0.08 || second.score < 0.56);
+          const confidentSingleMatch = hasConfidentSingleProductMatch(ranked);
           if (!confidentSingleMatch) {
             const candidates = ranked.slice(0, 3).map((entry) => ({
               storeProductId: entry.product.id,

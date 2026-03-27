@@ -320,6 +320,10 @@ export function StoreAgentDrawer() {
     await sendMessage(action.prompt, []);
   };
 
+  const removeAddedItem = async (storeProductId: string, name: string) => {
+    await sendMessage(`Quita ${name} del pedido usando storeProductId ${storeProductId}.`, []);
+  };
+
   const summary = useMemo(
     () => ({
       total: getDraftTotal(draft),
@@ -963,6 +967,29 @@ export function StoreAgentDrawer() {
                     <p className="mt-1 text-xs opacity-80">Tarjeta {message.customerCard.cardCode ?? message.customerCard.cardId}</p>
                     {message.customerCard.email ? <p className="mt-1 text-xs opacity-80">{message.customerCard.email}</p> : null}
                   </div>
+                </div>
+              </div>
+            ) : null}
+            {message.role === "assistant" && message.addedItems?.length ? (
+              <div className="mt-3 rounded-2xl border border-zinc-200 bg-white/70 px-4 py-3 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950/50 dark:text-zinc-100">
+                <p className="font-semibold">Agregué al pedido</p>
+                <div className="mt-3 space-y-2">
+                  {message.addedItems.map((item) => (
+                    <div key={`${message.id}-${item.storeProductId}`} className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/80 px-3 py-2 dark:border-zinc-800">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{item.quantity} x {item.name}</p>
+                        <p className="text-xs text-zinc-500 dark:text-zinc-400">${item.unitPrice} c/u · ${item.lineTotal}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => void removeAddedItem(item.storeProductId, item.name)}
+                        className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-600 transition hover:border-red-200 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-red-900/60 dark:hover:text-red-300"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : null}

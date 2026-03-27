@@ -66,6 +66,7 @@ export type AgentAttachment = {
   name: string;
   contentType: string;
   dataUrl: string;
+  previewUrl?: string;
   kind?: "image" | "audio";
   durationMs?: number;
   transcript?: string;
@@ -88,12 +89,21 @@ export type AgentAction = {
   variant?: "primary" | "secondary" | "danger";
 };
 
+export type AgentAddedItem = {
+  storeProductId: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
 export type AgentMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   renderedHtml?: string;
   customerCard?: DraftCustomer;
+  addedItems?: AgentAddedItem[];
   attachments?: AgentAttachment[];
   actions?: AgentAction[];
 };

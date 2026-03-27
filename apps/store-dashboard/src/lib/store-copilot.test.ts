@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildCopilotActions, getInitialCopilotActions, getProductMatchScore, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
+import { buildCopilotActions, extractRequestedOrderItems, getInitialCopilotActions, getProductMatchScore, planRequestedOrderItems, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
 
 describe("store copilot product matching", () => {
   test("matches misspelled product names strongly enough", () => {
@@ -88,5 +88,45 @@ describe("store copilot product matching", () => {
     expect(actions).toHaveLength(3);
     expect(actions.some((action) => action.label === "Confirmar venta")).toBe(false);
     expect(actions.find((action) => action.label === "Ligar tarjeta")?.kind).toBe("capture-qr");
+  });
+
+  test("extracts multiple requested items and quantities from a single order", () => {
+    expect(extractRequestedOrderItems("Quiero un refresco de limon y una papas de chile.")).toEqual([
+      { query: "refresco de limon", quantity: 1 },
+      { query: "papas de chile", quantity: 1 },
+    ]);
+  });
+
+  test("extracts numeric quantities from direct add commands", () => {
+    expect(extractRequestedOrderItems("dame 3 refrescos de cola")).toEqual([
+      { query: "refrescos de cola", quantity: 3 },
+    ]);
+  });
+
+  test("plans a full order when each request has a single confident match", () => {
+    const plan = planRequestedOrderItems("Quiero un refresco de limon y una papas de chile.", [
+      { id: "cola", name: "Refresco Cola 600 ml", price: 18 },
+      { id: "lima", name: "Refresco Lima-Limon 600 ml", price: 18 },
+      { id: "papas-chile", name: "Papas Chile y Limon 45 g", price: 17 },
+      { id: "chocolate", name: "Barra de Chocolate 40 g", price: 20 },
+    ]);
+
+    expect(plan.unresolved).toHaveLength(0);
+    expect(plan.resolved).toHaveLength(2);
+    expect(plan.resolved[0]?.match.product.id).toBe("lima");
+    expect(plan.resolved[0]?.request.quantity).toBe(1);
+    expect(plan.resolved[1]?.match.product.id).toBe("papas-chile");
+  });
+
+  test("plans quantity-preserving cola orders without confirmation", () => {
+    const plan = planRequestedOrderItems("dame 3 refrescos de cola", [
+      { id: "cola", name: "Refresco Cola 600 ml", price: 18 },
+      { id: "naranja", name: "Refresco Naranja 600 ml", price: 18 },
+    ]);
+
+    expect(plan.unresolved).toHaveLength(0);
+    expect(plan.resolved).toHaveLength(1);
+    expect(plan.resolved[0]?.match.product.id).toBe("cola");
+    expect(plan.resolved[0]?.request.quantity).toBe(3);
   });
 });
