@@ -474,9 +474,12 @@ export function StoreAgentDrawer() {
       try {
         setQrScannerState("starting");
         setQrScannerError(null);
+        const regionElement = document.getElementById(qrScannerRegionIdRef.current);
         logLiveQrDebug("boot-start", {
           regionId: qrScannerRegionIdRef.current,
-          regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
+          regionExists: Boolean(regionElement),
+          regionClientWidth: regionElement?.clientWidth,
+          regionClientHeight: regionElement?.clientHeight,
         });
         const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import("html5-qrcode");
         if (!isActive) {
@@ -519,7 +522,7 @@ export function StoreAgentDrawer() {
         const scannerConfig = {
           fps: 10,
           qrbox: { width: 240, height: 240 },
-          aspectRatio: 1,
+          disableFlip: true,
         };
 
         try {
@@ -533,6 +536,34 @@ export function StoreAgentDrawer() {
         logLiveQrDebug("start-success", {
           regionExists: Boolean(document.getElementById(qrScannerRegionIdRef.current)),
         });
+
+        window.setTimeout(() => {
+          const currentRegion = document.getElementById(qrScannerRegionIdRef.current);
+          const video = currentRegion?.querySelector("video") as HTMLVideoElement | null;
+          const canvas = currentRegion?.querySelector("canvas") as HTMLCanvasElement | null;
+          if (video) {
+            video.setAttribute("autoplay", "true");
+            video.setAttribute("playsinline", "true");
+            video.muted = true;
+            video.playsInline = true;
+            void video.play().catch(() => undefined);
+          }
+
+          logLiveQrDebug("start-post-check", {
+            regionClientWidth: currentRegion?.clientWidth,
+            regionClientHeight: currentRegion?.clientHeight,
+            childCount: currentRegion?.childElementCount,
+            childTags: currentRegion ? Array.from(currentRegion.children).map((child) => child.tagName) : [],
+            hasVideo: Boolean(video),
+            hasCanvas: Boolean(canvas),
+            videoReadyState: video?.readyState,
+            videoPaused: video?.paused,
+            videoClientWidth: video?.clientWidth,
+            videoClientHeight: video?.clientHeight,
+            videoWidth: video?.videoWidth,
+            videoHeight: video?.videoHeight,
+          });
+        }, 500);
 
         if (isActive) {
           setQrScannerState("ready");
