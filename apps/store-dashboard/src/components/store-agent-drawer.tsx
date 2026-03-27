@@ -540,6 +540,7 @@ export function StoreAgentDrawer() {
                   capture
                   className="hidden"
                   onChange={async (event) => {
+                    const input = event.currentTarget;
                     const file = event.target.files?.[0];
                     if (!file) {
                       return;
@@ -547,7 +548,7 @@ export function StoreAgentDrawer() {
 
                     setRecordingError(null);
                     await attachAudioBlob(file, file.type || "audio/m4a");
-                    event.currentTarget.value = "";
+                    input.value = "";
                   }}
                 />
               </label>
