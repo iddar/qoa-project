@@ -878,9 +878,7 @@ export function StoreAgentDrawer() {
       <header className="border-b border-zinc-200 bg-linear-to-br from-amber-50 via-white to-emerald-50 px-5 py-4 dark:border-zinc-800 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-400">Store Copilot</p>
-            <h2 className="mt-1 text-lg font-semibold text-zinc-950 dark:text-zinc-50">Caja asistida por IA</h2>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Arma el pedido, liga el QR del cliente y confirma la venta desde este panel.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-400">Store Agent</p>
           </div>
           <button
             type="button"
@@ -1037,7 +1035,7 @@ export function StoreAgentDrawer() {
         ) : null}
       </div>
 
-      <div className="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
+      <div className="border-t border-zinc-200 px-4 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] dark:border-zinc-800 sm:pb-4">
         <div className={`${showQrScanner ? "mb-3" : "hidden"}`}>
           <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="mb-3 flex items-center justify-between gap-3">
