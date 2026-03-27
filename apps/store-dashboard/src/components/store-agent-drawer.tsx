@@ -978,10 +978,11 @@ export function StoreAgentDrawer() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div
-              id={qrScannerRegionIdRef.current}
-              className="relative min-h-[320px] overflow-hidden rounded-2xl bg-black [&_video]:h-[320px] [&_video]:w-full [&_video]:object-cover [&_canvas]:h-[320px] [&_canvas]:w-full [&_canvas]:object-cover"
-            >
+            <div className="relative min-h-[320px] overflow-hidden rounded-2xl bg-black">
+              <div
+                id={qrScannerRegionIdRef.current}
+                className="min-h-[320px] [&_video]:h-[320px] [&_video]:w-full [&_video]:object-cover [&_canvas]:h-[320px] [&_canvas]:w-full [&_canvas]:object-cover"
+              />
               {qrScannerState !== "ready" ? (
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-white/80">
                   <ScanLine className="h-8 w-8" />
