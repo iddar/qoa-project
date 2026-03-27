@@ -17,18 +17,11 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const quickPrompts = [
-  "Agrega 2 refrescos al pedido",
-  "Busca unas papas para el carrito",
-  "Escanea la tarjeta del cliente",
-  "Confirma la venta actual",
-];
-
 const INITIAL_ASSISTANT_MESSAGE: AgentMessage = {
   id: "store-agent-welcome",
   role: "assistant",
   content:
-    "Hola, soy tu asistente de caja. Puedo armar el pedido, ligar la tarjeta del cliente por QR y confirmar la venta cuando me lo pidas.",
+    "Hola, soy tu asistente de caja. Puedo armar el pedido, ligar la tarjeta del cliente por QR y confirmar la venta cuando me lo pidas.\n\nPrueba con:\n- Agrega 2 refrescos al pedido\n- Busca unas papas para el carrito\n- Escanea la tarjeta del cliente\n- Confirma la venta actual",
 };
 
 const readFileAsDataUrl = (file: Blob) =>
@@ -373,21 +366,6 @@ export function StoreAgentDrawer() {
         </div>
       </header>
 
-      <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <div className="flex flex-wrap gap-2">
-          {quickPrompts.map((prompt) => (
-            <button
-              key={prompt}
-              type="button"
-              onClick={() => void sendMessage(prompt, [])}
-              className="rounded-full border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-zinc-50"
-            >
-              {prompt}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div
         ref={messagesContainerRef}
         onScroll={(event) => {
@@ -505,11 +483,11 @@ export function StoreAgentDrawer() {
             className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
           />
 
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50">
-                <Paperclip className="h-3.5 w-3.5" />
-                Adjuntar QR
+          <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium">
+                <Paperclip className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Adjuntar QR</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -531,9 +509,9 @@ export function StoreAgentDrawer() {
                 />
               </label>
 
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50">
-                <AudioLines className="h-3.5 w-3.5" />
-                Adjuntar audio
+              <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium">
+                <AudioLines className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Adjuntar audio</span>
                 <input
                   type="file"
                   accept="audio/*"
@@ -557,20 +535,22 @@ export function StoreAgentDrawer() {
                 type="button"
                 onClick={() => void startRecording()}
                 disabled={pending || isRecording}
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium"
+                aria-label="Grabar nota de voz"
               >
-                <Mic className="h-3.5 w-3.5" />
-                Nota de voz
+                <Mic className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                <span className="hidden sm:inline">Nota de voz</span>
               </button>
 
               {attachments.some((attachment) => attachment.kind === "audio") ? (
                 <button
                   type="button"
                   onClick={() => setAttachments((current) => current.filter((attachment) => attachment.kind !== "audio"))}
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-auto sm:w-auto sm:gap-2 sm:px-3 sm:py-2 sm:text-xs sm:font-medium"
+                  aria-label="Cancelar nota de voz"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Cancelar voz
+                  <Trash2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+                  <span className="hidden sm:inline">Cancelar voz</span>
                 </button>
               ) : null}
             </div>
@@ -578,10 +558,10 @@ export function StoreAgentDrawer() {
             <button
               type="submit"
               disabled={pending || isRecording || (!input.trim() && attachments.length === 0)}
-              className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full bg-emerald-600 px-3 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
             >
               <SendHorizontal className="h-4 w-4" />
-              Enviar
+              <span className="hidden sm:inline">Enviar</span>
             </button>
           </div>
         </form>

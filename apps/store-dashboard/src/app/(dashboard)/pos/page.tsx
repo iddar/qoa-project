@@ -158,14 +158,14 @@ export default function StorePOSPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] gap-6">
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <header className="mb-4 flex items-end justify-between gap-4">
+    <div className="flex min-h-0 flex-col gap-4 lg:h-[calc(100vh-4rem)] lg:flex-row lg:gap-6">
+      <div className="flex min-h-0 flex-1 flex-col lg:overflow-hidden">
+        <header className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Punto de Venta</h1>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Arma el pedido, liga la tarjeta del cliente y confirma la venta al final.</p>
           </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 xl:max-w-sm dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300">
             El asistente IA comparte este mismo borrador en tiempo real.
           </div>
         </header>
@@ -179,7 +179,7 @@ export default function StorePOSPage() {
             className="w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
           />
 
-          <div className="flex w-full max-w-xl gap-2">
+          <div className="flex w-full flex-col gap-2 sm:max-w-xl sm:flex-row">
             <input
               type="text"
               value={customerInput}
@@ -191,7 +191,7 @@ export default function StorePOSPage() {
               type="button"
               onClick={() => resolveCustomer.mutate()}
               disabled={resolveCustomer.isPending || !customerInput.trim()}
-              className="inline-flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             >
               <UserRoundPlus className="h-4 w-4" />
               {resolveCustomer.isPending ? "Ligando..." : "Ligar cliente"}
@@ -215,7 +215,7 @@ export default function StorePOSPage() {
 
         {productsQuery.isLoading ? <p className="text-sm text-zinc-500">Cargando productos...</p> : null}
 
-        <div className="flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 lg:overflow-y-auto">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
             {catalog.map((product) => (
               <button
@@ -252,8 +252,8 @@ export default function StorePOSPage() {
         </div>
       </div>
 
-      <aside className="flex w-96 flex-shrink-0 flex-col rounded-3xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <header className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+      <aside className="flex w-full min-w-0 flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white lg:w-96 lg:min-w-[22rem] lg:flex-shrink-0 dark:border-zinc-800 dark:bg-zinc-900">
+        <header className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-4 sm:px-5 dark:border-zinc-800">
           <div>
             <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Pedido en curso</h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">{cartItemCount} artículos preparados</p>
@@ -270,7 +270,7 @@ export default function StorePOSPage() {
           ) : null}
         </header>
 
-        <div className="space-y-4 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+        <div className="space-y-4 border-b border-zinc-100 px-4 py-4 sm:px-5 dark:border-zinc-800">
           <div className="rounded-2xl bg-zinc-50 px-4 py-3 dark:bg-zinc-950/70">
             <p className="text-xs uppercase tracking-[0.18em] text-zinc-400">Cliente</p>
             <p className="mt-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -282,7 +282,7 @@ export default function StorePOSPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto px-5 py-4">
+        <div className="max-h-[45vh] overflow-y-auto px-4 py-4 sm:px-5 lg:max-h-none lg:flex-1">
           {draft.items.length === 0 ? (
             <p className="text-center text-sm text-zinc-500">El pedido está vacío. Agrega productos o pídeselo al asistente.</p>
           ) : (
@@ -329,7 +329,7 @@ export default function StorePOSPage() {
           )}
         </div>
 
-        <footer className="border-t border-zinc-100 px-5 py-4 dark:border-zinc-800">
+        <footer className="border-t border-zinc-100 px-4 py-4 sm:px-5 dark:border-zinc-800">
           <div className="mb-4 flex items-center justify-between">
             <span className="font-semibold text-zinc-900 dark:text-zinc-100">Total</span>
             <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(cartTotal)}</span>
