@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
-import { ArrowDown, AudioLines, Bot, Camera, LoaderCircle, MessageSquarePlus, Mic, Paperclip, QrCode, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, AudioLines, Bot, LoaderCircle, MessageSquarePlus, Mic, QrCode, ScanLine, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
 import { getInitialCopilotActions } from "@/lib/store-copilot";
@@ -525,6 +525,7 @@ export function StoreAgentDrawer() {
                           : "border border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:border-zinc-600"
                     }`}
                   >
+                    {action.kind === "capture-qr" ? <ScanLine className="mr-1 inline h-3.5 w-3.5" /> : null}
                     {action.label}
                   </button>
                 ))}
@@ -625,8 +626,8 @@ export function StoreAgentDrawer() {
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
               <div className="pointer-events-auto flex min-w-0 items-center gap-2">
                 <label className="inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9">
-                  <Camera className="h-4 w-4" />
-                  <span className="sr-only">Adjuntar QR</span>
+                  <ScanLine className="h-4 w-4" />
+                  <span className="sr-only">Escanear QR</span>
                   <input
                    type="file"
                    accept="image/*"
