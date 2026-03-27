@@ -37,6 +37,7 @@ printf 'CPG Portal: http://%s:3002\n' "$PUBLIC_HOST_VALUE"
 printf 'Store Dashboard: http://%s:3003\n' "$PUBLIC_HOST_VALUE"
 printf 'Digital Wallet: http://%s:3004\n' "$PUBLIC_HOST_VALUE"
 
+export CHOUGH_URL="http://127.0.0.1:8080"
 export HOST="0.0.0.0"
 export PUBLIC_HOST="$PUBLIC_HOST_VALUE"
 export NEXT_PUBLIC_API_URL="http://${PUBLIC_HOST_VALUE}:3000"
