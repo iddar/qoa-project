@@ -12,6 +12,7 @@ const navItems = [
   {
     href: "/",
     label: "Inicio",
+    shortLabel: "Inicio",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -22,6 +23,7 @@ const navItems = [
   {
     href: "/users",
     label: "Usuarios",
+    shortLabel: "Usuarios",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -34,6 +36,7 @@ const navItems = [
   {
     href: "/stores",
     label: "Tiendas",
+    shortLabel: "Tiendas",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
@@ -47,6 +50,7 @@ const navItems = [
   {
     href: "/catalog",
     label: "Catálogo",
+    shortLabel: "Catálogo",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="m7.5 4.27 9 5.15" />
@@ -59,6 +63,7 @@ const navItems = [
   {
     href: "/cards",
     label: "Tarjetas",
+    shortLabel: "Tarjetas",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect width="20" height="14" x="2" y="5" rx="2" />
@@ -69,6 +74,7 @@ const navItems = [
   {
     href: "/campaigns",
     label: "Campañas",
+    shortLabel: "Campañas",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 12h4l3 8 4-16 3 8h4" />
@@ -78,6 +84,7 @@ const navItems = [
   {
     href: "/rewards",
     label: "Recompensas",
+    shortLabel: "Premios",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -87,6 +94,7 @@ const navItems = [
   {
     href: "/alerts",
     label: "Alertas",
+    shortLabel: "Alertas",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -98,6 +106,7 @@ const navItems = [
   {
     href: "/transactions",
     label: "Transacciones",
+    shortLabel: "Tx",
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
@@ -107,6 +116,8 @@ const navItems = [
     ),
   },
 ];
+
+const mobileNavItems = navItems.slice(0, 5);
 
 const portalLinks = [
   {
@@ -286,8 +297,49 @@ export default function DashboardLayout({
 
   return (
     <div className="flex min-h-screen bg-zinc-50 dark:bg-zinc-950">
+      <div className="fixed inset-x-0 top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-400">Qoa</p>
+            <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Backoffice</p>
+          </div>
+          <ApiStatus />
+        </div>
+        <div className="flex gap-2 overflow-x-auto px-4 pb-3">
+          {portalLinks.map((portal) => (
+            <a
+              key={portal.label}
+              href={portal.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="whitespace-nowrap rounded-full border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:text-zinc-300"
+            >
+              {portal.label}
+            </a>
+          ))}
+        </div>
+        <nav className="flex gap-2 overflow-x-auto px-4 pb-3">
+          {navItems.map((item) => {
+            const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                  isActive
+                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                    : "border-zinc-200 bg-white text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
+                }`}
+              >
+                {item.shortLabel}
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
+
       {/* Sidebar */}
-      <aside className="flex w-60 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+      <aside className="hidden w-60 flex-col border-r border-zinc-200 bg-white lg:flex dark:border-zinc-800 dark:bg-zinc-950">
         {/* Logo */}
         <div className="flex h-14 items-center gap-2.5 border-b border-zinc-100 px-4 dark:border-zinc-800/60">
           <div className="h-7 w-7 rounded-lg bg-zinc-900 flex items-center justify-center dark:bg-zinc-100">
@@ -332,8 +384,8 @@ export default function DashboardLayout({
       </aside>
 
         {/* Main content */}
-      <div className="flex flex-1 flex-col min-w-0">
-        <header className="flex h-14 items-center justify-between border-b border-zinc-200 bg-white px-6 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="hidden h-14 items-center justify-between border-b border-zinc-200 bg-white px-6 lg:flex dark:border-zinc-800 dark:bg-zinc-950">
           <ApiStatus />
           <div className="flex items-center gap-2 text-xs font-medium">
             {portalLinks.map((portal) => (
@@ -349,10 +401,28 @@ export default function DashboardLayout({
             ))}
           </div>
         </header>
-        <main className="flex-1 p-8">
+        <main className="flex-1 px-4 pb-28 pt-32 sm:px-6 lg:p-8 lg:pt-8">
           {children}
         </main>
       </div>
+
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-zinc-200 bg-white/95 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+        {mobileNavItems.map((item) => {
+          const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex flex-col items-center gap-1 px-2 py-3 text-[11px] font-medium transition ${
+                isActive ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-500 dark:text-zinc-400"
+              }`}
+            >
+              <span className={isActive ? "text-zinc-700 dark:text-zinc-300" : "text-zinc-400 dark:text-zinc-500"}>{item.icon}</span>
+              <span>{item.shortLabel}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

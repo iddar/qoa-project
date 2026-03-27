@@ -2,21 +2,24 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
+import { BarChart3, CreditCard, LayoutDashboard, Package2, ScanLine, ShoppingCart, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { StoreAgentDrawer } from "@/components/store-agent-drawer";
 import { useAuth } from "@/providers/auth-provider";
 import { StorePosProvider } from "@/providers/store-pos-provider";
 
 const navItems = [
-  { href: "/", label: "Resumen" },
-  { href: "/pos", label: "POS" },
-  { href: "/products", label: "Catálogo" },
-  { href: "/sales", label: "Ventas" },
-  { href: "/scan", label: "Escanear" },
-  { href: "/customers", label: "Clientes" },
-  { href: "/reports", label: "Reportes" },
-  { href: "/campaigns", label: "Campañas" },
+  { href: "/", label: "Resumen", shortLabel: "Inicio", icon: LayoutDashboard },
+  { href: "/pos", label: "POS", shortLabel: "POS", icon: ShoppingCart },
+  { href: "/products", label: "Catálogo", shortLabel: "Catálogo", icon: Package2 },
+  { href: "/sales", label: "Ventas", shortLabel: "Ventas", icon: CreditCard },
+  { href: "/scan", label: "Escanear", shortLabel: "Escanear", icon: ScanLine },
+  { href: "/customers", label: "Clientes", shortLabel: "Clientes", icon: Users },
+  { href: "/reports", label: "Reportes", shortLabel: "Reportes", icon: BarChart3 },
+  { href: "/campaigns", label: "Campañas", shortLabel: "Campañas", icon: LayoutDashboard },
 ];
+
+const mobileNavItems = navItems.slice(0, 5);
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -40,6 +43,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <StorePosProvider>
       <div className="flex min-h-screen bg-zinc-50 dark:bg-zinc-950">
+        <div className="fixed inset-x-0 top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+          <div className="flex items-center justify-between px-4 py-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-400">Qoa</p>
+              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Dashboard Tienda</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => logout()}
+              className="rounded-full border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+            >
+              Salir
+            </button>
+          </div>
+          <nav className="flex gap-2 overflow-x-auto px-4 pb-3">
+            {navItems.map((item) => {
+              const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                    isActive
+                      ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                      : "border-zinc-200 bg-white text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
+                  }`}
+                >
+                  {item.shortLabel}
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
         <aside className="hidden w-60 flex-col border-r border-zinc-200 bg-white lg:flex dark:border-zinc-800 dark:bg-zinc-950">
           <div className="border-b border-zinc-100 px-4 py-4 dark:border-zinc-800/60">
             <p className="text-xs uppercase tracking-[0.18em] text-zinc-400">Qoa</p>
@@ -75,9 +112,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </aside>
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <main className="flex-1 p-6 lg:p-8">{children}</main>
+          <main className="flex-1 px-4 pb-28 pt-28 sm:px-6 lg:p-8 lg:pt-8">{children}</main>
         </div>
         <StoreAgentDrawer />
+
+        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-zinc-200 bg-white/95 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+          {mobileNavItems.map((item) => {
+            const isActive = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center gap-1 px-2 py-3 text-[11px] font-medium transition ${
+                  isActive ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-500 dark:text-zinc-400"
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                <span>{item.shortLabel}</span>
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </StorePosProvider>
   );
