@@ -141,6 +141,10 @@ export function StoreAgentDrawer() {
   const recordingStartedAtRef = useRef<number | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
   const qrScannerRegionIdRef = useRef(`store-agent-live-qr-${createClientId()}`);
+  const liveQrScannerRef = useRef<{
+    start: (...args: unknown[]) => Promise<unknown>;
+    stop: () => Promise<void>;
+  } | null>(null);
 
   useEffect(() => {
     if (pathname.startsWith("/pos")) {
@@ -351,12 +355,8 @@ export function StoreAgentDrawer() {
     }
 
     let isActive = true;
-    let scannerInstance: {
-      start: (...args: unknown[]) => Promise<unknown>;
-      stop: () => Promise<void>;
-      clear: () => void;
-    } | null = null;
     let hasResolved = false;
+    let scannerStarted = false;
 
     const bootScanner = async () => {
       try {
@@ -371,7 +371,7 @@ export function StoreAgentDrawer() {
           formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
           verbose: false,
         });
-        scannerInstance = scanner;
+        liveQrScannerRef.current = scanner;
 
         const onSuccess = async (decodedText: string) => {
           if (hasResolved) {
@@ -379,6 +379,10 @@ export function StoreAgentDrawer() {
           }
 
           hasResolved = true;
+          if (scannerStarted) {
+            await scanner.stop().catch(() => undefined);
+            scannerStarted = false;
+          }
           setShowQrScanner(false);
           await sendMessage(`Quiero ligar la tarjeta del cliente con este QR: ${decodedText}`, []);
         };
@@ -394,6 +398,7 @@ export function StoreAgentDrawer() {
         } catch {
           await scanner.start({ facingMode: "environment" }, scannerConfig, onSuccess, () => undefined);
         }
+        scannerStarted = true;
 
         if (isActive) {
           setQrScannerState("ready");
@@ -412,17 +417,13 @@ export function StoreAgentDrawer() {
       isActive = false;
       setQrScannerState("idle");
       setQrScannerError(null);
-      if (!scannerInstance) {
+      const scanner = liveQrScannerRef.current;
+      if (!scanner || !scannerStarted) {
         return;
       }
 
-      void scannerInstance.stop().catch(() => undefined).finally(() => {
-        try {
-          scannerInstance?.clear();
-        } catch {
-          // ignore scanner cleanup issues
-        }
-      });
+      liveQrScannerRef.current = null;
+      void scanner.stop().catch(() => undefined);
     };
   }, [showQrScanner]);
 
@@ -674,8 +675,8 @@ export function StoreAgentDrawer() {
       </div>
 
       <div className="border-t border-zinc-200 px-4 py-4 dark:border-zinc-800">
-        {showQrScanner ? (
-          <div className="mb-3 rounded-3xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className={`${showQrScanner ? "mb-3" : "hidden"}`}>
+          <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Escaneando QR</p>
@@ -709,7 +710,7 @@ export function StoreAgentDrawer() {
             </p>
             {qrScannerError ? <p className="mt-2 text-xs text-red-500">{qrScannerError}</p> : null}
           </div>
-        ) : null}
+        </div>
 
         {attachments.length ? (
           <div className="mb-3 space-y-3">
