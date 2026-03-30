@@ -1,24 +1,16 @@
 FROM node:20-alpine
 
-RUN apk add --no-cache curl unzip
-
-RUN curl -fsSL https://github.com/oven/bun/releases/download/bun-v1.3.8/bun-linux-x64.zip -o bun.zip && \
-    unzip bun.zip && \
-    mv bun-linux-x64/bun /usr/local/bin/ && \
-    rm -rf bun.zip bun-linux-x64
-ENV PATH="/usr/local/bin:$PATH"
-
 WORKDIR /app
 
 COPY package.json ./
-COPY bun.lock ./
+COPY package-lock.json ./
 
-RUN bun install --frozen-lockfile
+RUN npm ci --frozen-lockfile && npm install -g tsx
 
 COPY . .
 
-RUN bun run db:migrate
+RUN npx drizzle-kit migrate --config drizzle.config.ts
 
 EXPOSE 3000
 
-CMD ["bun", "index.js"]
+CMD ["node", "--import", "tsx", "index.ts"]
