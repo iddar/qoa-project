@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
 import { createEmptyDraft, type DraftCustomer, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
@@ -26,29 +26,31 @@ export function StorePosProvider({ children }: { children: React.ReactNode }) {
   const storageKey = tenantType === "store" && tenantId ? `store-pos-draft:${tenantId}` : null;
   const [draft, setDraft] = useState<StorePosDraft>(createEmptyDraft);
   const [isAgentOpen, setAgentOpen] = useState(false);
+  const isInitialized = useRef(false);
 
   useEffect(() => {
-    if (!storageKey) {
-      setDraft(createEmptyDraft());
+    if (isInitialized.current || !storageKey) {
       return;
     }
 
     const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) {
-      setDraft(createEmptyDraft());
+      isInitialized.current = true;
       return;
     }
 
     try {
       const parsed = JSON.parse(raw) as StorePosDraft;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- This is a one-time initialization from sessionStorage after auth state is available. The draft is restored once on mount, not on every render.
       setDraft({
         items: parsed.items ?? [],
         customer: parsed.customer ?? null,
         lastTransaction: parsed.lastTransaction ?? null,
       });
     } catch {
-      setDraft(createEmptyDraft());
+      // Keep the initial state on parse error
     }
+    isInitialized.current = true;
   }, [storageKey]);
 
   useEffect(() => {
