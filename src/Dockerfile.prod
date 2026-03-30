@@ -3,9 +3,8 @@ FROM node:20-alpine
 WORKDIR /app
 
 COPY package.json ./
-COPY package-lock.json ./
 
-RUN npm ci --frozen-lockfile && npm install -g tsx
+RUN npm install && npm install -g tsx
 
 COPY . .
 
