@@ -10,8 +10,6 @@ COPY src/ .
 
 RUN npm install --legacy-peer-deps pg
 
-RUN npx drizzle-kit migrate --config drizzle.config.ts
-
 EXPOSE 3000
 
-CMD ["node", "--import", "tsx", "index.ts"]
+CMD ["sh", "-c", "npx drizzle-kit migrate --config drizzle.config.ts && node --import tsx index.ts"]
