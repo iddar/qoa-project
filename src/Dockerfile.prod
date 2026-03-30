@@ -2,7 +2,7 @@ FROM node:20-alpine
 
 RUN apk add --no-cache curl unzip
 
-RUN curl -fsSL https://github.com/oven/bun/releases/latest/download/bun-linux-x64.zip -o bun.zip && \
+RUN curl -fsSL https://github.com/oven/bun/releases/download/bun-v1.3.8/bun-linux-x64.zip -o bun.zip && \
     unzip bun.zip && \
     mv bun-linux-x64/bun /usr/local/bin/ && \
     rm -rf bun.zip bun-linux-x64
