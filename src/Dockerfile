@@ -1,4 +1,6 @@
-FROM oven/bun:1.3.8-alpine
+FROM node:20-alpine
+
+RUN apk add --no-cache bun
 
 WORKDIR /app
 
