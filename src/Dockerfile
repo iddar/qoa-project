@@ -1,13 +1,14 @@
 FROM node:20-alpine
 
-RUN apk add --no-cache bun
-
 WORKDIR /app
 
+RUN npm install -g bun
+
 COPY package.json ./
+COPY package-lock.json ./
 COPY bun.lock ./
 
-RUN npm install --frozen-lockfile
+RUN npm ci
 
 COPY . .
 
