@@ -1,0 +1,9 @@
+version: 3
+
+agent:
+  authtoken: YOUR_NGROK_AUTHTOKEN
+
+tunnels:
+  qoa-store:
+    proto: http
+    addr: 3003

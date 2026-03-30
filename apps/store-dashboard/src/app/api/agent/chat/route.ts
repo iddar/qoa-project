@@ -4,18 +4,41 @@ import { minimax } from "vercel-minimax-ai-provider";
 import sharp from "sharp";
 import { z } from "zod";
 import { api } from "@/lib/api";
-import { getProductMatchScore, normalizeText, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
-import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
+import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
+import { buildCopilotActions, hasConfidentSingleProductMatch, planRequestedOrderItems, rankProductsByQuery, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
+import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAddedItem, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 
 const requestSchema = z.object({
   messages: z.array(
-    z.object({
-      id: z.string(),
-      role: z.enum(["user", "assistant"]),
-      content: z.string(),
-      attachments: z
+          z.object({
+            id: z.string(),
+            role: z.enum(["user", "assistant"]),
+            content: z.string(),
+            renderedHtml: z.string().optional(),
+            customerCard: z
+              .object({
+                userId: z.string(),
+                cardId: z.string().optional(),
+                cardCode: z.string().optional(),
+                name: z.string().optional(),
+                phone: z.string(),
+                email: z.string().optional(),
+              })
+              .optional(),
+            addedItems: z
+              .array(
+                z.object({
+                  storeProductId: z.string(),
+                  name: z.string(),
+                  quantity: z.number(),
+                  unitPrice: z.number(),
+                  lineTotal: z.number(),
+                }),
+              )
+              .optional(),
+            attachments: z
         .array(
           z.object({
             id: z.string(),
@@ -26,6 +49,17 @@ const requestSchema = z.object({
             durationMs: z.number().optional(),
             transcript: z.string().optional(),
             status: z.enum(["pending", "ready", "processing", "transcribed", "failed"]).optional(),
+          }),
+        )
+        .optional(),
+      actions: z
+        .array(
+          z.object({
+            id: z.string(),
+            label: z.string(),
+            prompt: z.string(),
+            kind: z.enum(["prompt", "capture-qr"]).optional(),
+            variant: z.enum(["primary", "secondary", "danger"]).optional(),
           }),
         )
         .optional(),
@@ -168,19 +202,89 @@ const decodeQrWithPipeline = async (buffer: Buffer, transform?: (image: sharp.Sh
   return decodeQrPixels(data, info.width, info.height);
 };
 
-const decodeQrFromAttachment = async (attachment: AgentAttachment) => {
-  const [, encoded] = attachment.dataUrl.split(",");
-  if (!encoded) {
+const buildCropRegions = (width: number, height: number) => {
+  const shortestSide = Math.min(width, height);
+  const cropSizes = [1, 0.88, 0.72, 0.6]
+    .map((ratio) => Math.floor(shortestSide * ratio))
+    .filter((size, index, all) => size > 48 && all.indexOf(size) === index);
+
+  const regions = cropSizes.flatMap((size) => {
+    const maxLeft = Math.max(width - size, 0);
+    const maxTop = Math.max(height - size, 0);
+    const horizontalPositions = [...new Set([0, Math.floor(maxLeft / 2), maxLeft])];
+    const verticalPositions = [...new Set([0, Math.floor(maxTop / 2), maxTop])];
+
+    return horizontalPositions.flatMap((left) =>
+      verticalPositions.map((top) => ({
+        left,
+        top,
+        width: Math.min(size, width - left),
+        height: Math.min(size, height - top),
+      })),
+    );
+  });
+
+  return regions.filter((region, index, all) =>
+    all.findIndex(
+      (candidate) =>
+        candidate.left === region.left &&
+        candidate.top === region.top &&
+        candidate.width === region.width &&
+        candidate.height === region.height,
+    ) === index,
+  );
+};
+
+const decodeQrFromCrops = async (buffer: Buffer) => {
+  const baseImage = sharp(buffer, { failOn: "none" }).rotate();
+  const metadata = await baseImage.metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+
+  if (width <= 0 || height <= 0) {
     return null;
   }
 
-  const imageBuffer = Buffer.from(encoded, "base64");
+  const cropRegions = buildCropRegions(width, height);
+  const variants = [
+    (image: sharp.Sharp) => image,
+    (image: sharp.Sharp) => image.grayscale().normalize(),
+    (image: sharp.Sharp) => image.grayscale().normalize().threshold(150),
+    (image: sharp.Sharp) => image.grayscale().normalize().threshold(180),
+  ];
+
+  for (const region of cropRegions) {
+    for (const variant of variants) {
+      try {
+        const cropped = await baseImage
+          .clone()
+          .extract(region)
+          .resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: false })
+          .toBuffer();
+
+        const decoded = await decodeQrWithPipeline(cropped, variant);
+        if (decoded) {
+          return decoded;
+        }
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  return null;
+};
+
+const decodeQrFromAttachment = async (attachment: AgentAttachment) => {
+  const { buffer: imageBuffer } = parseDataUrl(attachment.dataUrl);
   const attempts = [
-    () => decodeQrWithPipeline(imageBuffer),
-    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize()),
-    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize().threshold(150)),
-    () => decodeQrWithPipeline(imageBuffer, (image) => image.grayscale().normalize().threshold(180)),
-    () => decodeQrWithPipeline(imageBuffer, (image) => image.resize({ width: 1600, withoutEnlargement: false }).grayscale().normalize()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().grayscale().normalize()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().grayscale().normalize().threshold(150)),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().grayscale().normalize().threshold(180)),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().resize({ width: 1600, withoutEnlargement: false }).grayscale().normalize()),
+    () => decodeQrWithPipeline(imageBuffer, (image) => image.rotate().resize({ width: 2200, withoutEnlargement: false }).grayscale().normalize()),
+    () => decodeQrFromCrops(imageBuffer),
   ];
 
   for (const attempt of attempts) {
@@ -296,6 +400,8 @@ export async function POST(request: Request) {
   }
 
   let workingDraft = cloneDraft(draft ?? createEmptyDraft());
+  const initialDraftItems = (draft?.items ?? []).map((item) => ({ ...item }));
+  const previousCustomerCardId = draft?.customer?.cardId ?? null;
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
   let latestAttachments = latestUserMessage?.attachments ?? [];
   let normalizedUserMessage = latestUserMessage ? { ...latestUserMessage } : null;
@@ -351,6 +457,7 @@ export async function POST(request: Request) {
           id: crypto.randomUUID(),
           role: "assistant",
           content: "No pude transcribir la nota de voz. Intenta grabarla otra vez o escribe el pedido.",
+          actions: buildCopilotActions(workingDraft),
         },
         draft: workingDraft,
         userMessage: normalizedUserMessage,
@@ -389,14 +496,7 @@ export async function POST(request: Request) {
   const rankStoreProducts = async (query: string) => {
     const products = await getStoreProducts();
 
-    return products
-      .map((product) => ({
-        product,
-        score: getProductMatchScore(query, product),
-      }))
-      .filter((entry) => entry.score >= 0.45)
-      .sort((left, right) => right.score - left.score)
-      .slice(0, 8) as RankedStoreProduct[];
+    return rankProductsByQuery(query, products) as RankedStoreProduct[];
   };
 
   const clearPendingProductChoices = () => {
@@ -433,6 +533,83 @@ export async function POST(request: Request) {
     return product;
   };
 
+  const buildAddedItem = (product: StoreProduct, quantity: number): AgentAddedItem => ({
+    storeProductId: product.id,
+    name: product.name,
+    quantity,
+    unitPrice: Number(product.price),
+    lineTotal: Number(product.price) * quantity,
+  });
+
+  const buildAddedItemsMessage = (addedItems: AgentAddedItem[]) => {
+    if (addedItems.length === 1) {
+      const [item] = addedItems;
+      return `Listo, agregué **${item?.quantity} ${item?.name}** al pedido por **$${item?.lineTotal}**.`;
+    }
+
+    const lines = addedItems.map((item) => `- **${item.quantity} x ${item.name}** · $${item.lineTotal}`);
+    return `Listo, agregué estos productos al pedido:\n${lines.join("\n")}`;
+  };
+
+  const collectAddedItemsFromDraftDiff = () => {
+    const previousItemsById = new Map(initialDraftItems.map((item) => [item.storeProductId, item]));
+    const addedItems: AgentAddedItem[] = [];
+
+    for (const currentItem of workingDraft.items) {
+      const previousItem = previousItemsById.get(currentItem.storeProductId);
+      const quantityDelta = currentItem.quantity - (previousItem?.quantity ?? 0);
+
+      if (quantityDelta > 0) {
+        addedItems.push({
+          storeProductId: currentItem.storeProductId,
+          name: currentItem.name,
+          quantity: quantityDelta,
+          unitPrice: currentItem.price,
+          lineTotal: currentItem.price * quantityDelta,
+        });
+      }
+    }
+
+    return addedItems;
+  };
+
+  const tryHandleDeterministicCartBuild = async () => {
+    if (!normalizedUserMessage || normalizedUserMessage.role !== "user") {
+      return null;
+    }
+
+    if ((workingDraft.pendingProductChoices?.length ?? 0) > 0) {
+      return null;
+    }
+
+    const plannedOrder = planRequestedOrderItems(normalizedUserMessage.content, await getStoreProducts());
+    if (plannedOrder.requests.length === 0 || plannedOrder.resolved.length === 0 || plannedOrder.unresolved.length > 0) {
+      return null;
+    }
+
+    const addedItems: AgentAddedItem[] = [];
+    for (const entry of plannedOrder.resolved) {
+      const addedProduct = await addProductToDraftById(entry.match.product.id, entry.request.quantity);
+      addedItems.push(buildAddedItem(addedProduct, entry.request.quantity));
+    }
+
+    const content = buildAddedItemsMessage(addedItems);
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        addedItems,
+        actions: buildCopilotActions(workingDraft),
+      },
+      userMessage: normalizedUserMessage,
+      draft: workingDraft,
+    });
+  };
+
   const resolvePendingProductChoice = async (selection: string, quantity: number) => {
     const resolution = resolvePendingProductChoiceSelection(workingDraft.pendingProductChoices ?? [], selection);
     if (!resolution.resolved) {
@@ -461,10 +638,19 @@ export async function POST(request: Request) {
     "Tolera errores pequenos de transcripcion o dictado en nombres de producto.",
     "Cuando el tendero pida agregar un producto por nombre, intenta primero addProductToDraftByQuery.",
     "Si acabas de ofrecer opciones de producto y el tendero responde con una palabra corta como un sabor, marca o variante, intenta primero resolvePendingProductChoice.",
+    "Si una tool ya tiene suficiente informacion para agregar el producto o ligar al cliente, ejecutala sin pedir confirmacion adicional.",
+    "Minimiza interacciones innecesarias: solo pide aclaracion cuando una tool devuelva varias opciones plausibles o baja confianza.",
+    "Prioriza armar el pedido: si tienes suficiente informacion para agregar productos, agregalos de inmediato en vez de pedir confirmacion.",
+    "Solo muestra opciones o confirmaciones cuando la tool no tenga suficiente certeza para actuar sola.",
     "Si solo hay una coincidencia claramente probable para un producto, agregala sin pedir aclaracion.",
     "Solo pide aclaracion cuando haya varias coincidencias plausibles o la confianza sea baja.",
     `Estado actual del pedido:\n${describeDraft(workingDraft)}`,
   ].join("\n\n");
+
+  const deterministicCartBuildResponse = await tryHandleDeterministicCartBuild();
+  if (deterministicCartBuildResponse) {
+    return deterministicCartBuildResponse;
+  }
 
   const transcript = normalizedMessages
     .map((message: AgentMessage) => {
@@ -532,7 +718,6 @@ export async function POST(request: Request) {
         execute: async ({ query, quantity }) => {
           const ranked = await rankStoreProducts(query);
           const best = ranked[0];
-          const second = ranked[1];
 
           if (!best) {
             return {
@@ -542,7 +727,7 @@ export async function POST(request: Request) {
             };
           }
 
-          const confidentSingleMatch = best.score >= 0.72 && (!second || best.score - second.score >= 0.12 || second.score < 0.6);
+          const confidentSingleMatch = hasConfidentSingleProductMatch(ranked);
           if (!confidentSingleMatch) {
             const candidates = ranked.slice(0, 3).map((entry) => ({
               storeProductId: entry.product.id,
@@ -721,11 +906,21 @@ export async function POST(request: Request) {
     },
   });
 
+  const renderedHtml = await renderAssistantMarkdownToHtml(result.text);
+  const customerCard = workingDraft.customer?.cardId && workingDraft.customer.cardId !== previousCustomerCardId
+    ? workingDraft.customer
+    : undefined;
+  const addedItems = collectAddedItemsFromDraftDiff();
+
   return Response.json({
     message: {
       id: crypto.randomUUID(),
       role: "assistant",
       content: result.text,
+      renderedHtml: renderedHtml || undefined,
+      customerCard,
+      addedItems: addedItems.length > 0 ? addedItems : undefined,
+      actions: buildCopilotActions(workingDraft),
     },
     userMessage: normalizedUserMessage,
     draft: workingDraft,

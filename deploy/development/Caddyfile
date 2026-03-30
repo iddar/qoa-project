@@ -1,0 +1,33 @@
+{
+	auto_https disable_redirects
+}
+
+api.qoa.test {
+	tls internal
+	reverse_proxy 127.0.0.1:3000
+}
+
+admin.qoa.test {
+	tls internal
+	reverse_proxy 127.0.0.1:3001
+}
+
+cpg.qoa.test {
+	tls internal
+	reverse_proxy 127.0.0.1:3002
+}
+
+store.qoa.test {
+	tls internal
+	reverse_proxy 127.0.0.1:3003
+}
+
+wallet.qoa.test {
+	tls internal
+	reverse_proxy 127.0.0.1:3004
+}
+
+voice.qoa.test {
+	tls internal
+	reverse_proxy 127.0.0.1:8080
+}

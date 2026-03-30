@@ -4,6 +4,26 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 
+function getLoginErrorMessage(caughtError: unknown) {
+  if (caughtError instanceof Error && caughtError.message === "not_cpg_owner") {
+    return "Tu cuenta no esta asociada a un CPG. Usa un usuario cpg_admin o contacta soporte.";
+  }
+
+  if (caughtError instanceof Error && caughtError.message === "profile_fetch_failed") {
+    return "El login si respondio, pero no pudimos validar la sesion contra el API. Revisa el certificado de Caddy en tu iPhone.";
+  }
+
+  if (caughtError instanceof TypeError) {
+    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+  }
+
+  if (caughtError instanceof Error && /fetch|network|load failed/i.test(caughtError.message)) {
+    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+  }
+
+  return "Credenciales inválidas. Verifica tu email y contraseña.";
+}
+
 export default function LoginPage() {
   const { login, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -35,11 +55,7 @@ export default function LoginPage() {
       await login(email, password);
       router.replace("/");
     } catch (caughtError) {
-      if (caughtError instanceof Error && caughtError.message === "not_cpg_owner") {
-        setError("Tu cuenta no está asociada a un CPG owner. Contacta soporte.");
-      } else {
-        setError("Credenciales inválidas. Verifica tu email y contraseña.");
-      }
+      setError(getLoginErrorMessage(caughtError));
     } finally {
       setSubmitting(false);
     }
@@ -101,6 +117,7 @@ export default function LoginPage() {
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
               Accede al portal CPG con tu cuenta de fabricante.
             </p>
+            <p className="mt-2 text-xs text-zinc-400">Usuario sugerido: cpg.development@qoa.local / Password123!</p>
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
