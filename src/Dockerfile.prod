@@ -4,9 +4,11 @@ WORKDIR /app
 
 COPY src/package.json ./
 
-RUN npm install --legacy-peer-deps && npm install -g tsx pg
+RUN npm install --legacy-peer-deps && npm install -g tsx
 
 COPY src/ .
+
+RUN npm install --legacy-peer-deps pg
 
 RUN npx drizzle-kit migrate --config drizzle.config.ts
 
