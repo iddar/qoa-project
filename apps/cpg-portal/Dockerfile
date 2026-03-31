@@ -47,7 +47,7 @@ COPY --from=builder /app/apps/cpg-portal/.next/standalone ./
 COPY --from=builder /app/apps/cpg-portal/.next/static ./apps/cpg-portal/.next/static
 COPY --from=builder /app/apps/cpg-portal/public ./apps/cpg-portal/public
 
-RUN rm -f package.json
+RUN find . -name "package.json" -delete
 
 EXPOSE 3002
 
