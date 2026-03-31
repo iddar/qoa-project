@@ -946,8 +946,8 @@ export function StoreAgentDrawer() {
                     {file.kind === "audio" ? (
                       <audio controls preload="metadata" src={file.previewUrl ?? file.dataUrl} className="mt-2 w-full max-w-full" />
                     ) : null}
-                    {file.status === "processing" ? <p>Transcribiendo...</p> : null}
-                    {file.status === "failed" ? <p>No se pudo transcribir.</p> : null}
+                    {file.status === "processing" ? <p>Procesando audio...</p> : null}
+                    {file.status === "failed" ? <p>No se pudo procesar el audio.</p> : null}
                     {file.transcript ? <p className="mt-1 whitespace-pre-wrap">Transcripción: {file.transcript}</p> : null}
                   </div>
                 ))}

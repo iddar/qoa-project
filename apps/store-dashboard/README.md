@@ -6,6 +6,7 @@ Dashboard operativo para tienda (tenderos y soporte) construido con Next.js + Re
 
 - `bun run dev` - Inicia la app en `http://localhost:3003`
 - `bun run lint` - Ejecuta lint
+- `bun run smoke:openrouter-audio` - Prueba Gemini por OpenRouter con audios locales
 
 La app ya escucha en `0.0.0.0`, así que también la puedes abrir desde otros dispositivos usando la IP LAN de tu máquina, por ejemplo `http://192.168.1.203:3003`.
 
@@ -17,11 +18,19 @@ bun run dev:env:public
 
 Ese comando expone API y frontends para LAN, y publica las URLs usando tu IP detectada o `PUBLIC_HOST` si la defines manualmente.
 
+Si necesitas el modo HTTPS con Caddy para pruebas en Safari/iPhone o flujos que exigen contexto seguro, usa desde la raiz:
+
+```sh
+bun run dev:env:caddy
+```
+
+Ese modo genera `apps/*/.env.local` con hosts `*.qoa.test` y evita mezclar la configuracion LAN HTTP con la configuracion HTTPS.
+
 ## Variables
 
 - `NEXT_PUBLIC_API_URL` (opcional) - URL del backend, por defecto `http://localhost:3000`
-- `MINIMAX_API_KEY` - API key de MiniMax para el asistente POS server-side
-- `CHOUGH_URL` - URL del servidor de transcripción de voz, por ejemplo `http://127.0.0.1:8080`
+- `OPENROUTER_API_KEY` - API key de OpenRouter para el asistente POS server-side
+- `OPENROUTER_MODEL` (opcional) - por defecto `google/gemini-2.5-flash`
 
 Para probar desde otros dispositivos en tu red local, levanta el dashboard con la URL pública del API:
 
@@ -40,7 +49,7 @@ NEXT_PUBLIC_API_URL=http://192.168.1.203:3000 bun run dev
 - Resumen diario con KPIs de tienda
 - POS con borrador compartido: tendero o IA pueden armar el pedido antes de confirmar
 - Resolución de cliente por QR JSON, `cardId` o `card code`
-- Asistente lateral con MiniMax + AI SDK para buscar productos, ligar tarjetas y confirmar ventas
+- Asistente lateral con OpenRouter + Gemini + AI SDK para buscar productos, ligar tarjetas y confirmar ventas
 - Escanear payload/cardId y registrar transacciones
 - Ranking de clientes frecuentes por actividad
 - Reportes de ventas/acumulaciones/canjes por día
@@ -54,7 +63,48 @@ NEXT_PUBLIC_API_URL=http://192.168.1.203:3000 bun run dev
 
 ## Notas de voz para POS
 
-El asistente POS puede recibir notas de voz y transcribirlas server-side antes de enviarlas al agente.
+El flujo activo manda la nota de voz directo al modelo multimodal `google/gemini-2.5-flash` por OpenRouter. Ya no hace una transcripción previa con `chough`.
+
+### Flujo activo
+
+1. Abre el asistente POS.
+2. Pulsa el botón del micrófono para grabar una nota de voz o usa `Adjuntar audio`.
+3. Envía el mensaje.
+4. El dashboard manda el audio crudo al modelo multimodal junto con el texto del turno.
+5. Gemini interpreta la orden y usa las tools del POS para armar el pedido.
+
+### Smoke test de OpenRouter + Gemini
+
+Antes de integrar el flujo completo del chat, puedes validar audio multimodal directo contra OpenRouter con los audios de `examples/` en la raiz del repo.
+
+Variables:
+
+- `OPENROUTER_API_KEY` - API key de OpenRouter
+- `OPENROUTER_MODEL` (opcional) - por defecto `google/gemini-2.5-flash`
+
+Comando desde `apps/store-dashboard`:
+
+```sh
+bun run smoke:openrouter-audio
+```
+
+Ese comando prueba por defecto estos fixtures:
+
+- `../../examples/sampler-1.mp3`
+- `../../examples/sampler-2.mp3`
+
+Tambien puedes pasar uno o varios audios manualmente:
+
+```sh
+bun run smoke:openrouter-audio ../../examples/sampler-1.mp3
+bun run smoke:openrouter-audio ../../examples/sampler-1.mp3 ../../examples/sampler-2.mp3
+```
+
+La salida imprime modelo, archivo, tipo MIME detectado, uso de tokens, el texto entendido por Gemini y las llamadas reales a una tool simulada `addProductToDraftByQuery` para validar tool calling con audio.
+
+### Guia legacy: MiniMax + Chough
+
+Esta seccion se conserva solo como referencia por si queremos reactivar el flujo anterior basado en transcripcion server-side.
 
 ### Levantar Chough
 

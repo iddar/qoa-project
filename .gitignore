@@ -1,6 +1,8 @@
 .playwright-mcp
 node_modules
 .env
+.env.local
+apps/*/.env.local
 .obsidian
 .next
 global/e2e/report
