@@ -54,11 +54,17 @@ export type DraftPendingProductChoice = {
   score: number;
 };
 
+export type DraftPendingProductContext = {
+  originalQuery: string;
+  categoryHint?: string;
+};
+
 export type StorePosDraft = {
   items: DraftItem[];
   customer: DraftCustomer | null;
   lastTransaction: DraftTransaction | null;
   pendingProductChoices?: DraftPendingProductChoice[];
+  pendingProductContext?: DraftPendingProductContext | null;
 };
 
 export type AgentAttachment = {
@@ -113,6 +119,7 @@ export const createEmptyDraft = (): StorePosDraft => ({
   customer: null,
   lastTransaction: null,
   pendingProductChoices: [],
+  pendingProductContext: null,
 });
 
 export const getDraftTotal = (draft: StorePosDraft) =>
