@@ -45,10 +45,10 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/apps/digital-wallet/.next/standalone ./
 COPY --from=builder /app/apps/digital-wallet/.next/static ./apps/digital-wallet/.next/static
-
 RUN test -d /app/apps/digital-wallet/public && cp -r /app/apps/digital-wallet/public ./apps/digital-wallet/public || true
+
 RUN find . -name "package.json" -delete 2>/dev/null || true
 
 EXPOSE 3004
 
-CMD ["bun", "server.js"]
+CMD ["bun", "apps/digital-wallet/server.js"]

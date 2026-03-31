@@ -45,11 +45,10 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/apps/backoffice/.next/standalone ./
 COPY --from=builder /app/apps/backoffice/.next/static ./apps/backoffice/.next/static
-
-RUN test -d /app/apps/backoffice/public && cp -r /app/apps/backoffice/public ./apps/backoffice/public || true
+COPY --from=builder /app/apps/backoffice/public ./apps/backoffice/public
 
 RUN find . -name "package.json" -delete 2>/dev/null || true
 
 EXPOSE 3001
 
-CMD ["bun", "server.js"]
+CMD ["bun", "apps/backoffice/server.js"]
