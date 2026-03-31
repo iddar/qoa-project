@@ -5,7 +5,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const corePublicUrl = process.env.NEXT_PUBLIC_API_URL
   ?? (process.env.RAILWAY_SERVICE__QOA_CORE_URL
     ? `https://${process.env.RAILWAY_SERVICE__QOA_CORE_URL}`
-    : undefined);
+    : "https://qoacore-production.up.railway.app");
 const apiProxyTarget = process.env.QOA_API_PROXY_TARGET?.trim().replace(/\/$/, "")
   ?? corePublicUrl?.replace(/\/$/, "");
 const allowedDevOrigins = [...new Set([

@@ -5,9 +5,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const corePublicUrl = process.env.NEXT_PUBLIC_API_URL
   ?? (process.env.RAILWAY_SERVICE__QOA_CORE_URL
     ? `https://${process.env.RAILWAY_SERVICE__QOA_CORE_URL}`
-    : undefined);
-const apiProxyTarget = process.env.QOA_API_PROXY_TARGET?.trim().replace(/\/$/, "")
-  ?? corePublicUrl?.replace(/\/$/, "");
+    : "https://qoacore-production.up.railway.app");
 const allowedDevOrigins = [...new Set([
   "192.168.1.203",
   process.env.PUBLIC_HOST,
@@ -22,18 +20,6 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: corePublicUrl,
   },
   typescript: { ignoreBuildErrors: true },
-  async rewrites() {
-    if (!apiProxyTarget) {
-      return [];
-    }
-
-    return [
-      {
-        source: "/v1/:path*",
-        destination: `${apiProxyTarget}/v1/:path*`,
-      },
-    ];
-  },
 };
 
 export default nextConfig;
