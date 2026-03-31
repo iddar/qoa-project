@@ -33,6 +33,8 @@ COPY src/ ./src/
 COPY packages/ ./packages/
 COPY apps/store-dashboard/ ./apps/store-dashboard/
 
+RUN rm -f /app/apps/store-dashboard/.env.local /app/apps/store-dashboard/.env.*.local
+
 WORKDIR /app/apps/store-dashboard
 RUN npm run build
 

@@ -33,6 +33,8 @@ COPY src/ ./src/
 COPY packages/ ./packages/
 COPY apps/digital-wallet/ ./apps/digital-wallet/
 
+RUN rm -f /app/apps/digital-wallet/.env.local /app/apps/digital-wallet/.env.*.local
+
 WORKDIR /app/apps/digital-wallet
 RUN npm run build
 

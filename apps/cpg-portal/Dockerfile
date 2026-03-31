@@ -33,6 +33,8 @@ COPY src/ ./src/
 COPY packages/ ./packages/
 COPY apps/cpg-portal/ ./apps/cpg-portal/
 
+RUN rm -f /app/apps/cpg-portal/.env.local /app/apps/cpg-portal/.env.*.local
+
 WORKDIR /app/apps/cpg-portal
 RUN npm run build
 
