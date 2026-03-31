@@ -37,13 +37,11 @@ WORKDIR /app/apps/cpg-portal
 RUN npm run build
 
 # --- Stage 3: Production ---
-FROM node:20-alpine AS runner
+FROM oven/bun:1.3.8-debian AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
-
-COPY --from=deps /usr/local/bin/bun /usr/local/bin/bun
 
 COPY --from=builder /app/apps/cpg-portal/.next/standalone ./
 COPY --from=builder /app/apps/cpg-portal/.next/static ./apps/cpg-portal/.next/static
@@ -51,4 +49,4 @@ COPY --from=builder /app/apps/cpg-portal/public ./apps/cpg-portal/public
 
 EXPOSE 3002
 
-CMD ["node", "apps/cpg-portal/server.js"]
+CMD ["bun", "apps/cpg-portal/server.js"]

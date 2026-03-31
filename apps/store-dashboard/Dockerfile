@@ -37,13 +37,11 @@ WORKDIR /app/apps/store-dashboard
 RUN npm run build
 
 # --- Stage 3: Production ---
-FROM node:20-alpine AS runner
+FROM oven/bun:1.3.8-debian AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
-
-COPY --from=deps /usr/local/bin/bun /usr/local/bin/bun
 
 COPY --from=builder /app/apps/store-dashboard/.next/standalone ./
 COPY --from=builder /app/apps/store-dashboard/.next/static ./apps/store-dashboard/.next/static
@@ -51,4 +49,4 @@ COPY --from=builder /app/apps/store-dashboard/public ./apps/store-dashboard/publ
 
 EXPOSE 3003
 
-CMD ["node", "apps/store-dashboard/server.js"]
+CMD ["bun", "apps/store-dashboard/server.js"]

@@ -37,13 +37,11 @@ WORKDIR /app/apps/digital-wallet
 RUN npm run build
 
 # --- Stage 3: Production ---
-FROM node:20-alpine AS runner
+FROM oven/bun:1.3.8-debian AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
-
-COPY --from=deps /usr/local/bin/bun /usr/local/bin/bun
 
 COPY --from=builder /app/apps/digital-wallet/.next/standalone ./
 COPY --from=builder /app/apps/digital-wallet/.next/static ./apps/digital-wallet/.next/static
@@ -51,4 +49,4 @@ COPY --from=builder /app/apps/digital-wallet/public ./apps/digital-wallet/public
 
 EXPOSE 3004
 
-CMD ["node", "apps/digital-wallet/server.js"]
+CMD ["bun", "apps/digital-wallet/server.js"]

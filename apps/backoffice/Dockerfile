@@ -37,14 +37,11 @@ WORKDIR /app/apps/backoffice
 RUN npm run build
 
 # --- Stage 3: Production ---
-FROM node:20-alpine AS runner
+FROM oven/bun:1.3.8-debian AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
-
-# Copy bun binary so Railway's auto-detected start command works
-COPY --from=deps /usr/local/bin/bun /usr/local/bin/bun
 
 COPY --from=builder /app/apps/backoffice/.next/standalone ./
 COPY --from=builder /app/apps/backoffice/.next/static ./apps/backoffice/.next/static
@@ -52,4 +49,4 @@ COPY --from=builder /app/apps/backoffice/public ./apps/backoffice/public
 
 EXPOSE 3001
 
-CMD ["node", "apps/backoffice/server.js"]
+CMD ["bun", "apps/backoffice/server.js"]
