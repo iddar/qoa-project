@@ -23,7 +23,13 @@ logs
 
 # Local environment definitions
 .env
+.env.local
+.env.*.local
 src/.env*
+apps/*/.env.local
+apps/*/.env.*.local
+packages/*/.env.local
+packages/*/.env.*.local
 
 # Agent/editor metadata
 .agents
