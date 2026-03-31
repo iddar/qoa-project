@@ -702,6 +702,50 @@ export async function POST(request: Request) {
     };
   };
 
+  const messageLooksLikeProductClarification = (content: string) => {
+    const normalized = content
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    return [
+      "hay varias opciones",
+      "a cual te refieres",
+      "a que papas te refieres",
+      "que papas",
+      "cuales quieres agregar",
+      "cual de estas opciones",
+      "opciones de papas",
+      "te refieres a",
+    ].some((needle) => normalized.includes(needle));
+  };
+
+  const restorePendingChoicesFromLatestRequest = async (assistantContent: string) => {
+    if (!normalizedUserMessage || (workingDraft.pendingProductChoices?.length ?? 0) > 0) {
+      return;
+    }
+
+    if (!messageLooksLikeProductClarification(assistantContent)) {
+      return;
+    }
+
+    const plannedOrder = planRequestedOrderItems(normalizedUserMessage.content, await getStoreProducts());
+    const [firstUnresolved] = plannedOrder.unresolved;
+    if (!firstUnresolved || firstUnresolved.candidates.length === 0) {
+      return;
+    }
+
+    setPendingProductChoices(
+      firstUnresolved.request.query,
+      firstUnresolved.candidates.slice(0, 3).map((entry) => ({
+        storeProductId: entry.product.id,
+        name: entry.product.name,
+        price: Number(entry.product.price),
+        score: Number(entry.score.toFixed(3)),
+      })),
+    );
+  };
+
   const systemPrompt = [
     "Eres un asistente de POS para tenderos en Qoa.",
     "Responde siempre en espanol claro y breve.",
@@ -979,6 +1023,8 @@ export async function POST(request: Request) {
       }),
     },
   });
+
+  await restorePendingChoicesFromLatestRequest(result.text);
 
   const renderedHtml = await renderAssistantMarkdownToHtml(result.text);
   const customerCard = workingDraft.customer?.cardId && workingDraft.customer.cardId !== previousCustomerCardId

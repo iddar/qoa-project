@@ -197,6 +197,17 @@ const hasItem = (draft: StorePosDraft, productName: string, quantity?: number) =
   return quantity ? item.quantity === quantity : true;
 };
 
+const looksLikeClarificationMessage = (content: string) => {
+  const normalized = normalizeText(content);
+  return [
+    "hay varias opciones",
+    "a cual te refieres",
+    "que papas",
+    "cuales quieres agregar",
+    "te refieres a",
+  ].some((needle) => normalized.includes(needle));
+};
+
 const SCENARIOS: Scenario[] = [
   {
     id: "ambiguous-followup-limon-chile",
@@ -218,6 +229,10 @@ const SCENARIOS: Scenario[] = [
 
       if ((firstTurn.draft.pendingProductChoices?.length ?? 0) === 0) {
         failures.push("turn1_missing_pending_choices");
+      }
+
+      if (looksLikeClarificationMessage(firstTurn.assistantMessage.content) && (firstTurn.draft.pendingProductChoices?.length ?? 0) === 0) {
+        failures.push("turn1_clarification_without_pending_state");
       }
 
       const pendingNames = new Set((firstTurn.draft.pendingProductChoices ?? []).map((choice) => choice.name));
@@ -259,6 +274,10 @@ const SCENARIOS: Scenario[] = [
 
       if ((firstTurn.draft.pendingProductChoices?.length ?? 0) === 0) {
         failures.push("turn1_missing_pending_choices");
+      }
+
+      if (looksLikeClarificationMessage(firstTurn.assistantMessage.content) && (firstTurn.draft.pendingProductChoices?.length ?? 0) === 0) {
+        failures.push("turn1_clarification_without_pending_state");
       }
 
       if (!scenarioContainsOnlyPapasActions(firstTurn.assistantMessage.actions)) {
