@@ -46,8 +46,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/apps/backoffice/.next/standalone ./
 COPY --from=builder /app/apps/backoffice/.next/static ./apps/backoffice/.next/static
 COPY --from=builder /app/apps/backoffice/public ./apps/backoffice/public
-
-RUN find . -name "package.json" -delete 2>/dev/null || true
+COPY --from=builder /app/apps/backoffice/node_modules ./apps/backoffice/node_modules
 
 EXPOSE 3001
 
