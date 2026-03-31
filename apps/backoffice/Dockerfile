@@ -51,4 +51,4 @@ RUN find . -name "package.json" -delete 2>/dev/null || true
 
 EXPOSE 3001
 
-CMD ["bun", "apps/backoffice/server.js"]
+CMD ["node", "apps/backoffice/server.js"]
