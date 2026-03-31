@@ -17,6 +17,14 @@ export type RankedProductCandidate<TProduct extends StoreProductLike = StoreProd
   score: number;
 };
 
+const PRODUCT_CATEGORY_HINTS = [
+  { id: "papas", queryTokens: ["papas", "papa"], productTokens: ["papas", "papa"] },
+  { id: "refrescos", queryTokens: ["refresco", "refrescos", "soda", "sodas"], productTokens: ["refresco", "refrescos", "cola", "lima", "limon"] },
+  { id: "aguas", queryTokens: ["agua", "aguas"], productTokens: ["agua", "aguas"] },
+  { id: "jugos", queryTokens: ["jugo", "jugos"], productTokens: ["jugo", "jugos"] },
+  { id: "galletas", queryTokens: ["galleta", "galletas"], productTokens: ["galleta", "galletas"] },
+];
+
 const NUMBER_WORDS = new Map<string, number>([
   ["un", 1],
   ["una", 1],
@@ -146,6 +154,38 @@ export const rankProductsByQuery = <TProduct extends StoreProductLike>(query: st
     .sort((left, right) => right.score - left.score)
     .slice(0, 8) as RankedProductCandidate<TProduct>[];
 
+export const inferProductCategoryHint = (query: string) => {
+  const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  const queryTokens = new Set(normalizedQuery.split(" ").filter(Boolean));
+  return PRODUCT_CATEGORY_HINTS.find((hint) => hint.queryTokens.some((token) => queryTokens.has(token)))?.id ?? null;
+};
+
+export const filterRankedProductsByCategoryHint = <TProduct extends StoreProductLike>(
+  rankedCandidates: RankedProductCandidate<TProduct>[],
+  categoryHint: string | null,
+) => {
+  if (!categoryHint) {
+    return rankedCandidates;
+  }
+
+  const hint = PRODUCT_CATEGORY_HINTS.find((entry) => entry.id === categoryHint);
+  if (!hint) {
+    return rankedCandidates;
+  }
+
+  const filtered = rankedCandidates.filter((entry) => {
+    const normalizedName = normalizeText(entry.product.name);
+    const normalizedSku = normalizeText(entry.product.sku ?? "");
+    return hint.productTokens.some((token) => normalizedName.includes(token) || normalizedSku.includes(token));
+  });
+
+  return filtered.length > 0 ? filtered : rankedCandidates;
+};
+
 export const hasConfidentSingleProductMatch = <TProduct extends StoreProductLike>(rankedCandidates: RankedProductCandidate<TProduct>[]) => {
   const best = rankedCandidates[0];
   const second = rankedCandidates[1];
@@ -229,16 +269,43 @@ export const resolvePendingProductChoiceSelection = (choices: DraftPendingProduc
   }
 
   const normalizedSelection = normalizeText(selection);
+  const selectionTokens = normalizedSelection.split(" ").filter((token) => token && !IGNORE_QUERY_TOKENS.has(token));
   const rankedChoices = choices
     .map((choice) => ({
       choice,
-      score: Math.max(
-        similarityScore(normalizedSelection, normalizeText(choice.name)),
-        ...normalizeText(choice.name)
-          .split(" ")
-          .filter(Boolean)
-          .map((token) => similarityScore(normalizedSelection, token)),
-      ),
+      score: (() => {
+        const normalizedChoiceName = normalizeText(choice.name);
+        const choiceTokens = normalizedChoiceName.split(" ").filter((token) => token && !IGNORE_QUERY_TOKENS.has(token));
+        const baseScore = Math.max(
+          similarityScore(normalizedSelection, normalizedChoiceName),
+          ...normalizedChoiceName
+            .split(" ")
+            .filter(Boolean)
+            .map((token) => similarityScore(normalizedSelection, token)),
+        );
+
+        if (selectionTokens.length === 0 || choiceTokens.length === 0) {
+          return baseScore;
+        }
+
+        const matchedTokens = selectionTokens.filter((selectionToken) =>
+          choiceTokens.some((choiceToken) => similarityScore(selectionToken, choiceToken) >= 0.82),
+        );
+        const matchedRatio = matchedTokens.length / selectionTokens.length;
+        const coverageRatio = matchedTokens.length / choiceTokens.length;
+        const includesAllSelectionTokens = matchedTokens.length === selectionTokens.length;
+        const tokenOrderAgnosticScore = matchedRatio * 0.88 + Math.min(coverageRatio, 0.55) * 0.12;
+
+        if (includesAllSelectionTokens && selectionTokens.length >= 2) {
+          return Math.max(baseScore, 0.96 + Math.min(coverageRatio, 0.25) * 0.02);
+        }
+
+        if (matchedTokens.length > 0) {
+          return Math.max(baseScore, tokenOrderAgnosticScore);
+        }
+
+        return baseScore;
+      })(),
     }))
     .sort((left, right) => right.score - left.score);
 

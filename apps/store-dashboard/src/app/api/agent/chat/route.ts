@@ -10,7 +10,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import { api } from "@/lib/api";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
-import { buildCopilotActions, hasConfidentSingleProductMatch, planRequestedOrderItems, rankProductsByQuery, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
+import { buildCopilotActions, filterRankedProductsByCategoryHint, hasConfidentSingleProductMatch, inferProductCategoryHint, planRequestedOrderItems, rankProductsByQuery, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
 import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAddedItem, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
@@ -145,6 +145,13 @@ const requestSchema = z.object({
         }),
       )
       .optional(),
+    pendingProductContext: z
+      .object({
+        originalQuery: z.string(),
+        categoryHint: z.string().optional(),
+      })
+      .nullable()
+      .optional(),
   }),
 });
 
@@ -173,6 +180,7 @@ const cloneDraft = (draft: StorePosDraft): StorePosDraft => ({
       }
     : null,
   pendingProductChoices: draft.pendingProductChoices?.map((entry) => ({ ...entry })) ?? [],
+  pendingProductContext: draft.pendingProductContext ? { ...draft.pendingProductContext } : null,
 });
 
 const buildDraftSummary = (draft: StorePosDraft) => ({
@@ -186,6 +194,7 @@ const buildDraftSummary = (draft: StorePosDraft) => ({
     price: item.price,
   })),
   pendingProductChoices: draft.pendingProductChoices ?? [],
+  pendingProductContext: draft.pendingProductContext ?? null,
 });
 
 const describeDraft = (draft: StorePosDraft) => {
@@ -560,10 +569,15 @@ export async function POST(request: Request) {
 
   const clearPendingProductChoices = () => {
     workingDraft.pendingProductChoices = [];
+    workingDraft.pendingProductContext = null;
   };
 
-  const setPendingProductChoices = (choices: DraftPendingProductChoice[]) => {
+  const setPendingProductChoices = (query: string, choices: DraftPendingProductChoice[]) => {
     workingDraft.pendingProductChoices = choices;
+    workingDraft.pendingProductContext = {
+      originalQuery: query,
+      categoryHint: inferProductCategoryHint(query) ?? undefined,
+    };
   };
 
   const addProductToDraftById = async (storeProductId: string, quantity: number) => {
@@ -774,7 +788,8 @@ export async function POST(request: Request) {
           quantity: z.number().int().min(1).default(1),
         }),
         execute: async ({ query, quantity }) => {
-          const ranked = await rankStoreProducts(query);
+          const categoryHint = inferProductCategoryHint(query);
+          const ranked = filterRankedProductsByCategoryHint(await rankStoreProducts(query), categoryHint);
           const best = ranked[0];
 
           if (!best) {
@@ -793,11 +808,12 @@ export async function POST(request: Request) {
               price: Number(entry.product.price),
               score: Number(entry.score.toFixed(3)),
             }));
-            setPendingProductChoices(candidates);
+            setPendingProductChoices(query, candidates);
 
             return {
               added: false,
               reason: "needs_confirmation",
+              categoryHint: categoryHint ?? undefined,
               candidates,
             };
           }
