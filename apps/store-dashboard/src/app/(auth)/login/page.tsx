@@ -89,7 +89,7 @@ export default function LoginPage() {
             <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-600 dark:text-amber-400 lg:hidden">Qoa Retail Ops</p>
             <h2 className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-100 lg:mt-0">Dashboard Tienda</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Inicia sesión para continuar.</p>
-            <p className="mt-2 text-xs leading-5 text-zinc-400">Usuario sugerido: `store.development@qoa.local` / `Password123!`</p>
+            <p className="mt-2 text-xs leading-5 text-zinc-400">Accede con la cuenta operativa asignada a tu tienda.</p>
           </div>
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300">{error}</p>}

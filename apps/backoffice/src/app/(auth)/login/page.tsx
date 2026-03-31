@@ -64,7 +64,7 @@ export default function LoginPage() {
             Inicia sesión para continuar
           </p>
           <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
-            Usuario semilla sugerido: admin.development@qoa.local / Password123!
+            Usa la cuenta asignada por el equipo de Qoa.
           </p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>

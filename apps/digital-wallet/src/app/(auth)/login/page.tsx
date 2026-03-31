@@ -75,7 +75,7 @@ export default function WalletLoginPage() {
         <p className="text-xs uppercase tracking-[0.2em] text-amber-600">Qoa Wallet</p>
         <h1 className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-100">Tu tarjeta digital</h1>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Consulta QR, recompensas e historial desde el celular.</p>
-        <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">Usuario sugerido: consumer.development@qoa.local / Password123!</p>
+        <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">Inicia sesión con la cuenta vinculada a tu programa de lealtad.</p>
 
         <div className="mt-4 grid grid-cols-3 gap-2 text-center">
           <div className="rounded-lg bg-amber-50 px-2 py-1.5 dark:bg-zinc-800/70">

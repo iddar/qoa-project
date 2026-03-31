@@ -117,7 +117,7 @@ export default function LoginPage() {
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
               Accede al portal CPG con tu cuenta de fabricante.
             </p>
-            <p className="mt-2 text-xs text-zinc-400">Usuario sugerido: cpg.development@qoa.local / Password123!</p>
+            <p className="mt-2 text-xs text-zinc-400">Accede con la cuenta CPG asignada a tu organización.</p>
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
