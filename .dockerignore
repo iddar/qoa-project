@@ -23,11 +23,19 @@ logs
 
 # Local environment definitions
 .env
-.env.*
 src/.env*
 
 # Agent/editor metadata
 .agents
 .claude
+.playwright-mcp
+.ruff_cache
+.devcontainer
 
+# Docs & non-deploy assets
 docs
+deploy
+global
+scripts
+*.docx
+docker-compose.yml
