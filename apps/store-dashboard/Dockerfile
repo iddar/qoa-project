@@ -45,6 +45,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/apps/store-dashboard/.next/standalone ./
 COPY --from=builder /app/apps/store-dashboard/.next/static ./apps/store-dashboard/.next/static
 RUN test -d /app/apps/store-dashboard/public && cp -r /app/apps/store-dashboard/public ./apps/store-dashboard/public || true
