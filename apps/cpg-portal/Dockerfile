@@ -47,6 +47,8 @@ COPY --from=builder /app/apps/cpg-portal/.next/standalone ./
 COPY --from=builder /app/apps/cpg-portal/.next/static ./apps/cpg-portal/.next/static
 COPY --from=builder /app/apps/cpg-portal/public ./apps/cpg-portal/public
 
+RUN rm -f package.json
+
 EXPOSE 3002
 
 CMD ["bun", "apps/cpg-portal/server.js"]

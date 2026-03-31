@@ -47,6 +47,8 @@ COPY --from=builder /app/apps/store-dashboard/.next/standalone ./
 COPY --from=builder /app/apps/store-dashboard/.next/static ./apps/store-dashboard/.next/static
 COPY --from=builder /app/apps/store-dashboard/public ./apps/store-dashboard/public
 
+RUN rm -f package.json
+
 EXPOSE 3003
 
 CMD ["bun", "apps/store-dashboard/server.js"]

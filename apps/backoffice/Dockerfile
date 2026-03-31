@@ -47,6 +47,9 @@ COPY --from=builder /app/apps/backoffice/.next/standalone ./
 COPY --from=builder /app/apps/backoffice/.next/static ./apps/backoffice/.next/static
 COPY --from=builder /app/apps/backoffice/public ./apps/backoffice/public
 
+# Remove package.json so Railway doesn't override CMD with "bun start"
+RUN rm -f package.json
+
 EXPOSE 3001
 
 CMD ["bun", "apps/backoffice/server.js"]

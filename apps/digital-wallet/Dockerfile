@@ -47,6 +47,8 @@ COPY --from=builder /app/apps/digital-wallet/.next/standalone ./
 COPY --from=builder /app/apps/digital-wallet/.next/static ./apps/digital-wallet/.next/static
 COPY --from=builder /app/apps/digital-wallet/public ./apps/digital-wallet/public
 
+RUN rm -f package.json
+
 EXPOSE 3004
 
 CMD ["bun", "apps/digital-wallet/server.js"]
