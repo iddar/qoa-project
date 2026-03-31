@@ -122,16 +122,21 @@ const mobileNavItems = navItems.slice(0, 5);
 const portalLinks = [
   {
     label: "CPG",
-    href: process.env.NEXT_PUBLIC_CPG_PORTAL_URL ?? "http://localhost:3002",
+    href:
+      process.env.NEXT_PUBLIC_CPG_PORTAL_URL
+      ?? "https://cpg-portal-production.up.railway.app",
   },
   {
     label: "Stores",
     href:
-      process.env.NEXT_PUBLIC_STORE_DASHBOARD_URL ?? "http://localhost:3003",
+      process.env.NEXT_PUBLIC_STORE_DASHBOARD_URL
+      ?? "https://store-dashboard-production-3392.up.railway.app",
   },
   {
     label: "Wallet",
-    href: process.env.NEXT_PUBLIC_WALLET_URL ?? "http://localhost:3004",
+    href:
+      process.env.NEXT_PUBLIC_WALLET_URL
+      ?? "https://digital-wallet-production-93fb.up.railway.app",
   },
 ];
 
