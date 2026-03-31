@@ -46,8 +46,9 @@ ENV NODE_ENV=production
 COPY --from=builder /app/apps/store-dashboard/.next/standalone ./
 COPY --from=builder /app/apps/store-dashboard/.next/static ./apps/store-dashboard/.next/static
 
-RUN find . -name "package.json" -delete
+RUN test -d /app/apps/store-dashboard/public && cp -r /app/apps/store-dashboard/public ./apps/store-dashboard/public || true
+RUN find . -name "package.json" -delete 2>/dev/null || true
 
 EXPOSE 3003
 
-CMD ["bun", "apps/store-dashboard/server.js"]
+CMD ["bun", "server.js"]

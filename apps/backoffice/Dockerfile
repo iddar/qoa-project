@@ -45,11 +45,11 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/apps/backoffice/.next/standalone ./
 COPY --from=builder /app/apps/backoffice/.next/static ./apps/backoffice/.next/static
-COPY --from=builder /app/apps/backoffice/public ./apps/backoffice/public
 
-# Remove all package.json so Railway doesn't override CMD with "bun start"
-RUN find . -name "package.json" -delete
+RUN test -d /app/apps/backoffice/public && cp -r /app/apps/backoffice/public ./apps/backoffice/public || true
+
+RUN find . -name "package.json" -delete 2>/dev/null || true
 
 EXPOSE 3001
 
-CMD ["bun", "apps/backoffice/server.js"]
+CMD ["bun", "server.js"]

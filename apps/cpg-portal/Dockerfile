@@ -46,8 +46,9 @@ ENV NODE_ENV=production
 COPY --from=builder /app/apps/cpg-portal/.next/standalone ./
 COPY --from=builder /app/apps/cpg-portal/.next/static ./apps/cpg-portal/.next/static
 
-RUN find . -name "package.json" -delete
+RUN test -d /app/apps/cpg-portal/public && cp -r /app/apps/cpg-portal/public ./apps/cpg-portal/public || true
+RUN find . -name "package.json" -delete 2>/dev/null || true
 
 EXPOSE 3002
 
-CMD ["bun", "apps/cpg-portal/server.js"]
+CMD ["bun", "server.js"]
