@@ -43,6 +43,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+COPY --from=deps /usr/local/bin/bun /usr/local/bin/bun
+
 COPY --from=builder /app/apps/digital-wallet/.next/standalone ./
 COPY --from=builder /app/apps/digital-wallet/.next/static ./apps/digital-wallet/.next/static
 COPY --from=builder /app/apps/digital-wallet/public ./apps/digital-wallet/public

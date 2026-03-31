@@ -43,6 +43,8 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+COPY --from=deps /usr/local/bin/bun /usr/local/bin/bun
+
 COPY --from=builder /app/apps/cpg-portal/.next/standalone ./
 COPY --from=builder /app/apps/cpg-portal/.next/static ./apps/cpg-portal/.next/static
 COPY --from=builder /app/apps/cpg-portal/public ./apps/cpg-portal/public
