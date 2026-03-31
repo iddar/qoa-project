@@ -28,7 +28,7 @@ COPY --from=deps /app/packages/ui/node_modules ./packages/ui/node_modules
 COPY --from=deps /app/apps/store-dashboard/node_modules ./apps/store-dashboard/node_modules
 
 # Copy source code
-COPY package.json ./
+COPY package.json tsconfig.base.json ./
 COPY src/ ./src/
 COPY packages/ ./packages/
 COPY apps/store-dashboard/ ./apps/store-dashboard/
