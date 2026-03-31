@@ -45,7 +45,6 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/apps/store-dashboard/.next/standalone ./
 COPY --from=builder /app/apps/store-dashboard/.next/static ./apps/store-dashboard/.next/static
-COPY --from=builder /app/apps/store-dashboard/public ./apps/store-dashboard/public
 
 RUN find . -name "package.json" -delete
 
