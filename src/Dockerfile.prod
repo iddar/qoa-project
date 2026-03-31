@@ -6,16 +6,13 @@ WORKDIR /app
 COPY src/package.json ./
 RUN bun install
 
-# Install pg driver for drizzle-kit migrate (not in runtime deps)
+# Install pg driver for drizzle-kit migrate
 RUN bun add pg
 
 # Copy application code
 COPY src/ .
 
-# Run migrations at build time (Railway injects DATABASE_URL via ARG)
-ARG DATABASE_URL
-RUN bunx drizzle-kit migrate --config drizzle.config.ts
-
 EXPOSE 3000
 
-CMD ["bun", "index.ts"]
+# Run migrations then start — DATABASE_URL available at runtime via Railway env vars
+CMD ["sh", "-c", "bunx drizzle-kit migrate --config drizzle.config.ts && bun index.ts"]

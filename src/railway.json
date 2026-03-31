@@ -6,7 +6,6 @@
     "watchPatterns": ["src/**"]
   },
   "deploy": {
-    "startCommand": "bun index.ts",
     "numReplicas": 1,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
