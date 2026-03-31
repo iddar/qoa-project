@@ -1,5 +1,10 @@
 import { generateText, stepCountIs, tool } from "ai";
 import { openrouter } from "@openrouter/ai-sdk-provider";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import jsQR from "jsqr";
 import sharp from "sharp";
 import { z } from "zod";
@@ -9,6 +14,7 @@ import { buildCopilotActions, hasConfidentSingleProductMatch, planRequestedOrder
 import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAddedItem, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
+const execFileAsync = promisify(execFile);
 
 const requestSchema = z.object({
   messages: z.array(
@@ -335,6 +341,87 @@ const parseDataUrl = (dataUrl: string) => {
   };
 };
 
+const getBaseContentType = (contentType: string) => contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+
+const getAudioExtension = (contentType: string) => {
+  const baseContentType = getBaseContentType(contentType);
+
+  if (baseContentType === "audio/aac") return "aac";
+  if (baseContentType === "audio/aiff" || baseContentType === "audio/x-aiff") return "aiff";
+  if (baseContentType === "audio/flac") return "flac";
+  if (baseContentType === "audio/m4a") return "m4a";
+  if (baseContentType === "audio/mp4") return "m4a";
+  if (baseContentType === "audio/mp3" || baseContentType === "audio/mpeg") return "mp3";
+  if (baseContentType === "audio/ogg") return "ogg";
+  if (baseContentType === "audio/wav" || baseContentType === "audio/x-wav") return "wav";
+  if (baseContentType === "audio/webm") return "webm";
+
+  return "bin";
+};
+
+const transcodeAudioToMp3 = async (buffer: Buffer, contentType: string) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "qoa-openrouter-audio-"));
+  const inputPath = path.join(tempDir, `input.${getAudioExtension(contentType)}`);
+  const outputPath = path.join(tempDir, "output.mp3");
+
+  try {
+    await writeFile(inputPath, buffer);
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      "-acodec",
+      "libmp3lame",
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      outputPath,
+    ]);
+
+    return Buffer.from(await readFile(outputPath));
+  } catch (error) {
+    throw new Error(
+      error instanceof Error && /ffmpeg/i.test(error.message)
+        ? "AUDIO_TRANSCODE_FAILED"
+        : "AUDIO_TRANSCODE_FAILED",
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+};
+
+const normalizeAudioForOpenRouter = async (buffer: Buffer, contentType: string) => {
+  const baseContentType = getBaseContentType(contentType);
+
+  switch (baseContentType) {
+    case "audio/aac":
+      return { buffer, mediaType: "audio/aac" };
+    case "audio/aiff":
+    case "audio/x-aiff":
+      return { buffer, mediaType: "audio/aiff" };
+    case "audio/flac":
+      return { buffer, mediaType: "audio/flac" };
+    case "audio/m4a":
+    case "audio/mp4":
+      return { buffer, mediaType: "audio/m4a" };
+    case "audio/mp3":
+    case "audio/mpeg":
+      return { buffer, mediaType: "audio/mpeg" };
+    case "audio/ogg":
+      return { buffer, mediaType: "audio/ogg" };
+    case "audio/wav":
+    case "audio/x-wav":
+      return { buffer, mediaType: "audio/wav" };
+    default:
+      return {
+        buffer: await transcodeAudioToMp3(buffer, baseContentType || contentType),
+        mediaType: "audio/mpeg",
+      };
+  }
+};
+
 const buildTextMessageContent = (message: AgentMessage) => {
   const attachmentLabel = message.attachments?.length
     ? `\nAdjuntos: ${message.attachments.map((file) => file.name).join(", ")}`
@@ -342,8 +429,8 @@ const buildTextMessageContent = (message: AgentMessage) => {
   return `${message.content}${attachmentLabel}`;
 };
 
-const buildModelMessages = (messages: AgentMessage[], latestUserMessageId?: string) =>
-  messages.map((message) => {
+const buildModelMessages = async (messages: AgentMessage[], latestUserMessageId?: string) =>
+  Promise.all(messages.map(async (message) => {
     const isLatestUserMessage = message.role === "user" && message.id === latestUserMessageId;
     const audioAttachments = isLatestUserMessage
       ? (message.attachments ?? []).filter((attachment) => getAttachmentKind(attachment) === "audio")
@@ -366,17 +453,18 @@ const buildModelMessages = (messages: AgentMessage[], latestUserMessageId?: stri
       role: message.role,
       content: [
         ...textParts.map((text) => ({ type: "text" as const, text })),
-        ...audioAttachments.map((attachment) => {
+        ...(await Promise.all(audioAttachments.map(async (attachment) => {
           const { buffer, contentType } = parseDataUrl(attachment.dataUrl);
+          const normalizedAudio = await normalizeAudioForOpenRouter(buffer, contentType);
           return {
             type: "file" as const,
-            data: buffer,
-            mediaType: contentType,
+            data: normalizedAudio.buffer,
+            mediaType: normalizedAudio.mediaType,
           };
-        }),
+        }))),
       ],
     };
-  });
+  }));
 
 const normalizeAttachments = (attachments: AgentAttachment[]) => {
   return attachments.map((attachment) => {
@@ -627,7 +715,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "OPENROUTER_NOT_CONFIGURED" }, { status: 500 });
   }
 
-  const modelMessages = buildModelMessages(normalizedMessages, normalizedUserMessage?.id);
+  const modelMessages = await buildModelMessages(normalizedMessages, normalizedUserMessage?.id);
 
   const result = await generateText({
     model: openrouter(process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash"),
