@@ -6,7 +6,7 @@
     "watchPatterns": ["apps/cpg-portal/**", "packages/**"]
   },
   "deploy": {
-    "startCommand": "node apps/cpg-portal/server.js",
+    "startCommand": "HOSTNAME=0.0.0.0 node apps/cpg-portal/server.js",
     "numReplicas": 1,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5

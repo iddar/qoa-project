@@ -6,7 +6,7 @@
     "watchPatterns": ["apps/backoffice/**", "packages/**"]
   },
   "deploy": {
-    "startCommand": "node apps/backoffice/server.js",
+    "startCommand": "HOSTNAME=0.0.0.0 node apps/backoffice/server.js",
     "numReplicas": 1,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 5
