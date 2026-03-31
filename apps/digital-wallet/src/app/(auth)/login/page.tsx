@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 
 function getLoginErrorMessage(caughtError: unknown) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
+  const mentionsCaddy = apiUrl.startsWith("https://") && (apiUrl.includes("qoa.test") || apiUrl.includes("192.168."));
+
   if (caughtError instanceof Error && caughtError.message === "not_wallet_user") {
     return "Tu cuenta no tiene acceso a la wallet. Usa un usuario consumer/customer.";
   }
@@ -15,15 +18,21 @@ function getLoginErrorMessage(caughtError: unknown) {
   }
 
   if (caughtError instanceof Error && caughtError.message === "profile_fetch_failed") {
-    return "El login si respondio, pero no pudimos validar la sesion contra el API. Revisa el certificado de Caddy en tu iPhone.";
+    return mentionsCaddy
+      ? "El login si respondio, pero no pudimos validar la sesion contra el API. Revisa el certificado de Caddy en tu iPhone."
+      : "El login si respondio, pero no pudimos validar la sesion contra el API configurado.";
   }
 
   if (caughtError instanceof TypeError) {
-    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+    return mentionsCaddy
+      ? "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar."
+      : `No pudimos conectar con el API en ${apiUrl}. Verifica que el backend local este corriendo.`;
   }
 
   if (caughtError instanceof Error && /fetch|network|load failed/i.test(caughtError.message)) {
-    return "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar.";
+    return mentionsCaddy
+      ? "No pudimos conectar con el API. En iPhone normalmente es un tema de certificado de Caddy sin confiar."
+      : `No pudimos conectar con el API en ${apiUrl}. Verifica que el backend local este corriendo.`;
   }
 
   return "No pudimos iniciar sesión con esos datos.";

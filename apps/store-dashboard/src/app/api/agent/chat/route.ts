@@ -1,12 +1,12 @@
 import { generateText, stepCountIs, tool } from "ai";
+import { openrouter } from "@openrouter/ai-sdk-provider";
 import jsQR from "jsqr";
-import { minimax } from "vercel-minimax-ai-provider";
 import sharp from "sharp";
 import { z } from "zod";
 import { api } from "@/lib/api";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { buildCopilotActions, hasConfidentSingleProductMatch, planRequestedOrderItems, rankProductsByQuery, resolvePendingProductChoiceSelection } from "@/lib/store-copilot";
-import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAddedItem, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
+import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAddedItem, type AgentAttachment, type AgentMessage, type DraftCustomer, type DraftPendingProductChoice, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 
@@ -309,15 +309,6 @@ const getAttachmentKind = (attachment: AgentAttachment) => {
   return attachment.contentType.startsWith("audio/") ? "audio" : "image";
 };
 
-const getFileExtension = (contentType: string) => {
-  if (contentType.includes("webm")) return "webm";
-  if (contentType.includes("ogg")) return "ogg";
-  if (contentType.includes("wav")) return "wav";
-  if (contentType.includes("mpeg") || contentType.includes("mp3")) return "mp3";
-  if (contentType.includes("mp4") || contentType.includes("m4a") || contentType.includes("aac")) return "m4a";
-  return "bin";
-};
-
 const parseDataUrl = (dataUrl: string) => {
   const [meta, encoded] = dataUrl.split(",");
   if (!meta || !encoded) {
@@ -344,33 +335,63 @@ const parseDataUrl = (dataUrl: string) => {
   };
 };
 
-const transcribeAudioAttachment = async (attachment: AgentAttachment) => {
-  const choughUrl = process.env.CHOUGH_URL;
-  if (!choughUrl) {
-    throw new Error("CHOUGH_NOT_CONFIGURED");
-  }
+const buildTextMessageContent = (message: AgentMessage) => {
+  const attachmentLabel = message.attachments?.length
+    ? `\nAdjuntos: ${message.attachments.map((file) => file.name).join(", ")}`
+    : "";
+  return `${message.content}${attachmentLabel}`;
+};
 
-  const { buffer, contentType } = parseDataUrl(attachment.dataUrl);
-  const formData = new FormData();
-  formData.append(
-    "file",
-    new Blob([buffer], { type: contentType }),
-    `${attachment.id}.${getFileExtension(contentType)}`,
-  );
-  formData.append("format", "text");
-  formData.append("chunk_size", "30");
+const buildModelMessages = (messages: AgentMessage[], latestUserMessageId?: string) =>
+  messages.map((message) => {
+    const isLatestUserMessage = message.role === "user" && message.id === latestUserMessageId;
+    const audioAttachments = isLatestUserMessage
+      ? (message.attachments ?? []).filter((attachment) => getAttachmentKind(attachment) === "audio")
+      : [];
 
-  const response = await fetch(new URL("/transcribe", choughUrl), {
-    method: "POST",
-    body: formData,
-    signal: AbortSignal.timeout(30000),
+    if (audioAttachments.length === 0) {
+      return {
+        role: message.role,
+        content: buildTextMessageContent(message),
+      };
+    }
+
+    const typedContent = message.content.trim();
+    const textParts = [
+      typedContent && typedContent !== AUDIO_PLACEHOLDER ? typedContent : "Nota de voz del tendero.",
+      message.attachments?.some((attachment) => getAttachmentKind(attachment) === "image") ? "Tambien hay adjuntos de imagen en este turno." : "",
+    ].filter(Boolean);
+
+    return {
+      role: message.role,
+      content: [
+        ...textParts.map((text) => ({ type: "text" as const, text })),
+        ...audioAttachments.map((attachment) => {
+          const { buffer, contentType } = parseDataUrl(attachment.dataUrl);
+          return {
+            type: "file" as const,
+            data: buffer,
+            mediaType: contentType,
+          };
+        }),
+      ],
+    };
   });
 
-  if (!response.ok) {
-    throw new Error("TRANSCRIPTION_FAILED");
-  }
+const normalizeAttachments = (attachments: AgentAttachment[]) => {
+  return attachments.map((attachment) => {
+    const kind = getAttachmentKind(attachment);
+    if (kind !== "audio") {
+      return { ...attachment, kind };
+    }
 
-  return (await response.text()).trim();
+    return {
+      ...attachment,
+      kind: "audio" as const,
+      transcript: undefined,
+      status: "ready" as const,
+    };
+  });
 };
 
 export async function POST(request: Request) {
@@ -407,62 +428,12 @@ export async function POST(request: Request) {
   let normalizedUserMessage = latestUserMessage ? { ...latestUserMessage } : null;
 
   if (normalizedUserMessage?.attachments?.length) {
-    const nextAttachments: AgentAttachment[] = [];
-    const transcripts: string[] = [];
-
-    for (const attachment of normalizedUserMessage.attachments) {
-      if (getAttachmentKind(attachment) !== "audio") {
-        nextAttachments.push({ ...attachment, kind: getAttachmentKind(attachment) });
-        continue;
-      }
-
-      try {
-        const transcript = await transcribeAudioAttachment(attachment);
-        if (transcript) {
-          transcripts.push(transcript);
-        }
-        nextAttachments.push({
-          ...attachment,
-          kind: "audio",
-          transcript: transcript || undefined,
-          status: transcript ? "transcribed" : "failed",
-        });
-      } catch {
-        nextAttachments.push({
-          ...attachment,
-          kind: "audio",
-          status: "failed",
-        });
-      }
-    }
-
-    const typedContent = normalizedUserMessage.content.trim();
-    const transcriptBlock = transcripts.join("\n").trim();
-    const hasOnlyAudioPlaceholder = typedContent === AUDIO_PLACEHOLDER || typedContent === "Adjunto una imagen para escanear.";
-
+    const normalizedAttachments = normalizeAttachments(normalizedUserMessage.attachments);
     normalizedUserMessage = {
       ...normalizedUserMessage,
-      content: transcriptBlock
-        ? hasOnlyAudioPlaceholder || !typedContent
-          ? transcriptBlock
-          : `${typedContent}\n\nNota de voz transcrita: ${transcriptBlock}`
-        : typedContent,
-      attachments: nextAttachments,
+      attachments: normalizedAttachments,
     };
-    latestAttachments = nextAttachments;
-
-    if (!transcriptBlock && nextAttachments.some((attachment) => attachment.kind === "audio") && (hasOnlyAudioPlaceholder || !typedContent)) {
-      return Response.json({
-        message: {
-          id: crypto.randomUUID(),
-          role: "assistant",
-          content: "No pude transcribir la nota de voz. Intenta grabarla otra vez o escribe el pedido.",
-          actions: buildCopilotActions(workingDraft),
-        },
-        draft: workingDraft,
-        userMessage: normalizedUserMessage,
-      });
-    }
+    latestAttachments = normalizedAttachments;
   }
 
   const normalizedMessages = normalizedUserMessage
@@ -652,17 +623,16 @@ export async function POST(request: Request) {
     return deterministicCartBuildResponse;
   }
 
-  const transcript = normalizedMessages
-    .map((message: AgentMessage) => {
-      const attachmentLabel = message.attachments?.length ? `\nAdjuntos: ${message.attachments.map((file) => file.name).join(", ")}` : "";
-      return `${message.role === "assistant" ? "Asistente" : "Tendero"}: ${message.content}${attachmentLabel}`;
-    })
-    .join("\n\n");
+  if (!process.env.OPENROUTER_API_KEY) {
+    return Response.json({ error: "OPENROUTER_NOT_CONFIGURED" }, { status: 500 });
+  }
+
+  const modelMessages = buildModelMessages(normalizedMessages, normalizedUserMessage?.id);
 
   const result = await generateText({
-    model: minimax("MiniMax-M2.7"),
+    model: openrouter(process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash"),
     system: systemPrompt,
-    prompt: transcript,
+    messages: modelMessages,
     stopWhen: stepCountIs(8),
     tools: {
       searchStoreProducts: tool({

@@ -192,6 +192,21 @@ bun run local:down
 
 `local:env` levanta la pila Docker con `src/.env.local`; `local:rebuild` rehace migraciones y seed dentro del contenedor `app`.
 
+### Desarrollo host + apps web
+
+Hay dos modos soportados para levantar API y frontends desde la raiz:
+
+```bash
+bun run dev:env:lan-http
+bun run dev:env:caddy
+```
+
+- `dev:env:lan-http` usa la IP LAN detectada y expone todo en HTTP (`3000-3004`).
+- `dev:env:caddy` usa los hosts HTTPS de desarrollo (`api.qoa.test`, `admin.qoa.test`, `cpg.qoa.test`, `store.qoa.test`, `wallet.qoa.test`, `voice.qoa.test`).
+- `dev:env:public` se conserva como alias de `dev:env:lan-http`.
+
+Los scripts generan `apps/*/.env.local` automaticamente segun el modo elegido para evitar que un entorno local contamine al otro.
+
 ### Staging en Docker
 
 Archivos y scripts nuevos para staging:

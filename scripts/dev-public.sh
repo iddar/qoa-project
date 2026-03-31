@@ -40,9 +40,11 @@ printf 'Digital Wallet: http://%s:3004\n' "$PUBLIC_HOST_VALUE"
 export CHOUGH_URL="http://127.0.0.1:8080"
 export HOST="0.0.0.0"
 export PUBLIC_HOST="$PUBLIC_HOST_VALUE"
+export ALLOWED_DEV_ORIGINS="${ALLOWED_DEV_ORIGINS:-$PUBLIC_HOST_VALUE}"
 export NEXT_PUBLIC_API_URL="http://${PUBLIC_HOST_VALUE}:3000"
 export NEXT_PUBLIC_CPG_PORTAL_URL="http://${PUBLIC_HOST_VALUE}:3002"
 export NEXT_PUBLIC_STORE_DASHBOARD_URL="http://${PUBLIC_HOST_VALUE}:3003"
 export NEXT_PUBLIC_WALLET_URL="http://${PUBLIC_HOST_VALUE}:3004"
 
+bash "$ROOT_DIR/scripts/write-app-local-envs.sh" lan-http "$PUBLIC_HOST_VALUE"
 bash "$ROOT_DIR/scripts/dev.sh" up

@@ -26,6 +26,15 @@ compose() {
   docker compose --env-file "$ENV_FILE" "$@"
 }
 
+require_free_port() {
+  local port="$1"
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    printf 'Port %s is already in use. Stop the blocking process before running dev.sh.\n' "$port" >&2
+    lsof -nP -iTCP:"$port" -sTCP:LISTEN >&2
+    exit 1
+  fi
+}
+
 wait_for_service() {
   local service="$1"
   local cid=""
@@ -53,6 +62,11 @@ wait_for_service() {
 
 case "$command" in
   up)
+    require_free_port 3000
+    require_free_port 3001
+    require_free_port 3002
+    require_free_port 3003
+    require_free_port 3004
     compose up -d --remove-orphans postgres postgres_test
     wait_for_service postgres
     wait_for_service postgres_test
