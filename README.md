@@ -219,7 +219,6 @@ bun run staging:deploy
 bun run staging:rollback
 bun run staging:smoke
 ```
-
 - `docker-compose.staging.yml` levanta API, Postgres y los cuatro frontends en Docker.
 - `deploy/staging/staging.env.example` define las variables requeridas del host.
 - `scripts/staging/render-caddy.sh` genera el bloque Caddy para los nuevos dominios sin prefijo `qoa-`.
