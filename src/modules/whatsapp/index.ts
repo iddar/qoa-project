@@ -1,14 +1,27 @@
 import { and, desc, eq, lt, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import QRCode from 'qrcode';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { backofficeRoles } from '../../app/plugins/roles';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
-import { whatsappMessages } from '../../db/schema';
+import { cards, whatsappMessages } from '../../db/schema';
+import {
+  attachWhatsappOutboundMessageToSession,
+  processWhatsappOnboardingMessage,
+} from '../../services/whatsapp-onboarding';
+import {
+  markInboundWhatsappMessageError,
+  sendTwilioWhatsappMessage,
+  validateTwilioWebhookRequest,
+  verifyWhatsappCardQrImageSignature,
+} from '../../services/twilio-whatsapp';
 import type { StatusHandler } from '../../types/handlers';
 import {
+  twilioWhatsappWebhookResponse,
+  whatsappQrImageQuery,
   whatsappMessageListQuery,
   whatsappMessageListResponse,
   whatsappMetricsResponse,
@@ -18,6 +31,10 @@ import {
 
 const webhookHeader = t.Object({
   'x-whatsapp-signature': t.Optional(t.String()),
+});
+
+const twilioWebhookHeader = t.Object({
+  'x-twilio-signature': t.Optional(t.String()),
 });
 
 type MessageRow = {
@@ -89,6 +106,14 @@ const signatureMatches = (provided: string | undefined, expected: string) => {
   }
 
   return timingSafeEqual(expectedBuffer, providedBuffer);
+};
+
+const stringRecord = (input: Record<string, unknown>) => {
+  const payload: Record<string, string> = {};
+  for (const [key, value] of Object.entries(input)) {
+    payload[key] = String(value);
+  }
+  return payload;
 };
 
 export const whatsappModule = new Elysia({
@@ -171,6 +196,192 @@ export const whatsappModule = new Elysia({
       },
       detail: {
         summary: 'Recibir webhook de WhatsApp',
+      },
+    },
+  )
+  .post(
+    '/twilio/webhook',
+    async (context: any) => {
+      const { request, status } = context;
+      const payload = stringRecord((context.body ?? {}) as Record<string, unknown>);
+      const signature = request.headers.get('x-twilio-signature');
+
+      try {
+        const valid = validateTwilioWebhookRequest({
+          requestUrl: request.url,
+          signature,
+          params: payload,
+        });
+
+        if (!valid) {
+          return status(401, {
+            error: {
+              code: 'INVALID_TWILIO_SIGNATURE',
+              message: 'Firma de webhook Twilio inválida',
+            },
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'TWILIO_SIGNATURE_VALIDATION_FAILED';
+        return status(500, {
+          error: {
+            code: 'TWILIO_SIGNATURE_VALIDATION_FAILED',
+            message,
+          },
+        });
+      }
+
+      const messageId = payload.MessageSid ?? payload.SmsMessageSid;
+      if (!messageId) {
+        return status(400, {
+          error: {
+            code: 'INVALID_TWILIO_PAYLOAD',
+            message: 'Falta MessageSid en el webhook',
+          },
+        });
+      }
+
+      const [existing] = (await db
+        .select()
+        .from(whatsappMessages)
+        .where(
+          and(eq(whatsappMessages.provider, 'twilio'), eq(whatsappMessages.externalMessageId, messageId)),
+        )) as MessageRow[];
+
+      if (existing) {
+        await db
+          .update(whatsappMessages)
+          .set({
+            replayCount: existing.replayCount + 1,
+            status: 'replayed',
+            lastReceivedAt: new Date(),
+          })
+          .where(eq(whatsappMessages.id, existing.id));
+
+        return {
+          data: {
+            messageId,
+            status: 'replayed',
+            replayed: true,
+          },
+        };
+      }
+
+      await db.insert(whatsappMessages).values({
+        provider: 'twilio',
+        externalMessageId: messageId,
+        direction: 'inbound',
+        fromPhone: payload.From ?? payload.WaId ?? '',
+        toPhone: payload.To ?? '',
+        textBody: payload.Body ?? null,
+        payload: JSON.stringify(payload),
+        status: 'processed',
+        processedAt: new Date(),
+      });
+
+      try {
+        const onboarding = await processWhatsappOnboardingMessage({
+          messageSid: messageId,
+          from: payload.From ?? payload.WaId ?? '',
+          body: payload.Body ?? null,
+        });
+
+        const outbound = await sendTwilioWhatsappMessage({
+          to: payload.From ?? payload.WaId ?? '',
+          body: onboarding.replyBody,
+          mediaUrl: onboarding.mediaUrl,
+        });
+
+        await attachWhatsappOutboundMessageToSession(payload.From ?? payload.WaId ?? '', outbound.sid);
+
+        return status(201, {
+          data: {
+            messageId,
+            status: 'processed',
+            replayed: false,
+            sessionState: onboarding.sessionState,
+          },
+        });
+      } catch (error) {
+        await markInboundWhatsappMessageError(
+          messageId,
+          error instanceof Error ? error.message : 'WHATSAPP_ONBOARDING_FAILED',
+        );
+
+        return status(500, {
+          error: {
+            code: 'WHATSAPP_ONBOARDING_FAILED',
+            message: error instanceof Error ? error.message : 'No se pudo procesar el onboarding por WhatsApp',
+          },
+        });
+      }
+    },
+    {
+      headers: twilioWebhookHeader,
+      parse: 'urlencoded',
+      response: {
+        200: twilioWhatsappWebhookResponse,
+        201: twilioWhatsappWebhookResponse,
+      },
+      detail: {
+        summary: 'Recibir webhook Twilio de WhatsApp',
+      },
+    },
+  )
+  .get(
+    '/cards/:cardId/qr-image',
+    async (context: any) => {
+      const { params, query, status } = context;
+      if (
+        !verifyWhatsappCardQrImageSignature({
+          cardId: params.cardId,
+          expires: query.expires,
+          signature: query.signature,
+        })
+      ) {
+        return status(401, {
+          error: {
+            code: 'INVALID_QR_IMAGE_SIGNATURE',
+            message: 'La URL del QR no es válida o expiró',
+          },
+        });
+      }
+
+      const [card] = (await db.select({ code: cards.code }).from(cards).where(eq(cards.id, params.cardId))) as Array<{
+        code: string;
+      }>;
+
+      if (!card) {
+        return status(404, {
+          error: {
+            code: 'CARD_NOT_FOUND',
+            message: 'Tarjeta no encontrada',
+          },
+        });
+      }
+
+      const png = await QRCode.toBuffer(card.code, {
+        type: 'png',
+        width: 512,
+        margin: 2,
+        color: {
+          dark: '#111111',
+          light: '#FFFFFF',
+        },
+      });
+
+      return new Response(new Uint8Array(png), {
+        status: 200,
+        headers: {
+          'content-type': 'image/png',
+          'cache-control': 'private, max-age=300',
+        },
+      });
+    },
+    {
+      query: whatsappQrImageQuery,
+      detail: {
+        summary: 'Obtener imagen QR firmada para WhatsApp',
       },
     },
   )

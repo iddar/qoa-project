@@ -1997,6 +1997,67 @@ paths:
               schema:
                 $ref: '#/components/schemas/WhatsappWebhookResponse'
 
+  /whatsapp/twilio/webhook:
+    post:
+      tags: [WhatsApp]
+      summary: Recibir webhook Twilio de WhatsApp
+      operationId: receiveTwilioWhatsappWebhook
+      parameters:
+        - name: x-twilio-signature
+          in: header
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TwilioWhatsappWebhookRequest'
+      responses:
+        '200':
+          description: Evento Twilio recibido previamente (replay)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwilioWhatsappWebhookResponse'
+        '201':
+          description: Evento Twilio procesado por primera vez
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwilioWhatsappWebhookResponse'
+
+  /whatsapp/cards/{cardId}/qr-image:
+    get:
+      tags: [WhatsApp]
+      summary: Obtener imagen QR firmada para WhatsApp
+      operationId: getWhatsappCardQrImage
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: expires
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: signature
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Imagen PNG del QR de la tarjeta
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
   /whatsapp/messages:
     get:
       tags: [WhatsApp]
@@ -4662,6 +4723,53 @@ components:
               type: string
             replayed:
               type: boolean
+
+    TwilioWhatsappWebhookRequest:
+      type: object
+      properties:
+        MessageSid:
+          type: string
+        SmsMessageSid:
+          type: string
+        AccountSid:
+          type: string
+        From:
+          type: string
+        To:
+          type: string
+        Body:
+          type: string
+          nullable: true
+        WaId:
+          type: string
+        ProfileName:
+          type: string
+        MessageType:
+          type: string
+        SmsStatus:
+          type: string
+        NumMedia:
+          type: string
+        NumSegments:
+          type: string
+        ApiVersion:
+          type: string
+
+    TwilioWhatsappWebhookResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            messageId:
+              type: string
+            status:
+              type: string
+            replayed:
+              type: boolean
+            sessionState:
+              type: string
+              nullable: true
 
     WhatsappMessage:
       type: object

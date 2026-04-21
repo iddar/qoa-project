@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
-import { eq } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import { createHmac } from 'node:crypto';
+import { getExpectedTwilioSignature } from 'twilio/lib/webhooks/webhooks';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { whatsappMessages } from '../db/schema';
+import { cards, stores, userStoreEnrollments, users, whatsappMessages, whatsappOnboardingSessions } from '../db/schema';
+import { buildSignedWhatsappCardQrImageUrl } from '../services/twilio-whatsapp';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
 process.env.WHATSAPP_WEBHOOK_SECRET = 'test_whatsapp_secret';
+process.env.TWILIO_AUTH = 'test_twilio_auth';
+process.env.TWILIO_ACCOUNT = 'ACtesttwilioaccount';
+process.env.TWILIO_WHATSAPP_FROM = 'whatsapp:+12182204117';
+process.env.PUBLIC_BASE_URL = 'https://qoacore-production.up.railway.app';
+process.env.TWILIO_MEDIA_SIGNING_SECRET = 'test_media_secret';
 
 const app = createApp();
 const api = treaty<App>(app);
@@ -23,6 +30,87 @@ const signatureFor = (payload: unknown) =>
   createHmac('sha256', process.env.WHATSAPP_WEBHOOK_SECRET ?? '')
     .update(JSON.stringify(payload))
     .digest('hex');
+
+const buildTwilioPayload = (overrides: Partial<Record<string, string>> = {}) => {
+  const messageSid = overrides.MessageSid ?? `SM${crypto.randomUUID().replace(/-/g, '').slice(0, 32)}`;
+  return {
+    SmsMessageSid: messageSid,
+    MessageSid: messageSid,
+    AccountSid: process.env.TWILIO_ACCOUNT ?? 'ACtesttwilioaccount',
+    From: overrides.From ?? 'whatsapp:+5215512345678',
+    To: overrides.To ?? process.env.TWILIO_WHATSAPP_FROM ?? 'whatsapp:+12182204117',
+    Body: overrides.Body ?? '',
+    WaId: overrides.WaId ?? '5215512345678',
+    ProfileName: overrides.ProfileName ?? 'Cliente WhatsApp',
+    MessageType: 'text',
+    SmsStatus: 'received',
+    NumMedia: '0',
+    NumSegments: '1',
+    ApiVersion: '2010-04-01',
+    ...overrides,
+  };
+};
+
+const buildTwilioRequest = (payload: Record<string, string>, invalidSignature = false) => {
+  const webhookUrl = `${process.env.PUBLIC_BASE_URL}/v1/whatsapp/twilio/webhook`;
+  const signature = invalidSignature
+    ? 'bad-signature'
+    : getExpectedTwilioSignature(process.env.TWILIO_AUTH ?? '', webhookUrl, payload);
+
+  return new Request(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      'x-twilio-signature': signature,
+    },
+    body: new URLSearchParams(payload).toString(),
+  });
+};
+
+const createStore = async (name: string) => {
+  const [store] = (await db
+    .insert(stores)
+    .values({
+      name,
+      code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+      type: 'tiendita',
+    })
+    .returning({ id: stores.id, code: stores.code, name: stores.name })) as Array<{
+    id: string;
+    code: string;
+    name: string;
+  }>;
+
+  if (!store) {
+    throw new Error('Failed to create store');
+  }
+
+  return store;
+};
+
+const cleanupPhoneData = async (phone: string) => {
+  const normalizedPhone = phone.startsWith('whatsapp:') ? phone.slice('whatsapp:'.length) : phone;
+  const whatsappPhone = `whatsapp:${normalizedPhone}`;
+
+  const userRows = (await db.select({ id: users.id }).from(users).where(eq(users.phone, normalizedPhone))) as Array<{
+    id: string;
+  }>;
+  for (const row of userRows) {
+    await db.delete(users).where(eq(users.id, row.id));
+  }
+
+  await db.delete(whatsappOnboardingSessions).where(eq(whatsappOnboardingSessions.phone, normalizedPhone));
+  await db
+    .delete(whatsappMessages)
+    .where(
+      or(
+        eq(whatsappMessages.fromPhone, normalizedPhone),
+        eq(whatsappMessages.toPhone, normalizedPhone),
+        eq(whatsappMessages.fromPhone, whatsappPhone),
+        eq(whatsappMessages.toPhone, whatsappPhone),
+      ),
+    );
+};
 
 describe('WhatsApp module', () => {
   it('ingests webhook and handles replay idempotently', async () => {
@@ -108,5 +196,151 @@ describe('WhatsApp module', () => {
 
     expect(response.status).toBe(401);
     expect(response.error.value.error.code).toBe('INVALID_WHATSAPP_SIGNATURE');
+  });
+
+  it('rejects Twilio webhook when signature is invalid', async () => {
+    const payload = buildTwilioPayload();
+    const response = await app.handle(buildTwilioRequest(payload, true));
+    const body = (await response.json()) as { error: { code: string } };
+
+    expect(response.status).toBe(401);
+    expect(body.error.code).toBe('INVALID_TWILIO_SIGNATURE');
+  });
+
+  it('processes Twilio onboarding and reuses the same universal card across stores', async () => {
+    const phone = '+5215512000001';
+    const waPhone = `whatsapp:${phone}`;
+    const firstStore = await createStore('Tienda WhatsApp Uno');
+    const secondStore = await createStore('Tienda WhatsApp Dos');
+
+    try {
+      const startPayload = buildTwilioPayload({ From: waPhone, Body: firstStore.code, WaId: phone.slice(1) });
+      const startResponse = await app.handle(buildTwilioRequest(startPayload));
+      const startBody = (await startResponse.json()) as { data: { sessionState?: string } };
+
+      expect(startResponse.status).toBe(201);
+      expect(startBody.data.sessionState).toBe('awaiting_name');
+
+      const namePayload = buildTwilioPayload({ From: waPhone, Body: 'Iddar Cliente', WaId: phone.slice(1) });
+      const nameResponse = await app.handle(buildTwilioRequest(namePayload));
+      const nameBody = (await nameResponse.json()) as { data: { sessionState?: string } };
+
+      expect(nameResponse.status).toBe(201);
+      expect(nameBody.data.sessionState).toBe('awaiting_birth_date');
+
+      const birthPayload = buildTwilioPayload({ From: waPhone, Body: '07/11/1994', WaId: phone.slice(1) });
+      const birthResponse = await app.handle(buildTwilioRequest(birthPayload));
+      const birthBody = (await birthResponse.json()) as { data: { sessionState?: string } };
+
+      expect(birthResponse.status).toBe(201);
+      expect(birthBody.data.sessionState).toBe('completed');
+
+      const [createdUser] = (await db
+        .select({ id: users.id, name: users.name, birthDate: users.birthDate })
+        .from(users)
+        .where(eq(users.phone, phone))) as Array<{ id: string; name: string | null; birthDate: Date | null }>;
+
+      expect(createdUser?.name).toBe('Iddar Cliente');
+      expect(createdUser?.birthDate?.toISOString().slice(0, 10)).toBe('1994-11-07');
+
+      const initialCards = (await db
+        .select({ id: cards.id, code: cards.code })
+        .from(cards)
+        .where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{ id: string; code: string }>;
+
+      expect(initialCards.length).toBe(1);
+
+      const secondStorePayload = buildTwilioPayload({ From: waPhone, Body: secondStore.code, WaId: phone.slice(1) });
+      const secondStoreResponse = await app.handle(buildTwilioRequest(secondStorePayload));
+      const secondStoreBody = (await secondStoreResponse.json()) as { data: { sessionState?: string } };
+
+      expect(secondStoreResponse.status).toBe(201);
+      expect(secondStoreBody.data.sessionState).toBe('completed');
+
+      const cardsAfterSecondStore = (await db
+        .select({ id: cards.id, code: cards.code })
+        .from(cards)
+        .where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{ id: string; code: string }>;
+
+      expect(cardsAfterSecondStore.length).toBe(1);
+      expect(cardsAfterSecondStore[0]?.id).toBe(initialCards[0]?.id);
+
+      const enrollments = (await db
+        .select({ storeId: userStoreEnrollments.storeId })
+        .from(userStoreEnrollments)
+        .where(eq(userStoreEnrollments.userId, createdUser?.id ?? ''))) as Array<{ storeId: string }>;
+
+      expect(enrollments).toHaveLength(2);
+      expect(new Set(enrollments.map((entry) => entry.storeId))).toEqual(new Set([firstStore.id, secondStore.id]));
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(and(eq(stores.id, firstStore.id), eq(stores.code, firstStore.code)));
+      await db.delete(stores).where(and(eq(stores.id, secondStore.id), eq(stores.code, secondStore.code)));
+    }
+  });
+
+  it('handles Twilio webhook replay idempotently', async () => {
+    const phone = '+5215512000002';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Replay Twilio');
+    const payload = buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) });
+
+    try {
+      const firstResponse = await app.handle(buildTwilioRequest(payload));
+      const firstBody = (await firstResponse.json()) as { data: { replayed: boolean } };
+      expect(firstResponse.status).toBe(201);
+      expect(firstBody.data.replayed).toBe(false);
+
+      const secondResponse = await app.handle(buildTwilioRequest(payload));
+      const secondBody = (await secondResponse.json()) as { data: { replayed: boolean } };
+      expect(secondResponse.status).toBe(200);
+      expect(secondBody.data.replayed).toBe(true);
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('serves signed QR image for WhatsApp cards', async () => {
+    const phone = '+5215512000003';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda QR Twilio');
+
+    try {
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente QR', WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })),
+      );
+
+      const [createdUser] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, phone))) as Array<{
+        id: string;
+      }>;
+      const [card] = (await db
+        .select({ id: cards.id })
+        .from(cards)
+        .where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{
+        id: string;
+      }>;
+
+      if (!card) {
+        throw new Error('Card was not created for QR image test');
+      }
+
+      const qrUrl = buildSignedWhatsappCardQrImageUrl(card.id);
+      const qrResponse = await app.handle(new Request(qrUrl));
+
+      expect(qrResponse.status).toBe(200);
+      expect(qrResponse.headers.get('content-type')).toBe('image/png');
+      const buffer = await qrResponse.arrayBuffer();
+      expect(buffer.byteLength).toBeGreaterThan(0);
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
   });
 });
