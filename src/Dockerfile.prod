@@ -14,5 +14,5 @@ COPY src/ .
 
 EXPOSE 3000
 
-# Run migrations then start — DATABASE_URL available at runtime via Railway env vars
-CMD ["sh", "-c", "bunx drizzle-kit migrate --config drizzle.config.ts && bun index.ts"]
+# Use the package start script so Railway start-command overrides and Docker CMD behave the same.
+CMD ["bun", "run", "start"]

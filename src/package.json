@@ -5,7 +5,7 @@
   "module": "index.ts",
   "scripts": {
     "dev": "bun --env-file=.env.development --hot index.ts",
-    "start": "bun index.ts",
+    "start": "bun run db:migrate && bun index.ts",
     "test": "bun --env-file=.env.test run db:rebuild:test && bun --env-file=.env.test test spec",
     "db:generate": "bunx drizzle-kit generate --config drizzle.config.ts",
     "db:migrate": "bunx drizzle-kit migrate --config drizzle.config.ts",
