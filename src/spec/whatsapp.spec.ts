@@ -67,12 +67,12 @@ const buildTwilioRequest = (payload: Record<string, string>, invalidSignature = 
   });
 };
 
-const createStore = async (name: string) => {
+const createStore = async (name: string, code?: string) => {
   const [store] = (await db
     .insert(stores)
     .values({
       name,
-      code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+      code: code ?? `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
       type: 'tiendita',
     })
     .returning({ id: stores.id, code: stores.code, name: stores.name })) as Array<{
@@ -338,6 +338,33 @@ describe('WhatsApp module', () => {
       expect(qrResponse.headers.get('content-type')).toBe('image/png');
       const buffer = await qrResponse.arrayBuffer();
       expect(buffer.byteLength).toBeGreaterThan(0);
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('accepts store onboarding from JSON payloads using existing store codes', async () => {
+    const phone = '+5215512000004';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Seed Staging', 'seed_store_staging');
+    const payload = JSON.stringify({
+      code: 'seed_store_staging',
+      payload: {
+        entityType: 'store',
+        entityId: store.id,
+        code: 'seed_store_staging',
+      },
+    });
+
+    try {
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: payload, WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('awaiting_name');
     } finally {
       await cleanupPhoneData(phone);
       await db.delete(stores).where(eq(stores.id, store.id));
