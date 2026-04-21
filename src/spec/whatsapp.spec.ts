@@ -344,22 +344,14 @@ describe('WhatsApp module', () => {
     }
   });
 
-  it('accepts store onboarding from JSON payloads using existing store codes', async () => {
+  it('accepts store onboarding with alta plus existing store code', async () => {
     const phone = '+5215512000004';
     const waPhone = `whatsapp:${phone}`;
     const store = await createStore('Tienda Seed Staging', 'seed_store_staging');
-    const payload = JSON.stringify({
-      code: 'seed_store_staging',
-      payload: {
-        entityType: 'store',
-        entityId: store.id,
-        code: 'seed_store_staging',
-      },
-    });
 
     try {
       const response = await app.handle(
-        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: payload, WaId: phone.slice(1) })),
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: `alta ${store.code}`, WaId: phone.slice(1) })),
       );
       const body = (await response.json()) as { data: { sessionState?: string } };
 
