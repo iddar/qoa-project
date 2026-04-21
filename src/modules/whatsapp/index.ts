@@ -223,6 +223,12 @@ export const whatsappModule = new Elysia({
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'TWILIO_SIGNATURE_VALIDATION_FAILED';
+        console.error('[whatsapp][twilio][signature-validation-failed]', {
+          message,
+          requestUrl: request.url,
+          hasSignature: Boolean(signature),
+          payloadKeys: Object.keys(payload),
+        });
         return status(500, {
           error: {
             code: 'TWILIO_SIGNATURE_VALIDATION_FAILED',
@@ -303,15 +309,20 @@ export const whatsappModule = new Elysia({
           },
         });
       } catch (error) {
-        await markInboundWhatsappMessageError(
+        const message = error instanceof Error ? error.message : 'WHATSAPP_ONBOARDING_FAILED';
+        console.error('[whatsapp][twilio][onboarding-failed]', {
           messageId,
-          error instanceof Error ? error.message : 'WHATSAPP_ONBOARDING_FAILED',
-        );
+          from: payload.From ?? payload.WaId ?? '',
+          to: payload.To ?? '',
+          body: payload.Body ?? null,
+          error: message,
+        });
+        await markInboundWhatsappMessageError(messageId, message);
 
         return status(500, {
           error: {
             code: 'WHATSAPP_ONBOARDING_FAILED',
-            message: error instanceof Error ? error.message : 'No se pudo procesar el onboarding por WhatsApp',
+            message,
           },
         });
       }
