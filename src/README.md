@@ -56,4 +56,6 @@ For `development` and `local`, the seed also creates demo activity for UX valida
 - active policy fixtures per campaign (min amount, min quantity, max accumulations, cooldown)
 - active rewards and completed redemptions for KPI/report widgets
 
+## Test
+
 `test` keeps a minimal dataset for faster automated runs.
