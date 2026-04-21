@@ -1,4 +1,5 @@
 import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { date } from 'drizzle-orm/pg-core/columns/date';
 import { sql } from 'drizzle-orm';
 import { tenantType } from './api-keys';
 
@@ -29,6 +30,7 @@ export const users = pgTable(
     phone: varchar('phone', { length: 20 }).notNull(),
     email: varchar('email', { length: 255 }),
     name: varchar('name', { length: 100 }),
+    birthDate: date('birth_date', { mode: 'date' }),
     passwordHash: varchar('password_hash', { length: 255 }),
     role: userRole('role').notNull().default('consumer'),
     status: userStatus('status').notNull().default('active'),
