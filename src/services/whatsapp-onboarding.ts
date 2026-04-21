@@ -1,5 +1,4 @@
 import { and, eq } from 'drizzle-orm';
-import { sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { cards, stores, userStoreEnrollments, users, whatsappOnboardingSessions } from '../db/schema';
 import { ensureUserUniversalWalletCard } from './wallet-onboarding';
@@ -45,7 +44,8 @@ export type ProcessWhatsappOnboardingResult = {
   storeId?: string;
 };
 
-const STORE_CODE_PATTERN = /\bsto_[a-z0-9]+\b/i;
+const STORE_CODE_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)+$/i;
+const STORE_SIGNUP_PATTERN = /^alta\s+([a-z0-9]+(?:[_-][a-z0-9]+)+)$/i;
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').slice(0, 100);
 
@@ -78,8 +78,13 @@ const extractStoreCodeFromText = (value: string | null | undefined) => {
     return null;
   }
 
-  const match = value.match(STORE_CODE_PATTERN);
-  return match ? match[0].toLowerCase() : null;
+  const trimmed = value.trim();
+  if (STORE_CODE_PATTERN.test(trimmed)) {
+    return trimmed.toLowerCase();
+  }
+
+  const altaMatch = trimmed.match(STORE_SIGNUP_PATTERN);
+  return altaMatch?.[1]?.toLowerCase() ?? null;
 };
 
 const findUserByPhone = async (phone: string) => {
@@ -306,8 +311,7 @@ export const processWhatsappOnboardingMessage = async (
         lastInboundMessageId: input.messageSid,
       });
       return {
-        replyBody:
-          'No reconocí ese código de tienda. Escanea otra vez el QR de tu tiendita o envíame el código que empieza con sto_.',
+        replyBody: 'No reconocí ese código de tienda. Escanea otra vez el QR o envíame `alta CODIGO_DE_TIENDA`.',
         sessionState: session.state,
         userId: session.userId ?? undefined,
       };
@@ -373,8 +377,7 @@ export const processWhatsappOnboardingMessage = async (
       state: 'awaiting_store',
     });
     return {
-      replyBody:
-        'Escanea el QR de tu tiendita o envíame el código que empieza con sto_ para comenzar a crear tu wallet Qoa.',
+      replyBody: 'Escanea el QR de tu tiendita o envíame `alta CODIGO_DE_TIENDA` para comenzar a crear tu wallet Qoa.',
       sessionState: 'awaiting_store',
     };
   }
