@@ -51,3 +51,17 @@ export const whatsappMetricsResponse = t.Object({
     errors: t.Number(),
   }),
 });
+
+export const twilioWhatsappWebhookResponse = t.Object({
+  data: t.Object({
+    messageId: t.String(),
+    status: t.String(),
+    replayed: t.Boolean(),
+    sessionState: t.Optional(t.String()),
+  }),
+});
+
+export const whatsappQrImageQuery = t.Object({
+  expires: t.String(),
+  signature: t.String(),
+});
