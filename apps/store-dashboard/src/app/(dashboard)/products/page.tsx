@@ -15,6 +15,7 @@ type StoreProduct = {
   sku?: string;
   unitType: string;
   price: number;
+  stock: number;
   status: string;
   createdAt: string;
 };
@@ -189,6 +190,7 @@ export default function StoreProductsPage() {
                 <tr className="border-b border-zinc-200 text-left text-xs font-medium uppercase tracking-wider text-zinc-500 dark:border-zinc-700">
                   <th className="px-4 py-3">Producto</th>
                   <th className="px-4 py-3">SKU</th>
+                  <th className="px-4 py-3">Stock</th>
                   <th className="px-4 py-3">Precio</th>
                   <th className="px-4 py-3">Tipo</th>
                   <th className="px-4 py-3">Estado</th>
@@ -218,6 +220,9 @@ export default function StoreProductsPage() {
                     </td>
                     <td className="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
                       {product.sku ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
+                      {product.stock}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-emerald-600 dark:text-emerald-400">
                       {formatMoney(product.price)}

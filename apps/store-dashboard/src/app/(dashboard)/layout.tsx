@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { BarChart3, CreditCard, LayoutDashboard, Package2, ScanLine, ShoppingCart, Users } from "lucide-react";
+import { Archive, BarChart3, CreditCard, LayoutDashboard, Package2, ScanLine, ShoppingCart, Users } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { StoreAgentDrawer } from "@/components/store-agent-drawer";
 import { useAuth } from "@/providers/auth-provider";
+import { StoreInventoryProvider } from "@/providers/store-inventory-provider";
 import { StorePosProvider } from "@/providers/store-pos-provider";
 
 const navItems = [
   { href: "/", label: "Resumen", shortLabel: "Inicio", icon: LayoutDashboard },
   { href: "/pos", label: "POS", shortLabel: "POS", icon: ShoppingCart },
+  { href: "/inventory", label: "Inventario", shortLabel: "Inventario", icon: Archive },
   { href: "/products", label: "Catálogo", shortLabel: "Catálogo", icon: Package2 },
   { href: "/sales", label: "Ventas", shortLabel: "Ventas", icon: CreditCard },
   { href: "/scan", label: "Escanear", shortLabel: "Escanear", icon: ScanLine },
@@ -42,6 +44,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <StorePosProvider>
+      <StoreInventoryProvider>
       <div className="flex min-h-screen bg-zinc-50 dark:bg-zinc-950">
         <div className="fixed inset-x-0 top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur lg:hidden dark:border-zinc-800 dark:bg-zinc-950/95">
           <div className="flex items-center justify-between px-4 py-3">
@@ -135,6 +138,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
       </div>
+      </StoreInventoryProvider>
     </StorePosProvider>
   );
 }

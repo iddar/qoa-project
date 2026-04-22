@@ -7,6 +7,8 @@ import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
 import { getInitialCopilotActions } from "@/lib/store-copilot";
 import { getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type StorePosDraft } from "@/lib/store-pos";
+import { getInventoryDraftSummary, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { useStoreInventory } from "@/providers/store-inventory-provider";
 import { useStorePos } from "@/providers/store-pos-provider";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
@@ -18,13 +20,21 @@ const formatMoney = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
-const INITIAL_ASSISTANT_MESSAGE: AgentMessage = {
-  id: "store-agent-welcome",
-  role: "assistant",
-  content:
-    "Hola, soy tu asistente de caja. Puedo armar el pedido, ligar la tarjeta del cliente por QR y confirmar la venta cuando me lo pidas.\n\nPrueba con:\n- Agrega 2 refrescos al pedido\n- Busca unas papas para el carrito\n- Escanea la tarjeta del cliente\n- Confirma la venta actual",
-  actions: getInitialCopilotActions(),
-};
+const getInitialAssistantMessage = (mode: "pos" | "inventory"): AgentMessage =>
+  mode === "inventory"
+    ? {
+        id: "store-agent-welcome-inventory",
+        role: "assistant",
+        content:
+          "Hola, soy tu asistente de inventario. Puedo interpretar listas de proveedor, preparar el preview de entrada y ayudarte a confirmar la carga al inventario.\n\nPrueba con:\n- 12 Refresco 600ml\n- Galletas Mantequilla, GAL-001, 6, 30\n- Confirma la entrada de inventario actual",
+      }
+    : {
+        id: "store-agent-welcome-pos",
+        role: "assistant",
+        content:
+          "Hola, soy tu asistente de caja. Puedo armar el pedido, ligar la tarjeta del cliente por QR y confirmar la venta cuando me lo pidas.\n\nPrueba con:\n- Agrega 2 refrescos al pedido\n- Busca unas papas para el carrito\n- Escanea la tarjeta del cliente\n- Confirma la venta actual",
+        actions: getInitialCopilotActions(),
+      };
 
 const readFileAsDataUrl = (file: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -183,9 +193,12 @@ const decodeQrFile = async (file: File) => {
 
 export function StoreAgentDrawer() {
   const pathname = usePathname();
+  const isInventoryMode = pathname.startsWith("/inventory");
+  const agentMode = isInventoryMode ? "inventory" : "pos";
   const token = getAccessToken();
   const { draft, replaceDraft, isAgentOpen, setAgentOpen } = useStorePos();
-  const [messages, setMessages] = useState<AgentMessage[]>([INITIAL_ASSISTANT_MESSAGE]);
+  const { draft: inventoryDraft, replaceDraft: replaceInventoryDraft } = useStoreInventory();
+  const [messages, setMessages] = useState<AgentMessage[]>([getInitialAssistantMessage(agentMode)]);
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
   const [attachments, setAttachments] = useState<AgentAttachment[]>([]);
@@ -231,7 +244,16 @@ export function StoreAgentDrawer() {
   }, [messages]);
 
   useEffect(() => {
-    if (pathname.startsWith("/pos")) {
+    setMessages([getInitialAssistantMessage(agentMode)]);
+    setAttachments((current) => {
+      current.forEach(revokeAttachmentPreviewUrl);
+      return [];
+    });
+    setInput("");
+  }, [agentMode]);
+
+  useEffect(() => {
+    if (pathname.startsWith("/pos") || pathname.startsWith("/inventory")) {
       setAgentOpen(true);
     }
   }, [pathname, setAgentOpen]);
@@ -321,20 +343,33 @@ export function StoreAgentDrawer() {
   };
 
   const removeAddedItem = async (storeProductId: string, name: string) => {
+    if (isInventoryMode) {
+      return;
+    }
+
     await sendMessage(`Quita ${name} del pedido usando storeProductId ${storeProductId}.`, []);
   };
 
   const summary = useMemo(
-    () => ({
-      total: getDraftTotal(draft),
-      items: getDraftItemCount(draft),
-    }),
-    [draft],
+    () => isInventoryMode
+      ? {
+          total: getInventoryDraftSummary(inventoryDraft).quantity,
+          items: getInventoryDraftSummary(inventoryDraft).rows,
+        }
+      : {
+          total: getDraftTotal(draft),
+          items: getDraftItemCount(draft),
+        },
+    [draft, inventoryDraft, isInventoryMode],
   );
 
   const sendMessage = async (content: string, outgoingAttachments: AgentAttachment[] = attachments) => {
     const trimmed = content.trim();
     if ((!trimmed && outgoingAttachments.length === 0) || !token) {
+      return;
+    }
+
+    if (isInventoryMode && outgoingAttachments.length > 0) {
       return;
     }
 
@@ -365,7 +400,7 @@ export function StoreAgentDrawer() {
     setPending(true);
 
     try {
-      const response = await fetch("/api/agent/chat", {
+      const response = await fetch(isInventoryMode ? "/api/agent/inventory-chat" : "/api/agent/chat", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -373,7 +408,7 @@ export function StoreAgentDrawer() {
         },
         body: JSON.stringify({
           messages: [...messages, userMessage],
-          draft,
+          draft: isInventoryMode ? inventoryDraft : draft,
         }),
       });
 
@@ -383,11 +418,15 @@ export function StoreAgentDrawer() {
 
       const data = (await response.json()) as {
         message: AgentMessage;
-        draft: StorePosDraft;
+        draft: StorePosDraft | StoreInventoryDraft;
         userMessage?: AgentMessage;
       };
 
-      replaceDraft(data.draft);
+      if (isInventoryMode) {
+        replaceInventoryDraft(data.draft as StoreInventoryDraft);
+      } else {
+        replaceDraft(data.draft as StorePosDraft);
+      }
       setMessages((current) => {
         const mergedUserMessage = data.userMessage ? mergeClientAttachmentFields(data.userMessage, current) : null;
         const withUpdatedUserMessage = data.userMessage
@@ -878,7 +917,9 @@ export function StoreAgentDrawer() {
       <header className="border-b border-zinc-200 bg-linear-to-br from-amber-50 via-white to-emerald-50 px-5 pt-3 pb-3 dark:border-zinc-800 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-400">Store Agent</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-400">
+              {isInventoryMode ? "Inventory Agent" : "Store Agent"}
+            </p>
           </div>
           <button
             type="button"
@@ -891,17 +932,23 @@ export function StoreAgentDrawer() {
 
         <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
           <div className="rounded-2xl border border-zinc-200/80 bg-white/90 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/80">
-            <p className="text-zinc-500 dark:text-zinc-400">Items</p>
+            <p className="text-zinc-500 dark:text-zinc-400">{isInventoryMode ? "Filas" : "Items"}</p>
             <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{summary.items}</p>
           </div>
           <div className="rounded-2xl border border-zinc-200/80 bg-white/90 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/80">
-            <p className="text-zinc-500 dark:text-zinc-400">Total</p>
-            <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">{formatMoney(summary.total)}</p>
+            <p className="text-zinc-500 dark:text-zinc-400">{isInventoryMode ? "Piezas" : "Total"}</p>
+            <p className="mt-1 text-sm font-semibold text-zinc-950 dark:text-zinc-50">
+              {isInventoryMode ? summary.total : formatMoney(summary.total)}
+            </p>
           </div>
           <div className="rounded-2xl border border-zinc-200/80 bg-white/90 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/80">
-            <p className="text-zinc-500 dark:text-zinc-400">Cliente</p>
+            <p className="text-zinc-500 dark:text-zinc-400">{isInventoryMode ? "Estado" : "Cliente"}</p>
             <p className="mt-1 truncate text-sm font-semibold text-zinc-950 dark:text-zinc-50">
-              {draft.customer?.name ?? draft.customer?.phone ?? "Sin ligar"}
+              {isInventoryMode
+                ? inventoryDraft.rows.length > 0
+                  ? `${getInventoryDraftSummary(inventoryDraft).ambiguous + getInventoryDraftSummary(inventoryDraft).invalid} pendientes`
+                  : (inventoryDraft.lastReceipt?.replayed ? "Replay" : inventoryDraft.lastReceipt ? "Aplicado" : "Sin borrador")
+                : (draft.customer?.name ?? draft.customer?.phone ?? "Sin ligar")}
             </p>
           </div>
         </div>
@@ -1194,41 +1241,45 @@ export function StoreAgentDrawer() {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               rows={2}
-              placeholder="Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"
+              placeholder={isInventoryMode ? "Ej. 12 Refresco 600ml, Galletas Mantequilla, GAL-001, 6, 30 o confirma la entrada" : "Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"}
               className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pb-14 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 sm:pb-12"
             />
 
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
               <div className="pointer-events-auto flex min-w-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleQrButtonClick}
-                  disabled={pending || showQrScanner}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
-                  aria-label={canUseLiveQrScanner ? "Escanear QR en vivo" : "Adjuntar foto del QR"}
-                >
-                  {canUseLiveQrScanner ? <ScanLine className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
-                </button>
+                {!isInventoryMode ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleQrButtonClick}
+                      disabled={pending || showQrScanner}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
+                      aria-label={canUseLiveQrScanner ? "Escanear QR en vivo" : "Adjuntar foto del QR"}
+                    >
+                      {canUseLiveQrScanner ? <ScanLine className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={handleAudioButtonClick}
-                  disabled={pending || isRecording}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
-                  aria-label={canUseLiveAudio ? "Grabar nota de voz" : "Adjuntar audio"}
-                >
-                  {canUseLiveAudio ? <Mic className="h-4 w-4" /> : <AudioLines className="h-4 w-4" />}
-                </button>
+                    <button
+                      type="button"
+                      onClick={handleAudioButtonClick}
+                      disabled={pending || isRecording}
+                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
+                      aria-label={canUseLiveAudio ? "Grabar nota de voz" : "Adjuntar audio"}
+                    >
+                      {canUseLiveAudio ? <Mic className="h-4 w-4" /> : <AudioLines className="h-4 w-4" />}
+                    </button>
 
-                {attachments.some((attachment) => attachment.kind === "audio") ? (
-                  <button
-                    type="button"
-                    onClick={() => setAttachments((current) => current.filter((attachment) => attachment.kind !== "audio"))}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
-                    aria-label="Cancelar nota de voz"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                    {attachments.some((attachment) => attachment.kind === "audio") ? (
+                      <button
+                        type="button"
+                        onClick={() => setAttachments((current) => current.filter((attachment) => attachment.kind !== "audio"))}
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
+                        aria-label="Cancelar nota de voz"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
 
@@ -1251,14 +1302,14 @@ export function StoreAgentDrawer() {
     <>
       <button
         type="button"
-        aria-label="Abrir asistente POS"
+        aria-label={isInventoryMode ? "Abrir asistente de inventario" : "Abrir asistente POS"}
         onClick={() => setAgentOpen(true)}
         className={`fixed right-4 bottom-24 z-40 inline-flex items-center justify-center gap-2 rounded-full bg-zinc-950 px-3 py-3 text-sm font-semibold text-white shadow-lg shadow-zinc-950/20 transition hover:-translate-y-0.5 lg:right-5 lg:bottom-5 lg:px-4 dark:bg-white dark:text-zinc-950 ${
           isAgentOpen ? "pointer-events-none opacity-0" : "opacity-100"
         }`}
       >
         <Sparkles className="h-4 w-4" />
-        <span className="hidden lg:inline">Asistente POS</span>
+        <span className="hidden lg:inline">{isInventoryMode ? "Asistente Inventario" : "Asistente POS"}</span>
       </button>
 
       <aside
