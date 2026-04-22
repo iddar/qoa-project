@@ -44,6 +44,7 @@ type DbClient = {
   update: (...args: unknown[]) => DbUpdate;
   delete: (...args: unknown[]) => DbDelete;
   execute: (query: unknown) => Promise<unknown[]>;
+  transaction: <T>(callback: (tx: DbClient) => Promise<T>) => Promise<T>;
 };
 
 export const sqlClient = new SQL(dbUrl);

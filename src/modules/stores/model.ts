@@ -76,6 +76,7 @@ export const storeProductSchema = t.Object({
   sku: t.Optional(t.String()),
   unitType: t.String(),
   price: t.Number(),
+  stock: t.Number(),
   status: t.String(),
   createdAt: t.String(),
 });
@@ -218,4 +219,120 @@ export const storeBrandWithProductsSchema = t.Object({
     sku: t.Optional(t.String()),
     price: t.String(),
   })),
+});
+
+export const inventoryPreviewCandidateSchema = t.Object({
+  storeProductId: t.String(),
+  name: t.String(),
+  sku: t.Optional(t.String()),
+  price: t.Number(),
+  stock: t.Number(),
+  score: t.Number(),
+});
+
+export const inventoryPreviewRowSchema = t.Object({
+  lineNumber: t.Number(),
+  rawText: t.String(),
+  name: t.String(),
+  sku: t.Optional(t.String()),
+  quantity: t.Number(),
+  price: t.Optional(t.Number()),
+  status: t.Union([
+    t.Literal('matched'),
+    t.Literal('new'),
+    t.Literal('ambiguous'),
+    t.Literal('invalid'),
+  ]),
+  matchedStoreProductId: t.Optional(t.String()),
+  matchedProduct: t.Optional(storeProductSchema),
+  candidates: t.Optional(t.Array(inventoryPreviewCandidateSchema)),
+  errors: t.Optional(t.Array(t.String())),
+});
+
+export const inventoryPreviewSummarySchema = t.Object({
+  totalRows: t.Number(),
+  matchedRows: t.Number(),
+  newRows: t.Number(),
+  ambiguousRows: t.Number(),
+  invalidRows: t.Number(),
+  totalQuantity: t.Number(),
+});
+
+export const inventoryIntakePreviewRequest = t.Object({
+  text: t.String({ minLength: 1 }),
+});
+
+export const inventoryIntakePreviewResponse = t.Object({
+  data: t.Object({
+    rows: t.Array(inventoryPreviewRowSchema),
+    summary: inventoryPreviewSummarySchema,
+  }),
+});
+
+export const inventoryIntakeConfirmRowSchema = t.Object({
+  lineNumber: t.Number(),
+  rawText: t.String(),
+  name: t.String({ minLength: 1, maxLength: 200 }),
+  sku: t.Optional(t.String({ maxLength: 100 })),
+  quantity: t.Number({ minimum: 1 }),
+  price: t.Optional(t.Number({ minimum: 0 })),
+  action: t.Union([t.Literal('match_existing'), t.Literal('create_new')]),
+  storeProductId: t.Optional(t.String({ format: 'uuid' })),
+});
+
+export const inventoryIntakeConfirmRequest = t.Object({
+  rows: t.Array(inventoryIntakeConfirmRowSchema),
+  idempotencyKey: t.Optional(t.String({ minLength: 1, maxLength: 120 })),
+  notes: t.Optional(t.String({ maxLength: 500 })),
+});
+
+export const inventoryIntakeAppliedRowSchema = t.Object({
+  storeProductId: t.String(),
+  name: t.String(),
+  sku: t.Optional(t.String()),
+  quantityDelta: t.Number(),
+  previousStock: t.Number(),
+  currentStock: t.Number(),
+  created: t.Boolean(),
+});
+
+export const inventoryIntakeConfirmResponse = t.Object({
+  data: t.Object({
+    idempotencyKey: t.String(),
+    replayed: t.Boolean(),
+    rows: t.Array(inventoryIntakeAppliedRowSchema),
+    summary: t.Object({
+      totalRows: t.Number(),
+      totalQuantity: t.Number(),
+      createdProducts: t.Number(),
+      updatedProducts: t.Number(),
+    }),
+  }),
+});
+
+export const inventoryMovementSchema = t.Object({
+  id: t.String(),
+  storeId: t.String(),
+  storeProductId: t.String(),
+  storeProductName: t.String(),
+  sku: t.Optional(t.String()),
+  type: t.Union([t.Literal('intake'), t.Literal('sale'), t.Literal('adjustment')]),
+  quantityDelta: t.Number(),
+  balanceAfter: t.Number(),
+  referenceType: t.Optional(t.String()),
+  referenceId: t.Optional(t.String()),
+  notes: t.Optional(t.String()),
+  createdAt: t.String(),
+});
+
+export const inventoryMovementListQuery = t.Object({
+  limit: t.Optional(t.String()),
+  cursor: t.Optional(t.String()),
+  storeProductId: t.Optional(t.String({ format: 'uuid' })),
+  type: t.Optional(t.Union([t.Literal('intake'), t.Literal('sale'), t.Literal('adjustment')])),
+});
+
+export const inventoryMovementListResponse = t.Object({
+  data: t.Array(inventoryMovementSchema),
+  pagination: paginationSchema,
 });

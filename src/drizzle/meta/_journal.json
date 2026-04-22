@@ -169,6 +169,13 @@
       "when": 1776735154704,
       "tag": "0023_perfect_kronos",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1776880348344,
+      "tag": "0024_known_proteus",
+      "breakpoints": true
     }
   ]
 }

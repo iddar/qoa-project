@@ -726,6 +726,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/StoreProductSearchResponse'
 
+  /stores/{storeId}/inventory/intake/preview:
+    post:
+      tags: [Stores]
+      summary: Previsualizar carga de inventario
+      description: Interpreta texto pegado por el tendero y devuelve un preview editable con coincidencias, productos nuevos y filas inválidas.
+      operationId: previewStoreInventoryIntake
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryIntakePreviewRequest'
+      responses:
+        '200':
+          description: Preview generado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryIntakePreviewResponse'
+
+  /stores/{storeId}/inventory/intake/confirm:
+    post:
+      tags: [Stores]
+      summary: Confirmar carga de inventario
+      description: Aplica una entrada de inventario, crea productos nuevos si hace falta y registra movimientos auditables.
+      operationId: confirmStoreInventoryIntake
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InventoryIntakeConfirmRequest'
+      responses:
+        '200':
+          description: Entrada aplicada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryIntakeConfirmResponse'
+
+  /stores/{storeId}/inventory/movements:
+    get:
+      tags: [Stores]
+      summary: Listar movimientos de inventario
+      description: Lista entradas, salidas por venta y ajustes manuales del inventario de la tienda.
+      operationId: listStoreInventoryMovements
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: storeProductId
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [intake, sale, adjustment]
+        - $ref: '#/components/parameters/limitParam'
+        - $ref: '#/components/parameters/cursorParam'
+      responses:
+        '200':
+          description: Lista de movimientos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryMovementListResponse'
+
   /stores/{storeId}/brands:
     get:
       tags: [Stores]
@@ -782,6 +860,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Sin stock suficiente para completar la venta
 
   /stores/{storeId}/transactions:
     get:
@@ -2974,6 +3054,10 @@ components:
         price:
           type: number
           description: Precio en centavos
+        stock:
+          type: integer
+          minimum: 0
+          description: Existencia actual disponible en tienda
         status:
           type: string
           enum: [active, inactive]
@@ -3083,6 +3167,235 @@ components:
                   source:
                     type: string
                     enum: [global]
+
+    InventoryPreviewCandidate:
+      type: object
+      properties:
+        storeProductId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        price:
+          type: number
+        stock:
+          type: integer
+        score:
+          type: number
+
+    InventoryPreviewRow:
+      type: object
+      properties:
+        lineNumber:
+          type: integer
+        rawText:
+          type: string
+        name:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        quantity:
+          type: integer
+        price:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [matched, new, ambiguous, invalid]
+        matchedStoreProductId:
+          type: string
+          format: uuid
+          nullable: true
+        matchedProduct:
+          allOf:
+            - $ref: '#/components/schemas/StoreProduct'
+          nullable: true
+        candidates:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/InventoryPreviewCandidate'
+        errors:
+          type: array
+          nullable: true
+          items:
+            type: string
+
+    InventoryPreviewSummary:
+      type: object
+      properties:
+        totalRows:
+          type: integer
+        matchedRows:
+          type: integer
+        newRows:
+          type: integer
+        ambiguousRows:
+          type: integer
+        invalidRows:
+          type: integer
+        totalQuantity:
+          type: integer
+
+    InventoryIntakePreviewRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+
+    InventoryIntakePreviewResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            rows:
+              type: array
+              items:
+                $ref: '#/components/schemas/InventoryPreviewRow'
+            summary:
+              $ref: '#/components/schemas/InventoryPreviewSummary'
+
+    InventoryIntakeConfirmRow:
+      type: object
+      required: [lineNumber, rawText, name, quantity, action]
+      properties:
+        lineNumber:
+          type: integer
+        rawText:
+          type: string
+        name:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        quantity:
+          type: integer
+          minimum: 1
+        price:
+          type: number
+          nullable: true
+          minimum: 0
+        action:
+          type: string
+          enum: [match_existing, create_new]
+        storeProductId:
+          type: string
+          format: uuid
+          nullable: true
+
+    InventoryIntakeConfirmRequest:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryIntakeConfirmRow'
+        idempotencyKey:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    InventoryIntakeAppliedRow:
+      type: object
+      properties:
+        storeProductId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        quantityDelta:
+          type: integer
+        previousStock:
+          type: integer
+        currentStock:
+          type: integer
+        created:
+          type: boolean
+
+    InventoryIntakeConfirmResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            idempotencyKey:
+              type: string
+            replayed:
+              type: boolean
+            rows:
+              type: array
+              items:
+                $ref: '#/components/schemas/InventoryIntakeAppliedRow'
+            summary:
+              type: object
+              properties:
+                totalRows:
+                  type: integer
+                totalQuantity:
+                  type: integer
+                createdProducts:
+                  type: integer
+                updatedProducts:
+                  type: integer
+
+    InventoryMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        storeId:
+          type: string
+          format: uuid
+        storeProductId:
+          type: string
+          format: uuid
+        storeProductName:
+          type: string
+        sku:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [intake, sale, adjustment]
+        quantityDelta:
+          type: integer
+        balanceAfter:
+          type: integer
+        referenceType:
+          type: string
+          nullable: true
+        referenceId:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    InventoryMovementListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryMovement'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
 
     StoreBrand:
       type: object

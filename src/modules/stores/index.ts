@@ -6,9 +6,10 @@ import type { AuthContext } from "../../app/plugins/auth";
 import { parseLimit, parseCursor } from "../../app/utils/pagination";
 import { generateCode } from "../../app/utils/generateCode";
 import { db } from "../../db/client";
-import { stores, cpgs, cpgStoreRelations, storeProducts, products, brands, cards, users, transactions, transactionItems } from "../../db/schema";
+import { stores, cpgs, cpgStoreRelations, storeProducts, products, brands, cards, users, transactions, transactionItems, inventoryMovements } from "../../db/schema";
 import { generateStoreQrPayload } from "../../services/stores";
 import { createStorePosTransaction, toDetailPayload } from "../transactions";
+import { previewInventoryImport, summarizeConfirmedInventoryRows } from "../../services/store-inventory";
 import {
   getRelatedCpgIdsForStore,
   getRelatedStoreIdsForCpg,
@@ -37,6 +38,12 @@ import {
   storeBrandListResponse,
   storeCustomerResolveRequest,
   storeCustomerResolveResponse,
+  inventoryIntakePreviewRequest,
+  inventoryIntakePreviewResponse,
+  inventoryIntakeConfirmRequest,
+  inventoryIntakeConfirmResponse,
+  inventoryMovementListQuery,
+  inventoryMovementListResponse,
 } from "./model";
 
 const getAuthRole = (auth: AuthContext): string | null => {
@@ -88,6 +95,35 @@ type StoreListRow = {
   longitude: string | null;
   status: string;
   created_at: Date | string;
+};
+
+type StoreProductRow = {
+  id: string;
+  store_id: string;
+  product_id: string | null;
+  cpg_id: string | null;
+  name: string;
+  sku: string | null;
+  unit_type: string;
+  price: string;
+  stock: number;
+  status: string;
+  created_at: Date;
+};
+
+type InventoryMovementListRow = {
+  id: string;
+  store_id: string;
+  store_product_id: string;
+  type: 'intake' | 'sale' | 'adjustment';
+  quantity_delta: number;
+  balance_after: number;
+  reference_type: string | null;
+  reference_id: string | null;
+  notes: string | null;
+  created_at: Date;
+  product_name: string;
+  sku: string | null;
 };
 
 type StoreListQuery = {
@@ -260,6 +296,35 @@ const serializeStore = (store: StoreRow) => ({
   longitude: store.longitude ? Number(store.longitude) : undefined,
   status: store.status,
   createdAt: store.createdAt.toISOString(),
+});
+
+const serializeStoreProduct = (row: StoreProductRow) => ({
+  id: row.id,
+  storeId: row.store_id,
+  productId: row.product_id ?? undefined,
+  cpgId: row.cpg_id ?? undefined,
+  name: row.name,
+  sku: row.sku ?? undefined,
+  unitType: row.unit_type,
+  price: Number(row.price),
+  stock: row.stock,
+  status: row.status,
+  createdAt: row.created_at.toISOString(),
+});
+
+const serializeInventoryMovement = (row: InventoryMovementListRow) => ({
+  id: row.id,
+  storeId: row.store_id,
+  storeProductId: row.store_product_id,
+  storeProductName: row.product_name,
+  sku: row.sku ?? undefined,
+  type: row.type,
+  quantityDelta: row.quantity_delta,
+  balanceAfter: row.balance_after,
+  referenceType: row.reference_type ?? undefined,
+  referenceId: row.reference_id ?? undefined,
+  notes: row.notes ?? undefined,
+  createdAt: row.created_at.toISOString(),
 });
 
 export const storesModule = new Elysia({
@@ -959,41 +1024,19 @@ export const storesModule = new Elysia({
       const whereClause = filters.length > 0 ? sql`where ${sql.join(filters, sql` and `)}` : sql``;
 
       const rows = (await db.execute(sql`
-        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "status", "created_at"
+        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "stock", "status", "created_at"
         from "store_products"
         ${whereClause}
         order by "store_products"."created_at" desc
         limit ${sql.raw(String(safeLimit))}
-      `)) as Array<{
-        id: string;
-        store_id: string;
-        product_id: string | null;
-        cpg_id: string | null;
-        name: string;
-        sku: string | null;
-        unit_type: string;
-        price: string;
-        status: string;
-        created_at: Date;
-      }>;
+      `)) as StoreProductRow[];
 
       const hasMore = rows.length > limit;
       const items = hasMore ? rows.slice(0, limit) : rows;
       const nextCursor = hasMore ? items[items.length - 1]?.created_at.toISOString() : null;
 
       return {
-        data: items.map((row) => ({
-          id: row.id,
-          storeId: row.store_id,
-          productId: row.product_id ?? undefined,
-          cpgId: row.cpg_id ?? undefined,
-          name: row.name,
-          sku: row.sku ?? undefined,
-          unitType: row.unit_type,
-          price: Number(row.price),
-          status: row.status,
-          createdAt: row.created_at.toISOString(),
-        })),
+        data: items.map(serializeStoreProduct),
         pagination: {
           hasMore,
           nextCursor: nextCursor ?? undefined,
@@ -1062,19 +1105,9 @@ export const storesModule = new Elysia({
           productId: body.productId ?? null,
           cpgId: inferredCpgId,
           price: body.price.toString(),
+          stock: 0,
         })
-        .returning()) as Array<{
-        id: string;
-        store_id: string;
-        product_id: string | null;
-        cpg_id: string | null;
-        name: string;
-        sku: string | null;
-        unit_type: string;
-        price: string;
-        status: string;
-        created_at: Date;
-      }>;
+        .returning()) as StoreProductRow[];
 
       if (!created) {
         return status(500, {
@@ -1086,18 +1119,7 @@ export const storesModule = new Elysia({
       }
 
       return status(201, {
-        data: {
-          id: created.id,
-          storeId: created.store_id,
-          productId: created.product_id ?? undefined,
-          cpgId: created.cpg_id ?? undefined,
-          name: created.name,
-          sku: created.sku ?? undefined,
-          unitType: created.unit_type,
-          price: Number(created.price),
-          status: created.status,
-          createdAt: created.created_at.toISOString(),
-        },
+        data: serializeStoreProduct(created),
       });
     },
     {
@@ -1127,40 +1149,16 @@ export const storesModule = new Elysia({
       }
 
       const [row] = (await db.execute(sql`
-        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "status", "created_at"
+        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "stock", "status", "created_at"
         from "store_products"
         where "id" = ${params.productId} and "store_id" = ${params.storeId}
-      `)) as Array<{
-        id: string;
-        store_id: string;
-        product_id: string | null;
-        cpg_id: string | null;
-        name: string;
-        sku: string | null;
-        unit_type: string;
-        price: string;
-        status: string;
-        created_at: Date;
-      }>;
+      `)) as StoreProductRow[];
 
       if (!row) {
         return status(404, { error: { code: "NOT_FOUND", message: "Producto no encontrado" } });
       }
 
-      return {
-        data: {
-          id: row.id,
-          storeId: row.store_id,
-          productId: row.product_id ?? undefined,
-          cpgId: row.cpg_id ?? undefined,
-          name: row.name,
-          sku: row.sku ?? undefined,
-          unitType: row.unit_type,
-          price: Number(row.price),
-          status: row.status,
-          createdAt: row.created_at.toISOString(),
-        },
-      };
+      return { data: serializeStoreProduct(row) };
     },
     {
       beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
@@ -1210,18 +1208,7 @@ export const storesModule = new Elysia({
         .update(storeProducts)
         .set(updates)
         .where(and(eq(storeProducts.id, params.productId), eq(storeProducts.storeId, params.storeId)))
-        .returning()) as Array<{
-        id: string;
-        store_id: string;
-        product_id: string | null;
-        cpg_id: string | null;
-        name: string;
-        sku: string | null;
-        unit_type: string;
-        price: string;
-        status: string;
-        created_at: Date;
-      }>;
+        .returning()) as StoreProductRow[];
 
       if (!updated) {
         return status(500, {
@@ -1232,20 +1219,7 @@ export const storesModule = new Elysia({
         });
       }
 
-      return {
-        data: {
-          id: updated.id,
-          storeId: updated.store_id,
-          productId: updated.product_id ?? undefined,
-          cpgId: updated.cpg_id ?? undefined,
-          name: updated.name,
-          sku: updated.sku ?? undefined,
-          unitType: updated.unit_type,
-          price: Number(updated.price),
-          status: updated.status,
-          createdAt: updated.created_at.toISOString(),
-        },
-      };
+      return { data: serializeStoreProduct(updated) };
     },
     {
       beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
@@ -1321,23 +1295,12 @@ export const storesModule = new Elysia({
       const searchTerm = '%' + query.q + '%';
 
       const storeProductsRows = (await db.execute(sql`
-        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "status", "created_at"
+        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "stock", "status", "created_at"
         from "store_products"
         where "store_id" = ${params.storeId} and "status" = 'active' and "name" ILIKE ${searchTerm}
         order by "name"
         limit ${sql.raw(String(limit))}
-      `)) as Array<{
-        id: string;
-        store_id: string;
-        product_id: string | null;
-        cpg_id: string | null;
-        name: string;
-        sku: string | null;
-        unit_type: string;
-        price: string;
-        status: string;
-        created_at: Date;
-      }>;
+      `)) as StoreProductRow[];
 
       const globalProductsRows = (await db.execute(sql`
         select p."id", p."brand_id", p."name", p."sku", b."cpg_id", c."name" as "cpg_name"
@@ -1357,16 +1320,7 @@ export const storesModule = new Elysia({
       }>;
 
       const storeProducts = storeProductsRows.map((row) => ({
-        id: row.id,
-        storeId: row.store_id,
-        productId: row.product_id ?? undefined,
-        cpgId: row.cpg_id ?? undefined,
-        name: row.name,
-        sku: row.sku ?? undefined,
-        unitType: row.unit_type,
-        price: Number(row.price),
-        status: row.status,
-        createdAt: row.created_at.toISOString(),
+        ...serializeStoreProduct(row),
         source: "store" as const,
       }));
 
@@ -1391,6 +1345,334 @@ export const storesModule = new Elysia({
       beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
       query: storeProductSearchQuery,
       detail: { summary: "Buscar productos en catálogo global y de tienda" },
+    },
+  )
+  .post(
+    "/:storeId/inventory/intake/preview",
+    async ({
+      auth,
+      params,
+      body,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      body: { text: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const rows = (await db.execute(sql`
+        select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "stock", "status", "created_at"
+        from "store_products"
+        where "store_id" = ${params.storeId}
+        order by "name"
+      `)) as StoreProductRow[];
+
+      return {
+        data: previewInventoryImport(body.text, rows.map(serializeStoreProduct)),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      body: inventoryIntakePreviewRequest,
+      response: { 200: inventoryIntakePreviewResponse },
+      detail: { summary: "Previsualizar carga de inventario por texto" },
+    },
+  )
+  .post(
+    "/:storeId/inventory/intake/confirm",
+    async ({
+      auth,
+      params,
+      body,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      body: { rows: Array<{ lineNumber: number; rawText: string; name: string; sku?: string; quantity: number; price?: number; action: 'match_existing' | 'create_new'; storeProductId?: string }>; idempotencyKey?: string; notes?: string };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      for (const row of body.rows) {
+        if (row.action === 'match_existing' && !row.storeProductId) {
+          return status(400, {
+            error: {
+              code: 'INVALID_INVENTORY_ROW',
+              message: `La fila ${row.lineNumber} debe apuntar a un producto existente.`,
+            },
+          });
+        }
+
+        if (row.action === 'create_new' && row.price === undefined) {
+          return status(400, {
+            error: {
+              code: 'NEW_PRODUCT_PRICE_REQUIRED',
+              message: `La fila ${row.lineNumber} necesita precio para crear un producto nuevo.`,
+            },
+          });
+        }
+      }
+
+      const idempotencyKey = body.idempotencyKey?.trim() || `inventory-intake-${crypto.randomUUID()}`;
+      const replayedMovements = (await db.execute(sql`
+        select m."id", m."store_id", m."store_product_id", m."type", m."quantity_delta", m."balance_after", m."reference_type", m."reference_id", m."notes", m."created_at", m."metadata", sp."name" as "product_name", sp."sku"
+        from "inventory_movements" m
+        inner join "store_products" sp on sp."id" = m."store_product_id"
+        where m."store_id" = ${params.storeId}
+          and m."reference_type" = 'inventory_intake'
+          and m."reference_id" = ${idempotencyKey}
+        order by m."created_at", m."id"
+      `)) as Array<InventoryMovementListRow & { metadata: string | null }>;
+
+      if (replayedMovements.length > 0) {
+        const rows = replayedMovements.map((row) => {
+          let created = false;
+          try {
+            created = Boolean(row.metadata ? JSON.parse(row.metadata).created : false);
+          } catch {
+            created = false;
+          }
+
+          return {
+            storeProductId: row.store_product_id,
+            name: row.product_name,
+            sku: row.sku ?? undefined,
+            quantityDelta: row.quantity_delta,
+            previousStock: row.balance_after - row.quantity_delta,
+            currentStock: row.balance_after,
+            created,
+          };
+        });
+
+        return {
+          data: {
+            idempotencyKey,
+            replayed: true,
+            rows,
+            summary: summarizeConfirmedInventoryRows(rows),
+          },
+        };
+      }
+
+      try {
+        const appliedRows = await db.transaction(async (tx) => {
+          const nextRows: Array<{ storeProductId: string; name: string; sku?: string; quantityDelta: number; previousStock: number; currentStock: number; created: boolean }> = [];
+
+          for (const row of body.rows) {
+            if (row.action === 'match_existing') {
+              const [existing] = (await tx.execute(sql`
+                select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "stock", "status", "created_at"
+                from "store_products"
+                where "id" = ${row.storeProductId!} and "store_id" = ${params.storeId}
+                for update
+              `)) as StoreProductRow[];
+
+              if (!existing) {
+                throw new Error('STORE_PRODUCT_NOT_FOUND');
+              }
+
+              const [updated] = (await tx.execute(sql`
+                update "store_products"
+                set "stock" = "stock" + ${row.quantity}, "updated_at" = now()
+                where "id" = ${row.storeProductId!} and "store_id" = ${params.storeId}
+                returning "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "stock", "status", "created_at"
+              `)) as StoreProductRow[];
+
+              if (!updated) {
+                throw new Error('STORE_PRODUCT_UPDATE_FAILED');
+              }
+
+              await tx.insert(inventoryMovements).values({
+                storeId: params.storeId,
+                storeProductId: updated.id,
+                type: 'intake',
+                quantityDelta: row.quantity,
+                balanceAfter: updated.stock,
+                referenceType: 'inventory_intake',
+                referenceId: idempotencyKey,
+                notes: body.notes ?? null,
+                metadata: JSON.stringify({ lineNumber: row.lineNumber, rawText: row.rawText, action: row.action, created: false }),
+              });
+
+              nextRows.push({
+                storeProductId: updated.id,
+                name: updated.name,
+                sku: updated.sku ?? undefined,
+                quantityDelta: row.quantity,
+                previousStock: existing.stock,
+                currentStock: updated.stock,
+                created: false,
+              });
+
+              continue;
+            }
+
+            const [createdProduct] = (await tx.insert(storeProducts).values({
+              storeId: params.storeId,
+              name: row.name,
+              sku: row.sku ?? null,
+              price: row.price!.toString(),
+              stock: row.quantity,
+            }).returning()) as StoreProductRow[];
+
+            if (!createdProduct) {
+              throw new Error('STORE_PRODUCT_CREATE_FAILED');
+            }
+
+            await tx.insert(inventoryMovements).values({
+              storeId: params.storeId,
+              storeProductId: createdProduct.id,
+              type: 'intake',
+              quantityDelta: row.quantity,
+              balanceAfter: createdProduct.stock,
+              referenceType: 'inventory_intake',
+              referenceId: idempotencyKey,
+              notes: body.notes ?? null,
+              metadata: JSON.stringify({ lineNumber: row.lineNumber, rawText: row.rawText, action: row.action, created: true }),
+            });
+
+            nextRows.push({
+              storeProductId: createdProduct.id,
+              name: createdProduct.name,
+              sku: createdProduct.sku ?? undefined,
+              quantityDelta: row.quantity,
+              previousStock: 0,
+              currentStock: createdProduct.stock,
+              created: true,
+            });
+          }
+
+          return nextRows;
+        });
+
+        return {
+          data: {
+            idempotencyKey,
+            replayed: false,
+            rows: appliedRows,
+            summary: summarizeConfirmedInventoryRows(appliedRows),
+          },
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message === 'STORE_PRODUCT_NOT_FOUND') {
+          return status(404, {
+            error: {
+              code: 'STORE_PRODUCT_NOT_FOUND',
+              message: 'Uno de los productos seleccionados ya no existe.',
+            },
+          });
+        }
+
+        if (error instanceof Error && error.message === 'STORE_PRODUCT_UPDATE_FAILED') {
+          return status(500, {
+            error: {
+              code: 'STORE_PRODUCT_UPDATE_FAILED',
+              message: 'No se pudo actualizar el inventario del producto existente.',
+            },
+          });
+        }
+
+        if (error instanceof Error && error.message === 'STORE_PRODUCT_CREATE_FAILED') {
+          return status(500, {
+            error: {
+              code: 'STORE_PRODUCT_CREATE_FAILED',
+              message: 'No se pudo crear uno de los productos nuevos del inventario.',
+            },
+          });
+        }
+
+        return status(500, {
+          error: {
+            code: 'INVENTORY_CONFIRM_FAILED',
+            message: 'No se pudo aplicar la carga de inventario.',
+          },
+        });
+      }
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      body: inventoryIntakeConfirmRequest,
+      response: { 200: inventoryIntakeConfirmResponse },
+      detail: { summary: "Confirmar carga de inventario" },
+    },
+  )
+  .get(
+    "/:storeId/inventory/movements",
+    async ({
+      auth,
+      params,
+      query,
+      status,
+    }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      query: { limit?: string; cursor?: string; storeProductId?: string; type?: 'intake' | 'sale' | 'adjustment' };
+      status: StatusHandler;
+    }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      if (!canAccessStore(auth, params.storeId)) {
+        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+      }
+
+      const cursorDate = parseCursor(query.cursor);
+      const limit = parseLimit(query.limit ?? '50');
+      const safeLimit = Math.trunc(limit) + 1;
+      const filters = [sql`m."store_id" = ${params.storeId}`];
+
+      if (query.storeProductId) {
+        filters.push(sql`m."store_product_id" = ${query.storeProductId}`);
+      }
+      if (query.type) {
+        filters.push(sql`m."type" = ${query.type}`);
+      }
+      if (cursorDate) {
+        filters.push(sql`m."created_at" < ${cursorDate}`);
+      }
+
+      const whereClause = sql`where ${sql.join(filters, sql` and `)}`;
+      const rows = (await db.execute(sql`
+        select m."id", m."store_id", m."store_product_id", m."type", m."quantity_delta", m."balance_after", m."reference_type", m."reference_id", m."notes", m."created_at", sp."name" as "product_name", sp."sku"
+        from "inventory_movements" m
+        inner join "store_products" sp on sp."id" = m."store_product_id"
+        ${whereClause}
+        order by m."created_at" desc, m."id" desc
+        limit ${sql.raw(String(safeLimit))}
+      `)) as InventoryMovementListRow[];
+
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const nextCursor = hasMore ? items[items.length - 1]?.created_at.toISOString() : null;
+
+      return {
+        data: items.map(serializeInventoryMovement),
+        pagination: {
+          hasMore,
+          nextCursor: nextCursor ?? undefined,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      query: inventoryMovementListQuery,
+      response: { 200: inventoryMovementListResponse },
+      detail: { summary: "Listar movimientos de inventario" },
     },
   )
   // ========== STORE BRANDS (all brands - not filtered by CPG relations) ==========
@@ -1627,7 +1909,10 @@ export const storesModule = new Elysia({
         productId: string | null;
         cpgId: string | null;
         name: string;
+        sku: string | null;
         price: string;
+        stock: number;
+        status: string;
       }>;
 
       const storeProductMap = new Map(storeProductsRows.map((sp) => [sp.id, sp]));
@@ -1636,24 +1921,99 @@ export const storesModule = new Elysia({
         if (!storeProductMap.has(item.storeProductId)) {
           return status(404, { error: { code: "PRODUCT_NOT_FOUND", message: `Producto ${item.storeProductId} no encontrado` } });
         }
+
+        const storeProduct = storeProductMap.get(item.storeProductId)!;
+        if (storeProduct.status !== 'active') {
+          return status(409, {
+            error: {
+              code: 'PRODUCT_INACTIVE',
+              message: `El producto ${storeProduct.name} está inactivo y no puede venderse.`,
+            },
+          });
+        }
+
+        if (storeProduct.stock < item.quantity) {
+          return status(409, {
+            error: {
+              code: 'OUT_OF_STOCK',
+              message: `No hay suficiente inventario para ${storeProduct.name}. Disponible: ${storeProduct.stock}.`,
+            },
+          });
+        }
       }
 
-      const outcome = await createStorePosTransaction({
-        storeId: params.storeId,
-        userId: resolvedCustomer?.userId,
-        cardId: resolvedCustomer?.cardId,
-        idempotencyKey: body.idempotencyKey,
-        items: body.items.map((item) => {
-          const storeProduct = storeProductMap.get(item.storeProductId)!;
-          return {
-            storeProductId: item.storeProductId,
-            productId: storeProduct.productId ?? undefined,
-            name: storeProduct.name,
-            quantity: item.quantity,
-            amount: item.amount,
-          };
-        }),
-      });
+      let outcome: Awaited<ReturnType<typeof createStorePosTransaction>> | null = null;
+
+      try {
+        outcome = await db.transaction(async (tx) => {
+          const nextOutcome = await createStorePosTransaction({
+            storeId: params.storeId,
+            userId: resolvedCustomer?.userId,
+            cardId: resolvedCustomer?.cardId,
+            idempotencyKey: body.idempotencyKey,
+            items: body.items.map((item) => {
+              const storeProduct = storeProductMap.get(item.storeProductId)!;
+              return {
+                storeProductId: item.storeProductId,
+                productId: storeProduct.productId ?? undefined,
+                name: storeProduct.name,
+                quantity: item.quantity,
+                amount: item.amount,
+              };
+            }),
+          }, tx);
+
+          if (!nextOutcome || nextOutcome.statusCode === 200) {
+            return nextOutcome;
+          }
+
+          for (const item of body.items) {
+            const storeProduct = storeProductMap.get(item.storeProductId)!;
+            const [updated] = (await tx.execute(sql`
+              update "store_products"
+              set "stock" = "stock" - ${item.quantity}, "updated_at" = now()
+              where "id" = ${item.storeProductId}
+                and "store_id" = ${params.storeId}
+                and "stock" >= ${item.quantity}
+              returning "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "stock", "status", "created_at"
+            `)) as StoreProductRow[];
+
+            if (!updated) {
+              throw new Error('OUT_OF_STOCK_RACE');
+            }
+
+            await tx.insert(inventoryMovements).values({
+              storeId: params.storeId,
+              storeProductId: updated.id,
+              type: 'sale',
+              quantityDelta: item.quantity * -1,
+              balanceAfter: updated.stock,
+              referenceType: 'transaction',
+              referenceId: nextOutcome.transaction.id,
+              notes: `Venta POS: ${storeProduct.name}`,
+              metadata: JSON.stringify({ quantity: item.quantity, amount: item.amount }),
+            });
+
+            storeProductMap.set(updated.id, {
+              ...storeProduct,
+              stock: updated.stock,
+            });
+          }
+
+          return nextOutcome;
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === 'OUT_OF_STOCK_RACE') {
+          return status(409, {
+            error: {
+              code: 'OUT_OF_STOCK',
+              message: 'El inventario cambió mientras se registraba la venta. Revisa el stock e intenta de nuevo.',
+            },
+          });
+        }
+
+        throw error;
+      }
 
       if (!outcome) {
         return status(500, {
