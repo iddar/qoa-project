@@ -4,7 +4,7 @@ import { z } from "zod";
 import { api } from "@/lib/api";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { type AgentAction, type AgentMessage } from "@/lib/store-pos";
-import { canConfirmInventoryDraft, createEmptyInventoryDraft, getInventoryDraftSummary, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, getInventoryDraftSummary, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
 
 const matchedProductSchema = z.object({
   id: z.string(),
@@ -92,6 +92,7 @@ const requestSchema = z.object({
         }),
       })
       .nullable(),
+    idempotencyKey: z.string().nullable().optional(),
   }),
 });
 
@@ -111,6 +112,7 @@ const cloneDraft = (draft: StoreInventoryDraft): StoreInventoryDraft => ({
         summary: { ...draft.lastReceipt.summary },
       }
     : null,
+  idempotencyKey: draft.idempotencyKey ?? null,
 });
 
 const buildActions = (draft: StoreInventoryDraft): AgentAction[] => {
@@ -225,6 +227,7 @@ export async function POST(request: Request) {
     workingDraft = {
       rows: toDraftRows(data.data.rows),
       lastReceipt: null,
+      idempotencyKey: createInventoryIntakeIdempotencyKey(),
     };
 
     return {
@@ -295,6 +298,7 @@ export async function POST(request: Request) {
           action: row.action!,
           storeProductId: row.action === "match_existing" ? row.matchedStoreProductId : undefined,
         })),
+        idempotencyKey: workingDraft.idempotencyKey ?? createInventoryIntakeIdempotencyKey(),
       },
       { headers: { authorization } },
     );
@@ -305,6 +309,7 @@ export async function POST(request: Request) {
     workingDraft = {
       rows: [],
       lastReceipt: data.data,
+      idempotencyKey: null,
     };
 
     return data.data;

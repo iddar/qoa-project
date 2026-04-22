@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
-import { createEmptyInventoryDraft, resolveInventoryRowState, type InventoryDraftReceipt, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, resolveInventoryRowState, type InventoryDraftReceipt, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
 
 type StoreInventoryContextValue = {
   draft: StoreInventoryDraft;
@@ -15,6 +15,16 @@ type StoreInventoryContextValue = {
 };
 
 const StoreInventoryContext = createContext<StoreInventoryContextValue | null>(null);
+
+const normalizeDraft = (draft: StoreInventoryDraft): StoreInventoryDraft => {
+  const rows = draft.rows.map(resolveInventoryRowState);
+
+  return {
+    rows,
+    lastReceipt: draft.lastReceipt ?? null,
+    idempotencyKey: rows.length > 0 ? (draft.idempotencyKey ?? createInventoryIntakeIdempotencyKey()) : null,
+  };
+};
 
 export function StoreInventoryProvider({ children }: { children: React.ReactNode }) {
   const { tenantId, tenantType } = useAuth();
@@ -35,10 +45,11 @@ export function StoreInventoryProvider({ children }: { children: React.ReactNode
 
     try {
       const parsed = JSON.parse(raw) as StoreInventoryDraft;
-      setDraft({
+      setDraft(normalizeDraft({
         rows: parsed.rows ?? [],
         lastReceipt: parsed.lastReceipt ?? null,
-      });
+        idempotencyKey: parsed.idempotencyKey ?? null,
+      }));
     } catch {
       // ignore restore failures
     }
@@ -56,28 +67,29 @@ export function StoreInventoryProvider({ children }: { children: React.ReactNode
   const value = useMemo<StoreInventoryContextValue>(
     () => ({
       draft,
-      replaceDraft: (nextDraft) => setDraft(nextDraft),
+      replaceDraft: (nextDraft) => setDraft(normalizeDraft(nextDraft)),
       setRows: (rows) => {
-        setDraft((current) => ({
+        setDraft((current) => normalizeDraft({
           ...current,
-          rows: rows.map(resolveInventoryRowState),
+          rows,
           lastReceipt: null,
+          idempotencyKey: rows.length > 0 ? createInventoryIntakeIdempotencyKey() : null,
         }));
       },
       updateRow: (rowId, updates) => {
-        setDraft((current) => ({
+        setDraft((current) => normalizeDraft({
           ...current,
           rows: current.rows.map((row) => row.id === rowId ? resolveInventoryRowState({ ...row, ...updates }) : row),
         }));
       },
       removeRow: (rowId) => {
-        setDraft((current) => ({
+        setDraft((current) => normalizeDraft({
           ...current,
           rows: current.rows.filter((row) => row.id !== rowId),
         }));
       },
       setLastReceipt: (lastReceipt) => {
-        setDraft((current) => ({
+        setDraft((current) => normalizeDraft({
           ...current,
           lastReceipt,
         }));

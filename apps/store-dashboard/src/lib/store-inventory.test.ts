@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { canConfirmInventoryDraft, createEmptyInventoryDraft, resolveInventoryRowState } from "@/lib/store-inventory";
+import { canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, resolveInventoryRowState } from "@/lib/store-inventory";
 
 test("marks row as new once required intake fields are completed", () => {
   const row = resolveInventoryRowState({
@@ -55,4 +55,29 @@ test("requires an explicit action before confirming the inventory draft", () => 
   });
 
   expect(canConfirmInventoryDraft({ ...createEmptyInventoryDraft(), rows: [resolvedRow] })).toBe(true);
+});
+
+test("creates inventory intake idempotency keys with the expected prefix", () => {
+  const first = createInventoryIntakeIdempotencyKey();
+  const second = createInventoryIntakeIdempotencyKey();
+
+  expect(first.startsWith("inventory-intake-")).toBe(true);
+  expect(second.startsWith("inventory-intake-")).toBe(true);
+  expect(first).not.toBe(second);
+});
+
+test("does not allow confirming a new row without price", () => {
+  const row = resolveInventoryRowState({
+    id: "row-3",
+    lineNumber: 3,
+    rawText: "Papas Fuego",
+    name: "Papas Fuego",
+    quantity: 4,
+    status: "new",
+    action: "create_new",
+  });
+
+  expect(row.status).toBe("new");
+  expect(row.errors).toEqual(["Agrega precio para crear este producto nuevo."]);
+  expect(canConfirmInventoryDraft({ ...createEmptyInventoryDraft(), rows: [row] })).toBe(false);
 });

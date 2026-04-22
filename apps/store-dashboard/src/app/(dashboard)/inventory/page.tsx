@@ -6,7 +6,7 @@ import { AlertTriangle, CheckCircle2, Eraser, PackagePlus, RefreshCcw, Trash2 } 
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
-import { canConfirmInventoryDraft, getInventoryDraftSummary, type InventoryDraftMatchedProduct, type InventoryDraftRow } from "@/lib/store-inventory";
+import { canConfirmInventoryDraft, createInventoryIntakeIdempotencyKey, getInventoryDraftSummary, type InventoryDraftMatchedProduct, type InventoryDraftRow } from "@/lib/store-inventory";
 import { useAuth } from "@/providers/auth-provider";
 import { useStoreInventory } from "@/providers/store-inventory-provider";
 
@@ -30,12 +30,59 @@ type InventoryPreviewResponse = {
   };
 };
 
+type InventoryMovement = {
+  id: string;
+  storeId: string;
+  storeProductId: string;
+  storeProductName: string;
+  sku?: string;
+  type: "intake" | "sale" | "adjustment";
+  quantityDelta: number;
+  balanceAfter: number;
+  referenceType?: string;
+  referenceId?: string;
+  notes?: string;
+  createdAt: string;
+};
+
+type InventoryMovementResponse = {
+  data: InventoryMovement[];
+};
+
+const movementLabels: Record<InventoryMovement["type"], string> = {
+  intake: "Entrada",
+  sale: "Venta",
+  adjustment: "Ajuste",
+};
+
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "MXN",
     maximumFractionDigits: 0,
   }).format(value);
+
+const formatMovementDate = (value: string) =>
+  new Intl.DateTimeFormat("es-MX", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+
+const describeMovementReference = (movement: InventoryMovement) => {
+  if (movement.referenceType === "inventory_intake") {
+    return "Carga de inventario";
+  }
+
+  if (movement.referenceType === "transaction") {
+    return "Venta POS";
+  }
+
+  if (movement.referenceType) {
+    return movement.referenceType;
+  }
+
+  return "Movimiento manual";
+};
 
 const toDraftRows = (rows: InventoryPreviewResponse["data"]["rows"]): InventoryDraftRow[] =>
   rows.map((row) => ({
@@ -72,6 +119,7 @@ export default function StoreInventoryPage() {
   const { draft, setRows, updateRow, removeRow, replaceDraft, resetDraft } = useStoreInventory();
   const queryClient = useQueryClient();
   const [textInput, setTextInput] = useState("");
+  const [movementType, setMovementType] = useState<"all" | InventoryMovement["type"]>("all");
 
   const storeId = tenantType === "store" ? (tenantId ?? "") : "";
   const summary = getInventoryDraftSummary(draft);
@@ -87,6 +135,22 @@ export default function StoreInventoryPage() {
       });
       if (error) throw error;
       return (data?.data ?? []) as StoreProduct[];
+    },
+  });
+
+  const movementsQuery = useQuery({
+    queryKey: ["inventory-movements", storeId, movementType],
+    enabled: Boolean(token) && Boolean(storeId),
+    queryFn: async () => {
+      const { data, error } = await api.v1.stores[storeId].inventory.movements.get({
+        query: {
+          limit: "30",
+          ...(movementType === "all" ? {} : { type: movementType }),
+        },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return (data as InventoryMovementResponse | null)?.data ?? [];
     },
   });
 
@@ -129,6 +193,7 @@ export default function StoreInventoryPage() {
             action: row.action!,
             storeProductId: row.action === "match_existing" ? row.matchedStoreProductId : undefined,
           })),
+          idempotencyKey: draft.idempotencyKey ?? createInventoryIntakeIdempotencyKey(),
         },
         { headers: { authorization: `Bearer ${token}` } },
       );
@@ -136,9 +201,10 @@ export default function StoreInventoryPage() {
       return data;
     },
     onSuccess: (data) => {
-      replaceDraft({ rows: [], lastReceipt: data.data });
+      replaceDraft({ rows: [], lastReceipt: data.data, idempotencyKey: null });
       setTextInput("");
       queryClient.invalidateQueries({ queryKey: ["store-products", storeId] });
+      queryClient.invalidateQueries({ queryKey: ["inventory-movements", storeId] });
     },
   });
 
@@ -146,6 +212,7 @@ export default function StoreInventoryPage() {
     () => [...storeProducts].sort((left, right) => right.stock - left.stock || left.name.localeCompare(right.name, "es")),
     [storeProducts],
   );
+  const recentMovements = movementsQuery.data ?? [];
 
   if (!storeId) {
     return (
@@ -428,6 +495,75 @@ export default function StoreInventoryPage() {
           </div>
         </section>
       ) : null}
+
+      <section className="rounded-[2rem] border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Historial de movimientos</h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Revisa las ultimas entradas y ventas que movieron tu stock.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {(["all", "intake", "sale", "adjustment"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setMovementType(value)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${movementType === value ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "border border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"}`}
+              >
+                {value === "all" ? "Todos" : movementLabels[value]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {movementsQuery.isLoading ? <p className="mt-4 text-sm text-zinc-500">Cargando movimientos...</p> : null}
+
+        {movementsQuery.isError ? (
+          <p className="mt-4 text-sm text-red-500">No pude cargar el historial de movimientos.</p>
+        ) : null}
+
+        {!movementsQuery.isLoading && !movementsQuery.isError && recentMovements.length === 0 ? (
+          <div className="mt-4 rounded-3xl border border-dashed border-zinc-200 px-4 py-8 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            Aun no hay movimientos para este filtro.
+          </div>
+        ) : null}
+
+        {recentMovements.length > 0 ? (
+          <div className="mt-4 space-y-3">
+            {recentMovements.map((movement) => (
+              <article key={movement.id} className="rounded-3xl border border-zinc-200 p-4 dark:border-zinc-800">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${movement.type === "sale" ? "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-300" : movement.type === "adjustment" ? "bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-300" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>
+                        {movementLabels[movement.type]}
+                      </span>
+                      <span className="text-xs text-zinc-400">{formatMovementDate(movement.createdAt)}</span>
+                    </div>
+                    <p className="mt-3 font-medium text-zinc-900 dark:text-zinc-100">{movement.storeProductName}</p>
+                    <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                      {movement.sku ? `${movement.sku} · ` : ""}
+                      {describeMovementReference(movement)}
+                      {movement.notes ? ` · ${movement.notes}` : ""}
+                    </p>
+                  </div>
+
+                  <div className="text-left lg:text-right">
+                    <p className={`text-lg font-semibold ${movement.quantityDelta < 0 ? "text-rose-600 dark:text-rose-300" : "text-emerald-600 dark:text-emerald-300"}`}>
+                      {movement.quantityDelta > 0 ? "+" : ""}
+                      {movement.quantityDelta}
+                    </p>
+                    <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Balance final: {movement.balanceAfter}</p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </section>
 
       <section className="rounded-[2rem] border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex items-start justify-between gap-4">

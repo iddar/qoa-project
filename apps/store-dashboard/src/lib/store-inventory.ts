@@ -60,11 +60,31 @@ export type InventoryDraftReceipt = {
 export type StoreInventoryDraft = {
   rows: InventoryDraftRow[];
   lastReceipt: InventoryDraftReceipt | null;
+  idempotencyKey: string | null;
 };
+
+const buildDraftKeySuffix = () => {
+  if (typeof globalThis !== "undefined") {
+    const runtimeCrypto = globalThis.crypto;
+    if (runtimeCrypto?.randomUUID) {
+      return runtimeCrypto.randomUUID();
+    }
+
+    if (runtimeCrypto?.getRandomValues) {
+      const bytes = runtimeCrypto.getRandomValues(new Uint8Array(12));
+      return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    }
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+};
+
+export const createInventoryIntakeIdempotencyKey = () => `inventory-intake-${buildDraftKeySuffix()}`;
 
 export const createEmptyInventoryDraft = (): StoreInventoryDraft => ({
   rows: [],
   lastReceipt: null,
+  idempotencyKey: null,
 });
 
 export const getInventoryDraftSummary = (draft: StoreInventoryDraft) => ({
