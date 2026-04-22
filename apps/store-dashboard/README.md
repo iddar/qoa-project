@@ -5,7 +5,7 @@ Dashboard operativo para tienda (tenderos y soporte) construido con Next.js + Re
 ## Scripts
 
 - `bun run dev` - Inicia la app en `http://localhost:3003`
-- `bun run lint` - Ejecuta lint
+- `bun run lint` - Ejecuta lint.
 - `bun run smoke:openrouter-audio` - Prueba Gemini por OpenRouter con audios locales
 
 La app ya escucha en `0.0.0.0`, así que también la puedes abrir desde otros dispositivos usando la IP LAN de tu máquina, por ejemplo `http://192.168.1.203:3003`.
