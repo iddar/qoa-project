@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, resolveInventoryRowState } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, resolveInventoryRowState } from "@/lib/store-inventory";
 
 test("marks row as new once required intake fields are completed", () => {
   const row = resolveInventoryRowState({
@@ -80,4 +80,49 @@ test("does not allow confirming a new row without price", () => {
   expect(row.status).toBe("new");
   expect(row.errors).toEqual(["Agrega precio para crear este producto nuevo."]);
   expect(canConfirmInventoryDraft({ ...createEmptyInventoryDraft(), rows: [row] })).toBe(false);
+});
+
+test("appends new preview rows after the current draft line numbers", () => {
+  const merged = appendInventoryDraftRows(
+    [
+      {
+        id: "existing-1",
+        lineNumber: 1,
+        rawText: "Pan Blanco",
+        name: "Pan Blanco",
+        quantity: 100,
+        status: "matched",
+        action: "match_existing",
+        matchedStoreProductId: "sp-1",
+      },
+      {
+        id: "existing-2",
+        lineNumber: 2,
+        rawText: "Bimbollos",
+        name: "Bimbollos",
+        quantity: 20,
+        status: "matched",
+        action: "match_existing",
+        matchedStoreProductId: "sp-2",
+      },
+    ],
+    [
+      {
+        id: "next-1",
+        lineNumber: 1,
+        rawText: "Roles Canela",
+        name: "Roles Canela",
+        quantity: 40,
+        status: "matched",
+        action: "match_existing",
+        matchedStoreProductId: "sp-3",
+      },
+    ],
+  );
+
+  expect(merged.map((row) => ({ id: row.id, lineNumber: row.lineNumber }))).toEqual([
+    { id: "existing-1", lineNumber: 1 },
+    { id: "existing-2", lineNumber: 2 },
+    { id: "next-1", lineNumber: 3 },
+  ]);
 });
