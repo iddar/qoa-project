@@ -2,33 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Eraser, PackagePlus, RefreshCcw, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, RefreshCcw, Sparkles, Trash2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
-import { createClientId } from "@/lib/id";
 import { canConfirmInventoryDraft, createInventoryIntakeIdempotencyKey, getInventoryDraftSummary, type InventoryDraftMatchedProduct, type InventoryDraftRow } from "@/lib/store-inventory";
 import { useAuth } from "@/providers/auth-provider";
 import { useStoreInventory } from "@/providers/store-inventory-provider";
+import { useStorePos } from "@/providers/store-pos-provider";
 
 type StoreProduct = InventoryDraftMatchedProduct;
-
-type InventoryPreviewResponse = {
-  data: {
-    rows: Array<{
-      lineNumber: number;
-      rawText: string;
-      name: string;
-      sku?: string;
-      quantity: number;
-      price?: number;
-      status: "matched" | "new" | "ambiguous" | "invalid";
-      matchedStoreProductId?: string;
-      matchedProduct?: StoreProduct;
-      candidates?: InventoryDraftRow["candidates"];
-      errors?: string[];
-    }>;
-  };
-};
 
 type InventoryMovement = {
   id: string;
@@ -84,28 +66,6 @@ const describeMovementReference = (movement: InventoryMovement) => {
   return "Movimiento manual";
 };
 
-const toDraftRows = (rows: InventoryPreviewResponse["data"]["rows"]): InventoryDraftRow[] =>
-  rows.map((row) => ({
-    id: createClientId(),
-    lineNumber: row.lineNumber,
-    rawText: row.rawText,
-    name: row.name,
-    sku: row.sku,
-    quantity: row.quantity,
-    price: row.price,
-    status: row.status,
-    action:
-      row.status === "matched"
-        ? "match_existing"
-        : row.status === "new" && row.price !== undefined
-          ? "create_new"
-          : undefined,
-    matchedStoreProductId: row.matchedStoreProductId,
-    matchedProduct: row.matchedProduct,
-    candidates: row.candidates,
-    errors: row.errors,
-  }));
-
 const badgeClasses: Record<InventoryDraftRow["status"], string> = {
   matched: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-300",
   new: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-300",
@@ -116,9 +76,9 @@ const badgeClasses: Record<InventoryDraftRow["status"], string> = {
 export default function StoreInventoryPage() {
   const token = getAccessToken();
   const { tenantId, tenantType } = useAuth();
-  const { draft, setRows, updateRow, removeRow, replaceDraft, resetDraft } = useStoreInventory();
+  const { draft, updateRow, removeRow, replaceDraft } = useStoreInventory();
+  const { setAgentOpen } = useStorePos();
   const queryClient = useQueryClient();
-  const [textInput, setTextInput] = useState("");
   const [movementType, setMovementType] = useState<"all" | InventoryMovement["type"]>("all");
 
   const storeId = tenantType === "store" ? (tenantId ?? "") : "";
@@ -157,24 +117,6 @@ export default function StoreInventoryPage() {
   const storeProducts = productsQuery.data ?? [];
   const findProductById = (storeProductId: string) => storeProducts.find((product) => product.id === storeProductId);
 
-  const previewMutation = useMutation({
-    mutationFn: async () => {
-      if (!token || !storeId || !textInput.trim()) {
-        throw new Error("TEXT_REQUIRED");
-      }
-
-      const { data, error } = await api.v1.stores[storeId].inventory.intake.preview.post(
-        { text: textInput.trim() },
-        { headers: { authorization: `Bearer ${token}` } },
-      );
-      if (error) throw error;
-      return data as InventoryPreviewResponse;
-    },
-    onSuccess: (data) => {
-      setRows(toDraftRows(data.data.rows));
-    },
-  });
-
   const confirmMutation = useMutation({
     mutationFn: async () => {
       if (!token || !storeId || !canConfirm) {
@@ -202,7 +144,6 @@ export default function StoreInventoryPage() {
     },
     onSuccess: (data) => {
       replaceDraft({ rows: [], lastReceipt: data.data, idempotencyKey: null });
-      setTextInput("");
       queryClient.invalidateQueries({ queryKey: ["store-products", storeId] });
       queryClient.invalidateQueries({ queryKey: ["inventory-movements", storeId] });
     },
@@ -228,7 +169,7 @@ export default function StoreInventoryPage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Inventario</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Pega una lista del proveedor, revisa el preview y confirma la entrada de mercancía.
+            Usa el agente para interpretar fotos o listas del proveedor y confirma la entrada solo cuando el preview esté correcto.
           </p>
         </div>
         <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 xl:max-w-md dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-300">
@@ -259,45 +200,41 @@ export default function StoreInventoryPage() {
         </article>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-[2rem] border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-start justify-between gap-4">
+      <section className="rounded-[2rem] border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mb-4 rounded-3xl border border-dashed border-zinc-200 bg-zinc-50 px-4 py-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Texto del proveedor</h2>
+              <p className="font-medium text-zinc-900 dark:text-zinc-100">Carga el borrador desde el agente</p>
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Ejemplos: `12 Refresco 600ml`, `Galletas, GAL-001, 6, 30`, o columnas pegadas desde Excel.
+                Pega una lista o sube una foto con el `Inventory Agent` de la derecha. Aquí solo revisas, corriges y confirmas.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setTextInput("");
-                resetDraft();
-              }}
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              onClick={() => setAgentOpen(true)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
             >
-              <Eraser className="h-3.5 w-3.5" />
-              Limpiar
+              <Sparkles className="h-4 w-4" />
+              Abrir Inventory Agent
             </button>
           </div>
+        </div>
 
-          <textarea
-            value={textInput}
-            onChange={(event) => setTextInput(event.target.value)}
-            rows={10}
-            placeholder={"2 Refresco 600ml\nGalletas Mantequilla, GAL-001, 6, 30\nPapas Fuego\tPAP-123\t4\t22"}
-            className="mt-4 w-full rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-4 text-sm text-zinc-900 outline-none transition focus:border-sky-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
-          />
-
-          <div className="mt-4 flex flex-wrap gap-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Inventory Preview</h2>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Edita, corrige o elimina filas antes de confirmar.</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => previewMutation.mutate()}
-              disabled={previewMutation.isPending || !textInput.trim()}
-              className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["store-products", storeId, "inventory-list"] })}
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
             >
-              <PackagePlus className="h-4 w-4" />
-              {previewMutation.isPending ? "Interpretando lista..." : "Generar preview"}
+              <RefreshCcw className="h-3.5 w-3.5" />
+              Stock actual
             </button>
             <button
               type="button"
@@ -309,35 +246,16 @@ export default function StoreInventoryPage() {
               {confirmMutation.isPending ? "Aplicando entrada..." : "Confirmar entrada"}
             </button>
           </div>
-
-          {previewMutation.isError ? <p className="mt-3 text-sm text-red-500">No pude interpretar esa lista. Revisa el formato e intenta de nuevo.</p> : null}
-          {confirmMutation.isError ? <p className="mt-3 text-sm text-red-500">No pude aplicar la entrada. Revisa las filas pendientes o intenta de nuevo.</p> : null}
         </div>
 
-        <div className="rounded-[2rem] border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Resultado esperado</h2>
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Edita, corrige o elimina filas antes de confirmar.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ["store-products", storeId, "inventory-list"] })}
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
-            >
-              <RefreshCcw className="h-3.5 w-3.5" />
-              Stock actual
-            </button>
+        {draft.rows.length === 0 ? (
+          <div className="mt-6 rounded-3xl border border-dashed border-zinc-200 px-4 py-10 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            El preview sigue vacío. Usa el agente para pegar una lista o subir una foto del ticket del proveedor.
           </div>
-
-          {draft.rows.length === 0 ? (
-            <div className="mt-6 rounded-3xl border border-dashed border-zinc-200 px-4 py-10 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-              Aún no hay preview. Pega una lista y genera la propuesta de entrada.
-            </div>
-          ) : (
-            <div className="mt-4 space-y-3">
-              {draft.rows.map((row) => (
-                <article key={row.id} className="rounded-3xl border border-zinc-200 p-4 dark:border-zinc-800">
+        ) : (
+          <div className="mt-4 space-y-3">
+            {draft.rows.map((row) => (
+              <article key={row.id} className="rounded-3xl border border-zinc-200 p-4 dark:border-zinc-800">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex items-center gap-2">
                       <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${badgeClasses[row.status]}`}>
@@ -472,11 +390,12 @@ export default function StoreInventoryPage() {
                       </div>
                     </div>
                   ) : null}
-                </article>
-              ))}
-            </div>
-          )}
-        </div>
+              </article>
+            ))}
+          </div>
+        )}
+
+        {confirmMutation.isError ? <p className="mt-3 text-sm text-red-500">No pude aplicar la entrada. Revisa las filas pendientes o intenta de nuevo.</p> : null}
       </section>
 
       {draft.lastReceipt ? (
