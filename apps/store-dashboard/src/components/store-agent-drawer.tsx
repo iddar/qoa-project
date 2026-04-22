@@ -12,6 +12,7 @@ import { useStoreInventory } from "@/providers/store-inventory-provider";
 import { useStorePos } from "@/providers/store-pos-provider";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
+const INVENTORY_IMAGE_PLACEHOLDER = "Adjunto una foto de inventario.";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-MX", {
@@ -26,7 +27,7 @@ const getInitialAssistantMessage = (mode: "pos" | "inventory"): AgentMessage =>
         id: "store-agent-welcome-inventory",
         role: "assistant",
         content:
-          "Hola, soy tu asistente de inventario. Puedo interpretar listas de proveedor, preparar el preview de entrada y ayudarte a confirmar la carga al inventario.\n\nPrueba con:\n- 12 Refresco 600ml\n- Galletas Mantequilla, GAL-001, 6, 30\n- Confirma la entrada de inventario actual",
+          "Hola, soy tu asistente de inventario. Puedo interpretar listas de proveedor o fotos de notas de entrega, preparar el preview de entrada y ayudarte a confirmar la carga al inventario.\n\nPrueba con:\n- 12 Refresco 600ml\n- Galletas Mantequilla, GAL-001, 6, 30\n- Adjunta una foto de la nota del proveedor\n- Confirma la entrada de inventario actual",
       }
     : {
         id: "store-agent-welcome-pos",
@@ -369,10 +370,6 @@ export function StoreAgentDrawer() {
       return;
     }
 
-    if (isInventoryMode && outgoingAttachments.length > 0) {
-      return;
-    }
-
     const preparedAttachments = outgoingAttachments.map((attachment) =>
       attachment.kind === "audio"
         ? { ...attachment, status: "processing" as const }
@@ -383,7 +380,13 @@ export function StoreAgentDrawer() {
       id: createClientId(),
       role: "user",
       content:
-        trimmed || (preparedAttachments.some((attachment) => attachment.kind === "audio") ? AUDIO_PLACEHOLDER : "Adjunto una imagen para escanear."),
+        trimmed || (
+          preparedAttachments.some((attachment) => attachment.kind === "audio")
+            ? AUDIO_PLACEHOLDER
+            : isInventoryMode
+              ? INVENTORY_IMAGE_PLACEHOLDER
+              : "Adjunto una imagen para escanear."
+        ),
       attachments: preparedAttachments,
     };
 
@@ -458,7 +461,7 @@ export function StoreAgentDrawer() {
     });
   };
 
-  const attachQrImages = async (files: FileList | File[]) => {
+  const attachImageFiles = async (files: FileList | File[]) => {
     const fileList = Array.from(files ?? []);
     if (fileList.length === 0) {
       return;
@@ -469,15 +472,17 @@ export function StoreAgentDrawer() {
       return;
     }
 
-    try {
-      setRecordingError(null);
-      const decodedText = await decodeQrFile(primaryFile);
-      if (decodedText) {
-        await sendMessage(`Quiero ligar la tarjeta del cliente con este QR: ${decodedText}`, []);
-        return;
+    if (!isInventoryMode) {
+      try {
+        setRecordingError(null);
+        const decodedText = await decodeQrFile(primaryFile);
+        if (decodedText) {
+          await sendMessage(`Quiero ligar la tarjeta del cliente con este QR: ${decodedText}`, []);
+          return;
+        }
+      } catch {
+        // Fallback to server-side image decoding below.
       }
-    } catch {
-      // Fallback to server-side image decoding below.
     }
 
     const nextAttachments = await Promise.all(
@@ -491,10 +496,15 @@ export function StoreAgentDrawer() {
       })),
     );
 
-    await sendMessage("Quiero ligar la tarjeta del cliente.", [
-      ...attachments.filter((attachment) => attachment.kind !== "image"),
-      ...nextAttachments,
-    ]);
+    await sendMessage(
+      isInventoryMode
+        ? "Quiero preparar un preview de inventario desde esta foto."
+        : "Quiero ligar la tarjeta del cliente.",
+      [
+        ...attachments.filter((attachment) => attachment.kind !== "image"),
+        ...nextAttachments,
+      ],
+    );
   };
 
   useEffect(() => {
@@ -895,6 +905,11 @@ export function StoreAgentDrawer() {
   };
 
   const handleQrButtonClick = () => {
+    if (isInventoryMode) {
+      qrCaptureInputRef.current?.click();
+      return;
+    }
+
     if (canUseLiveQrScanner) {
       setShowQrScanner(true);
       return;
@@ -993,6 +1008,9 @@ export function StoreAgentDrawer() {
                     {file.kind === "audio" ? (
                       <audio controls preload="metadata" src={file.previewUrl ?? file.dataUrl} className="mt-2 w-full max-w-full" />
                     ) : null}
+                    {file.kind === "image" ? (
+                      <img src={file.previewUrl ?? file.dataUrl} alt={file.name} className="mt-2 max-h-56 w-full rounded-xl object-cover" />
+                    ) : null}
                     {file.status === "processing" ? <p>Procesando audio...</p> : null}
                     {file.status === "failed" ? <p>No se pudo procesar el audio.</p> : null}
                     {file.transcript ? <p className="mt-1 whitespace-pre-wrap">Transcripción: {file.transcript}</p> : null}
@@ -1066,7 +1084,7 @@ export function StoreAgentDrawer() {
         {pending ? (
           <div className="mr-8 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
             <LoaderCircle className="h-4 w-4 animate-spin" />
-            Pensando y operando en caja...
+            {isInventoryMode ? "Interpretando imagen y preparando preview..." : "Pensando y operando en caja..."}
           </div>
         ) : null}
 
@@ -1158,6 +1176,13 @@ export function StoreAgentDrawer() {
                 ) : null}
               </div>
             ))}
+
+            {attachments.filter((attachment) => attachment.kind === "image").map((attachment) => (
+              <div key={`${attachment.id}-image-preview`} className="rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Preview de imagen</p>
+                <img src={attachment.previewUrl ?? attachment.dataUrl} alt={attachment.name} className="max-h-64 w-full rounded-2xl object-cover" />
+              </div>
+            ))}
           </div>
         ) : null}
 
@@ -1199,7 +1224,7 @@ export function StoreAgentDrawer() {
             className="hidden"
             onChange={async (event) => {
               const input = event.currentTarget;
-              await attachQrImages(input.files ?? []);
+              await attachImageFiles(input.files ?? []);
               input.value = "";
             }}
           />
@@ -1241,24 +1266,24 @@ export function StoreAgentDrawer() {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               rows={2}
-              placeholder={isInventoryMode ? "Ej. 12 Refresco 600ml, Galletas Mantequilla, GAL-001, 6, 30 o confirma la entrada" : "Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"}
+              placeholder={isInventoryMode ? "Ej. 12 Refresco 600ml, adjunta una foto de la nota del proveedor o confirma la entrada" : "Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"}
               className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pb-14 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 sm:pb-12"
             />
 
             <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-end justify-between gap-2">
               <div className="pointer-events-auto flex min-w-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleQrButtonClick}
+                  disabled={pending || (!isInventoryMode && showQrScanner)}
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
+                  aria-label={isInventoryMode ? "Adjuntar foto de inventario" : canUseLiveQrScanner ? "Escanear QR en vivo" : "Adjuntar foto del QR"}
+                >
+                  {isInventoryMode ? <Paperclip className="h-4 w-4" /> : canUseLiveQrScanner ? <ScanLine className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                </button>
+
                 {!isInventoryMode ? (
                   <>
-                    <button
-                      type="button"
-                      onClick={handleQrButtonClick}
-                      disabled={pending || showQrScanner}
-                      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
-                      aria-label={canUseLiveQrScanner ? "Escanear QR en vivo" : "Adjuntar foto del QR"}
-                    >
-                      {canUseLiveQrScanner ? <ScanLine className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
-                    </button>
-
                     <button
                       type="button"
                       onClick={handleAudioButtonClick}

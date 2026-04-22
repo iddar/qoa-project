@@ -1,9 +1,10 @@
-import { generateText, stepCountIs, tool } from "ai";
+import { generateObject, generateText, stepCountIs, tool } from "ai";
 import { openrouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 import { api } from "@/lib/api";
+import { buildInventoryPreviewTextFromImageRows, inventoryImageExtractionSchema } from "@/lib/inventory-image-extraction";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
-import { type AgentAction, type AgentMessage } from "@/lib/store-pos";
+import { type AgentAction, type AgentAttachment, type AgentMessage } from "@/lib/store-pos";
 import { canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, getInventoryDraftSummary, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
 
 const matchedProductSchema = z.object({
@@ -20,6 +21,17 @@ const matchedProductSchema = z.object({
   createdAt: z.string(),
 });
 
+const attachmentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  contentType: z.string(),
+  dataUrl: z.string(),
+  kind: z.enum(["image", "audio"]).optional(),
+  durationMs: z.number().optional(),
+  transcript: z.string().optional(),
+  status: z.enum(["pending", "ready", "processing", "transcribed", "failed"]).optional(),
+});
+
 const requestSchema = z.object({
   messages: z.array(
     z.object({
@@ -27,6 +39,7 @@ const requestSchema = z.object({
       role: z.enum(["user", "assistant"]),
       content: z.string(),
       renderedHtml: z.string().optional(),
+      attachments: z.array(attachmentSchema).optional(),
       actions: z
         .array(
           z.object({
@@ -115,6 +128,68 @@ const cloneDraft = (draft: StoreInventoryDraft): StoreInventoryDraft => ({
   idempotencyKey: draft.idempotencyKey ?? null,
 });
 
+const getAttachmentKind = (attachment: AgentAttachment) => {
+  if (attachment.kind) {
+    return attachment.kind;
+  }
+
+  return attachment.contentType.startsWith("audio/") ? "audio" : "image";
+};
+
+const normalizeAttachments = (attachments: AgentAttachment[]) =>
+  attachments.map((attachment) => ({
+    ...attachment,
+    kind: getAttachmentKind(attachment),
+  }));
+
+const buildTextMessageContent = (message: AgentMessage) => {
+  const attachmentLabel = message.attachments?.length
+    ? `\nAdjuntos: ${message.attachments.map((file) => file.name).join(", ")}`
+    : "";
+  return `${message.content}${attachmentLabel}`;
+};
+
+const parseDataUrl = (dataUrl: string) => {
+  const [meta, encoded] = dataUrl.split(",");
+  if (!meta || !encoded || !meta.startsWith("data:")) {
+    throw new Error("INVALID_DATA_URL");
+  }
+
+  const metaWithoutPrefix = meta.slice(5);
+  if (!metaWithoutPrefix.endsWith(";base64")) {
+    throw new Error("INVALID_DATA_URL");
+  }
+
+  const contentType = metaWithoutPrefix.slice(0, -7);
+  if (!contentType) {
+    throw new Error("INVALID_DATA_URL");
+  }
+
+  return {
+    contentType,
+    buffer: Buffer.from(encoded, "base64"),
+  };
+};
+
+const mapImagePreviewError = (error: unknown) => {
+  if (error instanceof Error) {
+    switch (error.message) {
+      case "IMAGE_ATTACHMENT_REQUIRED":
+        return "Necesito una foto para preparar el preview de inventario.";
+      case "INVENTORY_IMAGE_EMPTY":
+        return "No pude extraer productos claros de esa foto. Intenta con otra imagen mas centrada o con mejor luz.";
+      case "OPENROUTER_NOT_CONFIGURED":
+        return "No tengo configurado el modelo para leer imagenes en este momento.";
+      case "INVENTORY_DRAFT_NOT_EMPTY":
+        return "Ya hay un borrador de inventario abierto. Vacialo antes de cargar una foto nueva o dime que lo reemplace.";
+      default:
+        break;
+    }
+  }
+
+  return "No pude leer esa foto de inventario. Intenta con otra imagen o pega la lista en texto.";
+};
+
 const buildActions = (draft: StoreInventoryDraft): AgentAction[] => {
   const actions: AgentAction[] = [];
 
@@ -194,8 +269,22 @@ export async function POST(request: Request) {
   }
 
   let workingDraft = cloneDraft(draft ?? createEmptyInventoryDraft());
-  const normalizedMessages = messages;
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
+  let latestAttachments = latestUserMessage?.attachments ?? [];
+  let normalizedUserMessage = latestUserMessage ? { ...latestUserMessage } : null;
+
+  if (normalizedUserMessage?.attachments?.length) {
+    const normalizedAttachments = normalizeAttachments(normalizedUserMessage.attachments as AgentAttachment[]);
+    normalizedUserMessage = {
+      ...normalizedUserMessage,
+      attachments: normalizedAttachments,
+    };
+    latestAttachments = normalizedAttachments;
+  }
+
+  const normalizedMessages = normalizedUserMessage
+    ? messages.map((message) => (message.id === normalizedUserMessage?.id ? normalizedUserMessage : message))
+    : messages;
   let storeProductsCache: StoreProduct[] | null = null;
 
   const getStoreProducts = async () => {
@@ -233,6 +322,63 @@ export async function POST(request: Request) {
     return {
       rows: workingDraft.rows.length,
       summary: getInventoryDraftSummary(workingDraft),
+    };
+  };
+
+  const previewInventoryFromLatestImage = async ({ overwrite = false }: { overwrite?: boolean } = {}) => {
+    if (workingDraft.rows.length > 0 && !overwrite) {
+      throw new Error("INVENTORY_DRAFT_NOT_EMPTY");
+    }
+
+    const imageAttachments = latestAttachments.filter((attachment) => getAttachmentKind(attachment) === "image");
+    const latestImage = imageAttachments.at(-1);
+    if (!latestImage) {
+      throw new Error("IMAGE_ATTACHMENT_REQUIRED");
+    }
+
+    if (!process.env.OPENROUTER_API_KEY) {
+      throw new Error("OPENROUTER_NOT_CONFIGURED");
+    }
+
+    const { buffer, contentType } = parseDataUrl(latestImage.dataUrl);
+    const extraction = await generateObject({
+      model: openrouter(process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash"),
+      schema: inventoryImageExtractionSchema,
+      system: [
+        "Extrae productos de notas o tickets de proveedor para inventario.",
+        "Devuelve solo productos reales, sin encabezados ni totales.",
+        "Ignora vendedor, ruta, subtotal, descuento, IVA, IEPS, total y texto legal.",
+        "Para cada producto devuelve name, sku si existe y quantity.",
+        "price es opcional y no es obligatorio si no se ve claro.",
+        "No inventes filas ni cantidades.",
+      ].join("\n"),
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Lee esta foto de inventario y extrae las filas de producto. Instruccion del tendero: ${latestUserMessage?.content.trim() || "Preparar preview de inventario desde la foto."}`,
+            },
+            {
+              type: "file",
+              data: buffer,
+              mediaType: contentType,
+            },
+          ],
+        },
+      ],
+    });
+
+    const previewText = buildInventoryPreviewTextFromImageRows(extraction.object.rows);
+    if (!previewText.trim()) {
+      throw new Error("INVENTORY_IMAGE_EMPTY");
+    }
+
+    const preview = await previewInventoryFromText(previewText);
+    return {
+      ...preview,
+      source: "image" as const,
     };
   };
 
@@ -315,6 +461,40 @@ export async function POST(request: Request) {
     return data.data;
   };
 
+  const hasLatestImage = latestAttachments.some((attachment) => getAttachmentKind(attachment) === "image");
+  if (hasLatestImage && workingDraft.rows.length === 0) {
+    try {
+      const preview = await previewInventoryFromLatestImage();
+      const content = `Preparé el preview de inventario desde la foto con **${preview.rows} filas**. Revísalo y edítalo antes de confirmar la entrada.`;
+      const renderedHtml = await renderAssistantMarkdownToHtml(content);
+      return Response.json({
+        message: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content,
+          renderedHtml: renderedHtml || undefined,
+          actions: buildActions(workingDraft),
+        } as AgentMessage,
+        userMessage: normalizedUserMessage,
+        draft: workingDraft,
+      });
+    } catch (error) {
+      const content = mapImagePreviewError(error);
+      const renderedHtml = await renderAssistantMarkdownToHtml(content);
+      return Response.json({
+        message: {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content,
+          renderedHtml: renderedHtml || undefined,
+          actions: buildActions(workingDraft),
+        } as AgentMessage,
+        userMessage: normalizedUserMessage,
+        draft: workingDraft,
+      });
+    }
+  }
+
   const deterministicPreview = latestUserMessage && workingDraft.rows.length === 0 && /\n|\t|,|\d\s*[xX]?\s+/.test(latestUserMessage.content);
   if (deterministicPreview) {
     await previewInventoryFromText(latestUserMessage.content);
@@ -328,6 +508,7 @@ export async function POST(request: Request) {
         renderedHtml: renderedHtml || undefined,
         actions: buildActions(workingDraft),
       } as AgentMessage,
+      userMessage: normalizedUserMessage,
       draft: workingDraft,
     });
   }
@@ -338,7 +519,7 @@ export async function POST(request: Request) {
 
   const modelMessages = normalizedMessages.map((message) => ({
     role: message.role,
-    content: message.content,
+    content: buildTextMessageContent(message),
   }));
 
   const result = await generateText({
@@ -349,6 +530,8 @@ export async function POST(request: Request) {
       "Usa herramientas para interpretar listas de proveedor, editar el borrador y confirmar entradas.",
       "No digas que la entrada fue aplicada si no ejecutaste confirmInventoryIntake.",
       "Si el usuario pega una lista o tabla, usa previewInventoryFromText.",
+      "Si el usuario adjunta una foto de nota o ticket y el borrador esta vacio, usa previewInventoryFromLatestImage.",
+      "Si ya hay un borrador abierto y quieren procesar otra foto, pide vaciarlo primero o hazlo solo si el usuario te pide reemplazarlo.",
       "Si hay filas ambiguas o invalidas, pide correccion puntual o usa updateInventoryDraftRow cuando ya tengas la instruccion.",
       `Estado actual del inventario en borrador:\n${buildSummaryText(workingDraft)}`,
     ].join("\n\n"),
@@ -359,6 +542,21 @@ export async function POST(request: Request) {
         description: "Interpreta texto pegado y genera un borrador de entrada de inventario.",
         inputSchema: z.object({ text: z.string().min(1) }),
         execute: async ({ text }) => previewInventoryFromText(text),
+      }),
+      previewInventoryFromLatestImage: tool({
+        description: "Lee la foto mas reciente adjunta y prepara un preview de inventario editable.",
+        inputSchema: z.object({
+          overwrite: z.boolean().optional(),
+        }),
+        execute: async ({ overwrite }) => {
+          try {
+            return await previewInventoryFromLatestImage({ overwrite });
+          } catch (error) {
+            return {
+              error: mapImagePreviewError(error),
+            };
+          }
+        },
       }),
       updateInventoryDraftRow: tool({
         description: "Edita una fila del borrador de inventario.",
@@ -405,6 +603,7 @@ export async function POST(request: Request) {
       renderedHtml: renderedHtml || undefined,
       actions: buildActions(workingDraft),
     } as AgentMessage,
+    userMessage: normalizedUserMessage,
     draft: workingDraft,
   });
 }
