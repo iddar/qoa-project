@@ -1,4 +1,4 @@
-import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
+import { index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { stores } from './stores';
 import { products } from './catalog';
@@ -29,6 +29,7 @@ export const storeProducts = pgTable(
     sku: varchar('sku', { length: 100 }),
     unitType: storeProductUnitType('unit_type').notNull().default('piece'),
     price: varchar('price', { length: 20 }).notNull(),
+    stock: integer('stock').notNull().default(0),
     status: storeProductStatus('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),

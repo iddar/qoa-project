@@ -4,7 +4,7 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
-import { db } from '../../db/client';
+import { db, type Database } from '../../db/client';
 import {
   accumulations,
   balances,
@@ -326,7 +326,7 @@ const resolveAccumulationRule = (
   return scored[0]?.rule ?? null;
 };
 
-const resolveCatalogItems = async (productRefs: string[]) => {
+const resolveCatalogItems = async (productRefs: string[], database: Database = db) => {
   const resolved = new Map<string, ResolvedCatalogItem>();
 
   if (productRefs.length === 0) {
@@ -334,7 +334,7 @@ const resolveCatalogItems = async (productRefs: string[]) => {
   }
 
   // Fetch products with their brand info
-  const productsData = (await db
+  const productsData = (await database
     .select({
       id: products.id,
       sku: products.sku,
@@ -456,9 +456,9 @@ const ensureTransactionEntities = async (
   };
 };
 
-const resolveCardForTransaction = async (payload: { userId?: string; cardId?: string }) => {
+const resolveCardForTransaction = async (payload: { userId?: string; cardId?: string }, database: Database = db) => {
   if (payload.cardId) {
-    const [card] = (await db
+    const [card] = (await database
       .select({ id: cards.id, campaignId: cards.campaignId, userId: cards.userId })
       .from(cards)
       .where(eq(cards.id, payload.cardId))) as Array<{ id: string; campaignId: string; userId: string }>;
@@ -486,13 +486,13 @@ const resolveCardForTransaction = async (payload: { userId?: string; cardId?: st
   };
 };
 
-const resolveEligibleCampaignIds = async (payload: { userId: string; cardId: string; baseCampaignId: string }) => {
-  const [universal] = (await db
+const resolveEligibleCampaignIds = async (payload: { userId: string; cardId: string; baseCampaignId: string }, database: Database = db) => {
+  const [universal] = (await database
     .select({ id: campaigns.id })
     .from(campaigns)
     .where(eq(campaigns.key, UNIVERSAL_CAMPAIGN_KEY))) as Array<{ id: string }>;
 
-  const subscribedRows = (await db
+  const subscribedRows = (await database
     .select({ campaignId: campaignSubscriptions.campaignId })
     .from(campaignSubscriptions)
     .where(
@@ -501,7 +501,7 @@ const resolveEligibleCampaignIds = async (payload: { userId: string; cardId: str
     campaignId: string;
   }>;
 
-  const openRows = (await db
+  const openRows = (await database
     .select({ id: campaigns.id })
     .from(campaigns)
     .where(and(eq(campaigns.status, 'active'), eq(campaigns.enrollmentMode, 'open')))) as Array<{ id: string }>;
@@ -528,15 +528,15 @@ export const createOrReplayTransaction = async (payload: {
   idempotencyKey?: string;
   items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>;
   catalogItems: Map<string, ResolvedCatalogItem>;
-}) => {
+}, database: Database = db) => {
   if (payload.idempotencyKey) {
-    const [existing] = (await db
+    const [existing] = (await database
       .select()
       .from(transactions)
       .where(eq(transactions.idempotencyKey, payload.idempotencyKey))) as TransactionRow[];
 
     if (existing) {
-      const existingItems = (await db
+      const existingItems = (await database
         .select()
         .from(transactionItems)
         .where(eq(transactionItems.transactionId, existing.id))) as TransactionItemRow[];
@@ -544,7 +544,7 @@ export const createOrReplayTransaction = async (payload: {
       const itemIds = existingItems.map((item) => item.id);
       const existingAccumulations =
         itemIds.length > 0
-          ? ((await db
+          ? ((await database
               .select()
               .from(accumulations)
               .where(or(...itemIds.map((id) => eq(accumulations.transactionItemId, id))))) as AccumulationRow[])
@@ -571,10 +571,10 @@ export const createOrReplayTransaction = async (payload: {
   const resolvedCard = await resolveCardForTransaction({
     userId: payload.userId,
     cardId: payload.cardId,
-  });
+  }, database);
   const resolvedUserId = payload.userId ?? resolvedCard?.userId ?? null;
 
-  const [created] = (await db
+  const [created] = (await database
     .insert(transactions)
     .values({
       userId: resolvedUserId,
@@ -607,7 +607,7 @@ export const createOrReplayTransaction = async (payload: {
     });
   }
 
-  await db.insert(transactionItems).values(
+  await database.insert(transactionItems).values(
     normalizedItems.map((item) => ({
       transactionId: created.id,
       productId: item.productId,
@@ -617,7 +617,7 @@ export const createOrReplayTransaction = async (payload: {
     })),
   );
 
-  const createdItems = (await db
+  const createdItems = (await database
     .select()
     .from(transactionItems)
     .where(eq(transactionItems.transactionId, created.id))) as TransactionItemRow[];
@@ -626,7 +626,7 @@ export const createOrReplayTransaction = async (payload: {
 
   if (resolvedCard && resolvedUserId) {
     const now = new Date();
-    const [existingBalance] = (await db
+    const [existingBalance] = (await database
       .select()
       .from(balances)
       .where(eq(balances.cardId, resolvedCard.cardId))) as Array<{
@@ -639,8 +639,8 @@ export const createOrReplayTransaction = async (payload: {
       userId: resolvedUserId,
       cardId: resolvedCard.cardId,
       baseCampaignId: resolvedCard.baseCampaignId,
-    });
-    const campaignRows = (await db
+    }, database);
+    const campaignRows = (await database
       .select({ id: campaigns.id, accumulationMode: campaigns.accumulationMode })
       .from(campaigns)
       .where(or(...campaignIds.map((id) => eq(campaigns.id, id))))) as Array<{
@@ -649,7 +649,7 @@ export const createOrReplayTransaction = async (payload: {
     }>;
     const campaignById = new Map(campaignRows.map((entry) => [entry.id, entry]));
 
-    const campaignBalanceRows = (await db
+    const campaignBalanceRows = (await database
       .select()
       .from(campaignBalances)
       .where(and(eq(campaignBalances.cardId, resolvedCard.cardId)))) as CampaignBalanceRow[];
@@ -702,13 +702,13 @@ export const createOrReplayTransaction = async (payload: {
         continue;
       }
 
-      const activePolicies = (await db
+      const activePolicies = (await database
         .select()
         .from(campaignPolicies)
         .where(
           and(eq(campaignPolicies.campaignId, campaignId), eq(campaignPolicies.active, true)),
         )) as CampaignPolicyRow[];
-      const accumulationRules = (await db
+      const accumulationRules = (await database
         .select({
           id: campaignAccumulationRules.id,
           campaignId: campaignAccumulationRules.campaignId,
@@ -772,7 +772,7 @@ export const createOrReplayTransaction = async (payload: {
               continue;
             }
 
-            const latestRows = (await db
+            const latestRows = (await database
               .select({ createdAt: accumulations.createdAt })
               .from(accumulations)
               .where(
@@ -824,7 +824,7 @@ export const createOrReplayTransaction = async (payload: {
               historicalFilters.push(gt(accumulations.createdAt, periodStart));
             }
 
-            const historicalRows = (await db
+            const historicalRows = (await database
               .select({ transactionItemId: accumulations.transactionItemId })
               .from(accumulations)
               .where(and(...historicalFilters))) as Array<{ transactionItemId: string | null }>;
@@ -838,7 +838,7 @@ export const createOrReplayTransaction = async (payload: {
               if (historicalItemIds.length === 0) {
                 historicalCount = 0;
               } else {
-                const historicalItems = (await db
+                const historicalItems = (await database
                   .select({ id: transactionItems.id, productId: transactionItems.productId })
                   .from(transactionItems)
                   .where(or(...historicalItemIds.map((id) => eq(transactionItems.id, id))))) as Array<{
@@ -853,7 +853,7 @@ export const createOrReplayTransaction = async (payload: {
                     return false;
                   }
 
-                  const brandProducts = (await db
+                  const brandProducts = (await database
                     .select({ id: products.id })
                     .from(products)
                     .where(eq(products.brandId, brandId))) as Array<{ id: string }>;
@@ -908,7 +908,7 @@ export const createOrReplayTransaction = async (payload: {
 
       if (existingCampaignBalance) {
         if (campaignAccumulated > 0) {
-          await db
+          await database
             .update(campaignBalances)
             .set({
               current: currentCampaignBalance,
@@ -918,7 +918,7 @@ export const createOrReplayTransaction = async (payload: {
             .where(eq(campaignBalances.id, existingCampaignBalance.id));
         }
       } else {
-        await db.insert(campaignBalances).values({
+        await database.insert(campaignBalances).values({
           cardId: resolvedCard.cardId,
           campaignId,
           current: currentCampaignBalance,
@@ -931,7 +931,7 @@ export const createOrReplayTransaction = async (payload: {
     const currentTotalBalance = existingBalance?.current ?? 0;
     const lifetimeTotalBalance = existingBalance?.lifetime ?? 0;
     if (existingBalance) {
-      await db
+      await database
         .update(balances)
         .set({
           current: currentTotalBalance + totalAccumulatedAcrossCampaigns,
@@ -940,7 +940,7 @@ export const createOrReplayTransaction = async (payload: {
         })
         .where(eq(balances.id, existingBalance.id));
     } else {
-      await db.insert(balances).values({
+      await database.insert(balances).values({
         cardId: resolvedCard.cardId,
         current: totalAccumulatedAcrossCampaigns,
         lifetime: totalAccumulatedAcrossCampaigns,
@@ -949,9 +949,9 @@ export const createOrReplayTransaction = async (payload: {
     }
 
     if (accumulationRows.length > 0) {
-      await db.insert(accumulations).values(accumulationRows);
+      await database.insert(accumulations).values(accumulationRows);
       const itemIds = accumulationRows.map((row) => row.transactionItemId);
-      createdAccumulations = (await db
+      createdAccumulations = (await database
         .select()
         .from(accumulations)
         .where(or(...itemIds.map((id) => eq(accumulations.transactionItemId, id))))) as AccumulationRow[];
@@ -984,9 +984,9 @@ export const createStorePosTransaction = async (payload: {
     quantity: number;
     amount: number;
   }>;
-}) => {
+}, database: Database = db) => {
   const linkedProductRefs = [...new Set(payload.items.map((item) => item.productId).filter((item): item is string => Boolean(item)))];
-  const catalogItems = (linkedProductRefs.length > 0 ? await resolveCatalogItems(linkedProductRefs) : new Map()) ?? new Map();
+  const catalogItems = (linkedProductRefs.length > 0 ? await resolveCatalogItems(linkedProductRefs, database) : new Map()) ?? new Map();
 
   return createOrReplayTransaction({
     userId: payload.userId,
@@ -1004,7 +1004,7 @@ export const createStorePosTransaction = async (payload: {
       }),
     })),
     catalogItems,
-  });
+  }, database);
 };
 
 const createWebhookHash = (payload: {

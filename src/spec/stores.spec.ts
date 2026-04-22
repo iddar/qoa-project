@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { accumulations, balances, brands, campaignBalances, campaigns, cards, cpgs, products, storeProducts, stores, transactionItems, transactions, users } from '../db/schema';
+import { accumulations, balances, brands, campaignBalances, campaigns, cards, cpgs, inventoryMovements, products, storeProducts, stores, transactionItems, transactions, users } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -49,6 +49,14 @@ const createUser = async () => {
 
 const buildAuthHeaders = (accessToken: string) => ({
   authorization: `Bearer ${accessToken}`,
+});
+
+const buildStoreDevHeaders = (storeId: string) => ({
+  authorization: 'Bearer dev-token',
+  'x-dev-user-id': 'dev-store-pos',
+  'x-dev-user-role': 'store_admin',
+  'x-dev-tenant-type': 'store',
+  'x-dev-tenant-id': storeId,
 });
 
 const createCatalogProduct = async () => {
@@ -315,6 +323,7 @@ describe('Stores module', () => {
         sku: `POS-${crypto.randomUUID().slice(0, 8)}`,
         unitType: 'piece',
         price: 25,
+        stock: 10,
       })
       .returning({ id: storeProducts.id })) as Array<{ id: string }>;
 
@@ -348,13 +357,7 @@ describe('Stores module', () => {
       throw new Error('Failed to create POS card');
     }
 
-    const storeHeaders = {
-      authorization: 'Bearer dev-token',
-      'x-dev-user-id': 'dev-store-pos',
-      'x-dev-user-role': 'store_admin',
-      'x-dev-tenant-type': 'store',
-      'x-dev-tenant-id': store.id,
-    };
+    const storeHeaders = buildStoreDevHeaders(store.id);
 
     const resolvedByQr = await api.v1.stores({ storeId: store.id })['customer-resolve'].post(
       { input: JSON.stringify({ entityType: 'card', entityId: card.id, code: card.code }) },
@@ -422,6 +425,7 @@ describe('Stores module', () => {
     await db.delete(balances).where(eq(balances.cardId, card.id));
     await db.delete(cards).where(eq(cards.id, card.id));
     await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
+    await db.delete(inventoryMovements).where(eq(inventoryMovements.referenceId, txId));
     await db.delete(transactionItems).where(eq(transactionItems.transactionId, txId));
     await db.delete(transactions).where(eq(transactions.id, txId));
     await db.delete(storeProducts).where(eq(storeProducts.id, storeProduct.id));
@@ -430,5 +434,244 @@ describe('Stores module', () => {
     await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
+  });
+
+  it('previews and confirms inventory intake with idempotent replay', async () => {
+    const [store] = (await db
+      .insert(stores)
+      .values({
+        name: `Inventory Store ${crypto.randomUUID().slice(0, 6)}`,
+        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        type: 'tiendita',
+      })
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+
+    if (!store) {
+      throw new Error('Failed to create inventory test store');
+    }
+
+    const catalog = await createCatalogProduct();
+    const [existingProduct] = (await db
+      .insert(storeProducts)
+      .values({
+        storeId: store.id,
+        productId: catalog.productId,
+        cpgId: catalog.cpgId,
+        name: 'Refresco 600ml',
+        sku: `INV-${crypto.randomUUID().slice(0, 8)}`,
+        unitType: 'piece',
+        price: 25,
+        stock: 3,
+      })
+      .returning({ id: storeProducts.id, sku: storeProducts.sku })) as Array<{ id: string; sku: string | null }>;
+
+    if (!existingProduct) {
+      throw new Error('Failed to create inventory store product');
+    }
+
+    const headers = buildStoreDevHeaders(store.id);
+    const preview = await api.v1.stores({ storeId: store.id }).inventory.intake.preview.post(
+      {
+        text: `2 Refresco 600ml\nGalletas Mantequilla, GAL-001, 6, 30\nSolo texto roto`,
+      },
+      { headers },
+    );
+
+    if (preview.error || !preview.data) {
+      throw preview.error?.value ?? new Error('Inventory preview failed');
+    }
+
+    expect(preview.status).toBe(200);
+    expect(preview.data.data.rows).toHaveLength(3);
+    expect(preview.data.data.rows[0]?.status).toBe('matched');
+    expect(preview.data.data.rows[0]?.matchedStoreProductId).toBe(existingProduct.id);
+    expect(preview.data.data.rows[1]?.status).toBe('new');
+    expect(preview.data.data.rows[2]?.status).toBe('invalid');
+
+    const idempotencyKey = `inventory-intake-${crypto.randomUUID()}`;
+    const confirmed = await api.v1.stores({ storeId: store.id }).inventory.intake.confirm.post(
+      {
+        idempotencyKey,
+        rows: [
+          {
+            lineNumber: 1,
+            rawText: '2 Refresco 600ml',
+            name: 'Refresco 600ml',
+            quantity: 2,
+            action: 'match_existing',
+            storeProductId: existingProduct.id,
+          },
+          {
+            lineNumber: 2,
+            rawText: 'Galletas Mantequilla, GAL-001, 6, 30',
+            name: 'Galletas Mantequilla',
+            sku: 'GAL-001',
+            quantity: 6,
+            price: 30,
+            action: 'create_new',
+          },
+        ],
+      },
+      { headers },
+    );
+
+    if (confirmed.error || !confirmed.data) {
+      throw confirmed.error?.value ?? new Error('Inventory confirm failed');
+    }
+
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.data.data.replayed).toBe(false);
+    expect(confirmed.data.data.summary.totalRows).toBe(2);
+    expect(confirmed.data.data.summary.totalQuantity).toBe(8);
+    expect(confirmed.data.data.summary.createdProducts).toBe(1);
+    expect(confirmed.data.data.summary.updatedProducts).toBe(1);
+
+    const storeProductsAfter = (await db
+      .select({ id: storeProducts.id, name: storeProducts.name, stock: storeProducts.stock, sku: storeProducts.sku })
+      .from(storeProducts)
+      .where(eq(storeProducts.storeId, store.id))) as Array<{ id: string; name: string; stock: number; sku: string | null }>;
+    const existingAfter = storeProductsAfter.find((entry) => entry.id === existingProduct.id);
+    const createdAfter = storeProductsAfter.find((entry) => entry.name === 'Galletas Mantequilla');
+
+    expect(existingAfter?.stock).toBe(5);
+    expect(createdAfter?.stock).toBe(6);
+    expect(createdAfter?.sku).toBe('GAL-001');
+
+    const movements = (await db
+      .select({ id: inventoryMovements.id, referenceId: inventoryMovements.referenceId, quantityDelta: inventoryMovements.quantityDelta })
+      .from(inventoryMovements)
+      .where(eq(inventoryMovements.referenceId, idempotencyKey))) as Array<{ id: string; referenceId: string | null; quantityDelta: number }>;
+    expect(movements).toHaveLength(2);
+    expect(movements.reduce((sum, entry) => sum + entry.quantityDelta, 0)).toBe(8);
+
+    const replay = await api.v1.stores({ storeId: store.id }).inventory.intake.confirm.post(
+      {
+        idempotencyKey,
+        rows: [
+          {
+            lineNumber: 1,
+            rawText: '2 Refresco 600ml',
+            name: 'Refresco 600ml',
+            quantity: 2,
+            action: 'match_existing',
+            storeProductId: existingProduct.id,
+          },
+        ],
+      },
+      { headers },
+    );
+
+    if (replay.error || !replay.data) {
+      throw replay.error?.value ?? new Error('Inventory replay failed');
+    }
+
+    expect(replay.status).toBe(200);
+    expect(replay.data.data.replayed).toBe(true);
+    expect(replay.data.data.rows).toHaveLength(2);
+
+    await db.delete(inventoryMovements).where(eq(inventoryMovements.referenceId, idempotencyKey));
+    if (createdAfter) {
+      await db.delete(storeProducts).where(eq(storeProducts.id, createdAfter.id));
+    }
+    await db.delete(storeProducts).where(eq(storeProducts.id, existingProduct.id));
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
+    await db.delete(stores).where(eq(stores.id, store.id));
+  });
+
+  it('blocks out-of-stock sales and decrements stock on successful POS transactions', async () => {
+    const [store] = (await db
+      .insert(stores)
+      .values({
+        name: `Stock Guard Store ${crypto.randomUUID().slice(0, 6)}`,
+        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        type: 'tiendita',
+      })
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+
+    if (!store) {
+      throw new Error('Failed to create stock-guard store');
+    }
+
+    const catalog = await createCatalogProduct();
+    const [storeProduct] = (await db
+      .insert(storeProducts)
+      .values({
+        storeId: store.id,
+        productId: catalog.productId,
+        cpgId: catalog.cpgId,
+        name: 'Agua 1L',
+        sku: `WATER-${crypto.randomUUID().slice(0, 8)}`,
+        unitType: 'piece',
+        price: 18,
+        stock: 2,
+      })
+      .returning({ id: storeProducts.id })) as Array<{ id: string }>;
+
+    if (!storeProduct) {
+      throw new Error('Failed to create guarded stock product');
+    }
+
+    const headers = buildStoreDevHeaders(store.id);
+    const rejected = await api.v1.stores({ storeId: store.id }).transactions.post(
+      {
+        items: [
+          {
+            storeProductId: storeProduct.id,
+            quantity: 3,
+            amount: 18,
+          },
+        ],
+        idempotencyKey: `store-pos-reject-${crypto.randomUUID()}`,
+      },
+      { headers },
+    );
+
+    expect(rejected.status).toBe(409);
+    expect(rejected.error?.value.error.code).toBe('OUT_OF_STOCK');
+
+    const accepted = await api.v1.stores({ storeId: store.id }).transactions.post(
+      {
+        items: [
+          {
+            storeProductId: storeProduct.id,
+            quantity: 2,
+            amount: 18,
+          },
+        ],
+        idempotencyKey: `store-pos-accept-${crypto.randomUUID()}`,
+      },
+      { headers },
+    );
+
+    if (accepted.error || !accepted.data) {
+      throw accepted.error?.value ?? new Error('Expected accepted stock transaction');
+    }
+
+    expect(accepted.status).toBe(201);
+    expect(accepted.data.data.guestFlag).toBe(true);
+    expect(accepted.data.data.totalAmount).toBe(36);
+
+    const [productAfter] = (await db
+      .select({ stock: storeProducts.stock })
+      .from(storeProducts)
+      .where(eq(storeProducts.id, storeProduct.id))) as Array<{ stock: number }>;
+    expect(productAfter?.stock).toBe(0);
+
+    const saleMovements = (await db
+      .select({ type: inventoryMovements.type, quantityDelta: inventoryMovements.quantityDelta, referenceId: inventoryMovements.referenceId })
+      .from(inventoryMovements)
+      .where(eq(inventoryMovements.storeProductId, storeProduct.id))) as Array<{ type: string; quantityDelta: number; referenceId: string | null }>;
+    expect(saleMovements.some((entry) => entry.type === 'sale' && entry.quantityDelta === -2)).toBe(true);
+
+    await db.delete(inventoryMovements).where(eq(inventoryMovements.storeProductId, storeProduct.id));
+    await db.delete(transactionItems).where(eq(transactionItems.transactionId, accepted.data.data.id));
+    await db.delete(transactions).where(eq(transactions.id, accepted.data.data.id));
+    await db.delete(storeProducts).where(eq(storeProducts.id, storeProduct.id));
+    await db.delete(products).where(eq(products.id, catalog.productId));
+    await db.delete(brands).where(eq(brands.id, catalog.brandId));
+    await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
+    await db.delete(stores).where(eq(stores.id, store.id));
   });
 });
