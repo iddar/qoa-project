@@ -10,7 +10,8 @@
         "lint": "eslint",
         "test": "bun test",
         "smoke:openrouter-audio": "bun run src/scripts/openrouter-audio-smoke.ts",
-        "smoke:openrouter-matrix": "bun run src/scripts/openrouter-conversation-matrix.ts"
+        "smoke:openrouter-matrix": "bun run src/scripts/openrouter-conversation-matrix.ts",
+        "smoke:inventory-image": "bun run src/scripts/openrouter-inventory-image-smoke.ts"
     },
     "dependencies": {
         "@elysiajs/eden": "^1.4.2",

@@ -1338,8 +1338,8 @@ export function StoreAgentDrawer() {
       </button>
 
       <aside
-        className={`hidden h-screen min-h-0 shrink-0 border-l border-zinc-200 bg-white/95 shadow-2xl backdrop-blur transition-[width,opacity] duration-200 lg:block dark:border-zinc-800 dark:bg-zinc-950/95 ${
-          isAgentOpen ? "w-[28rem] opacity-100" : "w-0 overflow-hidden border-l-0 opacity-0"
+        className={`fixed inset-y-0 right-0 z-20 hidden min-h-0 border-l border-zinc-200 bg-white/95 shadow-2xl backdrop-blur transition-[width,opacity] duration-200 lg:block dark:border-zinc-800 dark:bg-zinc-950/95 ${
+          isAgentOpen ? "w-[28rem] opacity-100" : "pointer-events-none w-0 overflow-hidden border-l-0 opacity-0"
         }`}
       >
         {panelContent}
