@@ -87,6 +87,18 @@ export const createEmptyInventoryDraft = (): StoreInventoryDraft => ({
   idempotencyKey: null,
 });
 
+export const appendInventoryDraftRows = (currentRows: InventoryDraftRow[], nextRows: InventoryDraftRow[]) => {
+  const currentMaxLineNumber = currentRows.reduce((max, row) => Math.max(max, row.lineNumber), 0);
+
+  return [
+    ...currentRows,
+    ...nextRows.map((row, index) => ({
+      ...row,
+      lineNumber: currentMaxLineNumber + index + 1,
+    })),
+  ];
+};
+
 export const getInventoryDraftSummary = (draft: StoreInventoryDraft) => ({
   rows: draft.rows.length,
   quantity: draft.rows.reduce((sum, row) => sum + (row.status === 'invalid' ? 0 : row.quantity), 0),

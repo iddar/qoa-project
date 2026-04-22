@@ -5,7 +5,7 @@ import { api } from "@/lib/api";
 import { buildInventoryPreviewTextFromImageRows, inventoryImageExtractionSchema } from "@/lib/inventory-image-extraction";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { type AgentAction, type AgentAttachment, type AgentMessage } from "@/lib/store-pos";
-import { canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, getInventoryDraftSummary, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, getInventoryDraftSummary, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
 
 const matchedProductSchema = z.object({
   id: z.string(),
@@ -180,8 +180,6 @@ const mapImagePreviewError = (error: unknown) => {
         return "No pude extraer productos claros de esa foto. Intenta con otra imagen mas centrada o con mejor luz.";
       case "OPENROUTER_NOT_CONFIGURED":
         return "No tengo configurado el modelo para leer imagenes en este momento.";
-      case "INVENTORY_DRAFT_NOT_EMPTY":
-        return "Ya hay un borrador de inventario abierto. Vacialo antes de cargar una foto nueva o dime que lo reemplace.";
       default:
         break;
     }
@@ -246,6 +244,12 @@ const toDraftRows = (rows: Array<Omit<InventoryDraftRow, "id" | "action"> & { ma
           : undefined,
   }));
 
+const buildPreviewApplicationResult = (draft: StoreInventoryDraft, addedRows: number) => ({
+  addedRows,
+  totalRows: draft.rows.length,
+  summary: getInventoryDraftSummary(draft),
+});
+
 export async function POST(request: Request) {
   const authorization = request.headers.get("authorization");
   if (!authorization) {
@@ -304,7 +308,23 @@ export async function POST(request: Request) {
     return storeProductsCache;
   };
 
-  const previewInventoryFromText = async (text: string) => {
+  const applyPreviewRows = (rows: Array<Omit<InventoryDraftRow, "id" | "action"> & { matchedProduct?: StoreProduct }>, options?: { overwrite?: boolean }) => {
+    const nextDraftRows = toDraftRows(rows);
+    const overwrite = options?.overwrite ?? false;
+    const mergedRows = overwrite ? nextDraftRows : appendInventoryDraftRows(workingDraft.rows, nextDraftRows);
+
+    workingDraft = {
+      rows: mergedRows,
+      lastReceipt: null,
+      idempotencyKey: overwrite || !workingDraft.idempotencyKey
+        ? createInventoryIntakeIdempotencyKey()
+        : workingDraft.idempotencyKey,
+    };
+
+    return buildPreviewApplicationResult(workingDraft, nextDraftRows.length);
+  };
+
+  const previewInventoryFromText = async (text: string, options?: { overwrite?: boolean }) => {
     const { data, error } = await api.v1.stores[storeId].inventory.intake.preview.post(
       { text },
       { headers: { authorization } },
@@ -313,23 +333,10 @@ export async function POST(request: Request) {
       throw new Error("INVENTORY_PREVIEW_FAILED");
     }
 
-    workingDraft = {
-      rows: toDraftRows(data.data.rows),
-      lastReceipt: null,
-      idempotencyKey: createInventoryIntakeIdempotencyKey(),
-    };
-
-    return {
-      rows: workingDraft.rows.length,
-      summary: getInventoryDraftSummary(workingDraft),
-    };
+    return applyPreviewRows(data.data.rows, options);
   };
 
   const previewInventoryFromLatestImage = async ({ overwrite = false }: { overwrite?: boolean } = {}) => {
-    if (workingDraft.rows.length > 0 && !overwrite) {
-      throw new Error("INVENTORY_DRAFT_NOT_EMPTY");
-    }
-
     const imageAttachments = latestAttachments.filter((attachment) => getAttachmentKind(attachment) === "image");
     const latestImage = imageAttachments.at(-1);
     if (!latestImage) {
@@ -375,7 +382,7 @@ export async function POST(request: Request) {
       throw new Error("INVENTORY_IMAGE_EMPTY");
     }
 
-    const preview = await previewInventoryFromText(previewText);
+    const preview = await previewInventoryFromText(previewText, { overwrite });
     return {
       ...preview,
       source: "image" as const,
@@ -462,10 +469,12 @@ export async function POST(request: Request) {
   };
 
   const hasLatestImage = latestAttachments.some((attachment) => getAttachmentKind(attachment) === "image");
-  if (hasLatestImage && workingDraft.rows.length === 0) {
+  if (hasLatestImage) {
     try {
       const preview = await previewInventoryFromLatestImage();
-      const content = `Preparé el preview de inventario desde la foto con **${preview.rows} filas**. Revísalo y edítalo antes de confirmar la entrada.`;
+      const content = workingDraft.rows.length > preview.addedRows
+        ? `Agregué **${preview.addedRows} filas** desde la foto al borrador actual. Ahora tienes **${preview.totalRows} filas** para revisar antes de confirmar.`
+        : `Preparé el preview de inventario desde la foto con **${preview.totalRows} filas**. Revísalo y edítalo antes de confirmar la entrada.`;
       const renderedHtml = await renderAssistantMarkdownToHtml(content);
       return Response.json({
         message: {
@@ -495,10 +504,12 @@ export async function POST(request: Request) {
     }
   }
 
-  const deterministicPreview = latestUserMessage && workingDraft.rows.length === 0 && /\n|\t|,|\d\s*[xX]?\s+/.test(latestUserMessage.content);
+  const deterministicPreview = latestUserMessage && /\n|\t|,|\d\s*[xX]?\s+/.test(latestUserMessage.content);
   if (deterministicPreview) {
-    await previewInventoryFromText(latestUserMessage.content);
-    const content = `Preparé el preview de inventario con **${workingDraft.rows.length} filas**. Revisa las coincidencias y confirma la entrada cuando esté lista.`;
+    const preview = await previewInventoryFromText(latestUserMessage.content);
+    const content = workingDraft.rows.length > preview.addedRows
+      ? `Agregué **${preview.addedRows} filas** al borrador actual. Ahora tienes **${preview.totalRows} filas** para revisar antes de confirmar.`
+      : `Preparé el preview de inventario con **${preview.totalRows} filas**. Revisa las coincidencias y confirma la entrada cuando esté lista.`;
     const renderedHtml = await renderAssistantMarkdownToHtml(content);
     return Response.json({
       message: {
@@ -530,8 +541,8 @@ export async function POST(request: Request) {
       "Usa herramientas para interpretar listas de proveedor, editar el borrador y confirmar entradas.",
       "No digas que la entrada fue aplicada si no ejecutaste confirmInventoryIntake.",
       "Si el usuario pega una lista o tabla, usa previewInventoryFromText.",
-      "Si el usuario adjunta una foto de nota o ticket y el borrador esta vacio, usa previewInventoryFromLatestImage.",
-      "Si ya hay un borrador abierto y quieren procesar otra foto, pide vaciarlo primero o hazlo solo si el usuario te pide reemplazarlo.",
+      "Si el usuario adjunta una foto de nota o ticket, usa previewInventoryFromLatestImage.",
+      "Cuando el borrador ya tenga filas y llegue otra foto o lista, agregala al borrador actual salvo que el usuario pida reemplazarlo por completo.",
       "Si hay filas ambiguas o invalidas, pide correccion puntual o usa updateInventoryDraftRow cuando ya tengas la instruccion.",
       `Estado actual del inventario en borrador:\n${buildSummaryText(workingDraft)}`,
     ].join("\n\n"),
@@ -544,7 +555,7 @@ export async function POST(request: Request) {
         execute: async ({ text }) => previewInventoryFromText(text),
       }),
       previewInventoryFromLatestImage: tool({
-        description: "Lee la foto mas reciente adjunta y prepara un preview de inventario editable.",
+        description: "Lee la foto mas reciente adjunta y agrega sus filas al preview de inventario actual, salvo que se pida overwrite.",
         inputSchema: z.object({
           overwrite: z.boolean().optional(),
         }),
