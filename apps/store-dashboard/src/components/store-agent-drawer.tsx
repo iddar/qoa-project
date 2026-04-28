@@ -143,6 +143,11 @@ const mergeClientAttachmentFields = (serverMessage: AgentMessage, localMessages:
   };
 };
 
+const stripMessageAttachments = (message: AgentMessage): AgentMessage => ({
+  ...message,
+  attachments: undefined,
+});
+
 const getRecordingSupportMessage = () => {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return "La grabación solo está disponible en el navegador.";
@@ -390,6 +395,10 @@ export function StoreAgentDrawer() {
       attachments: preparedAttachments,
     };
 
+    const requestMessages = isInventoryMode
+      ? [...messages.map(stripMessageAttachments), userMessage]
+      : [...messages, userMessage];
+
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setAttachments((current) => {
@@ -410,7 +419,7 @@ export function StoreAgentDrawer() {
           authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          messages: [...messages, userMessage],
+          messages: requestMessages,
           draft: isInventoryMode ? inventoryDraft : draft,
         }),
       });
