@@ -709,7 +709,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const deterministicPreview = latestUserMessage && /\n|\t|,|\d\s*[xX]?\s+/.test(latestUserMessage.content);
+  const deterministicPreview = latestUserMessage && /\n|\t|,|(?:^|[\n,\t])\s*\d+\s*[xX]?\s+\S/m.test(latestUserMessage.content);
   if (deterministicPreview) {
     const preview = await previewInventoryFromText(latestUserMessage.content);
     const content = workingDraft.rows.length > preview.addedRows
@@ -863,6 +863,8 @@ export async function POST(request: Request) {
       "Si el usuario adjunta una foto de nota o ticket, usa previewInventoryFromLatestImage.",
       "Si el usuario manda audio, interpretalo como instruccion del tendero para preparar, corregir o confirmar el borrador.",
       "Cuando el borrador ya tenga filas y llegue otra foto o lista, agregala al borrador actual salvo que el usuario pida reemplazarlo por completo.",
+      "Si el usuario pregunta por un producto (precio, stock, si existe), usa searchStoreProducts para buscarlo.",
+      "Si el usuario pide agregar un producto que no esta en el borrador, busca primero con searchStoreProducts para confirmar que existe y obtener su storeProductId.",
       "Si el usuario pide corregir un producto por nombre, usa updateInventoryDraftRowByQuery antes de pedir rowId.",
       "Ejemplo: 'corrige el panque de nuez son 15 unidades' significa buscar Panque Nuez y cambiar quantity a 15.",
       "Si hay filas ambiguas o invalidas, pide correccion puntual o usa updateInventoryDraftRow/updateInventoryDraftRowByQuery cuando ya tengas la instruccion.",
@@ -936,6 +938,32 @@ export async function POST(request: Request) {
         description: "Confirma y aplica la entrada de inventario actual.",
         inputSchema: z.object({ confirmation: z.string() }),
         execute: async () => confirmInventoryIntake(),
+      }),
+      searchStoreProducts: tool({
+        description: "Busca productos activos en el catalogo de la tienda por nombre o SKU. Util para verificar si un producto existe, obtener su storeProductId, precio o stock.",
+        inputSchema: z.object({
+          query: z.string().min(2).describe("Nombre o SKU del producto a buscar"),
+          limit: z.number().int().min(1).max(20).optional().describe("Maximo de resultados, default 8"),
+        }),
+        execute: async ({ query, limit }) => {
+          const { data, error } = await api.v1.stores[storeId]["products-search"].get({
+            query: { q: query, limit: String(limit ?? 8) },
+            headers: { authorization },
+          });
+          if (error) {
+            return { error: "PRODUCT_SEARCH_FAILED" };
+          }
+          return {
+            storeProducts: ((data?.data?.storeProducts ?? []) as StoreProduct[]).map((p) => ({
+              storeProductId: p.id,
+              name: p.name,
+              sku: p.sku,
+              price: p.price,
+              stock: p.stock,
+              status: p.status,
+            })),
+          };
+        },
       }),
     },
   });
