@@ -73,7 +73,7 @@ const parseBirthDate = (value: string) => {
   return candidate;
 };
 
-const extractStoreCodeFromText = (value: string | null | undefined) => {
+export const extractStoreCodeFromText = (value: string | null | undefined) => {
   if (!value) {
     return null;
   }

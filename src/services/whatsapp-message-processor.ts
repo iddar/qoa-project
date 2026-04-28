@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { users, whatsappOnboardingSessions } from '../db/schema';
 import { normalizeWhatsappPhone } from './twilio-whatsapp';
-import { processWhatsappOnboardingMessage } from './whatsapp-onboarding';
+import { processWhatsappOnboardingMessage, extractStoreCodeFromText } from './whatsapp-onboarding';
 import { detectIntent, type WhatsappIntent } from './whatsapp-intent-router';
 import { getUserBalanceSummary, getUserRecentActivity, resendUserQr, buildHelpMessage } from './whatsapp-queries';
 
@@ -58,13 +58,17 @@ export const processWhatsappMessage = async (
   const user = await findUserByPhone(phone);
   const session = await getSessionByPhone(phone);
 
+  const storeCode = extractStoreCodeFromText(input.body);
+
   // Route to onboarding if user doesn't exist, has no session,
-  // or the session is not yet completed.
+  // the session is not yet completed, or they sent a store code
+  // (to enroll in a new store).
   const needsOnboarding =
     !user ||
     !session ||
     session.state !== 'completed' ||
-    !['consumer', 'customer'].includes(user.role);
+    !['consumer', 'customer'].includes(user.role) ||
+    storeCode;
 
   if (needsOnboarding) {
     return processWhatsappOnboardingMessage(input);
