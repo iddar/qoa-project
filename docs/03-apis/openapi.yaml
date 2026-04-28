@@ -1750,6 +1750,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/CampaignResponse'
 
+  # ==================== CAMPAIGNS - STORE VIEW ====================
+  /campaigns/stores/{storeId}/campaigns:
+    get:
+      tags: [Campaigns]
+      summary: Listar campañas visibles para una tienda
+      description: Devuelve todas las campañas activas y visibles para la tienda, incluyendo el estado de enrolamiento (`storeEnrollmentStatus`) por campaña.
+      operationId: listStoreCampaigns
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/storeIdParam'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de campañas visibles para la tienda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
   # ==================== CARDS ====================
   /cards:
     post:
@@ -3929,6 +3962,11 @@ components:
           nullable: true
         isExpired:
           type: boolean
+        storeEnrollmentStatus:
+          type: string
+          enum: [visible, invited, enrolled, declined, removed, suspended]
+          nullable: true
+          description: Estado de enrolamiento de la tienda en la campaña. Solo presente en respuestas del endpoint /campaigns/stores/{storeId}/campaigns.
         policySummaries:
           type: array
           items:

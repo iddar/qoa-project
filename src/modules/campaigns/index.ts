@@ -3162,8 +3162,27 @@ export const campaignsModule = new Elysia({
       const items = hasMore ? visibleCampaigns.slice(0, limit) : visibleCampaigns;
       const nextCursor = hasMore ? items[items.length - 1]?.createdAt.toISOString() : null;
 
+      const serialized = await Promise.all(
+        items.map(async (item) => {
+          let storeEnrollmentStatus: string | undefined;
+          if (
+            item.storeAccessMode === "all_related_stores" &&
+            item.storeEnrollmentMode === "auto_enroll"
+          ) {
+            storeEnrollmentStatus = "enrolled";
+          } else {
+            const enrollment = await getStoreEnrollmentForCampaign({
+              campaignId: item.id,
+              storeId: params.storeId,
+            });
+            storeEnrollmentStatus = enrollment?.status ?? "visible";
+          }
+          return { ...serializeCampaign(item), storeEnrollmentStatus };
+        }),
+      );
+
       return {
-        data: items.map((item) => serializeCampaign(item)),
+        data: serialized,
         pagination: { hasMore, nextCursor: nextCursor ?? undefined },
       };
     },
