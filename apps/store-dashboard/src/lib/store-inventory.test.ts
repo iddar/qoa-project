@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { appendInventoryDraftRows, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, resolveInventoryRowState } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, parseInventoryQuantityCorrection, resolveInventoryRowState } from "@/lib/store-inventory";
 
 test("marks row as new once required intake fields are completed", () => {
   const row = resolveInventoryRowState({
@@ -125,4 +125,111 @@ test("appends new preview rows after the current draft line numbers", () => {
     { id: "existing-2", lineNumber: 2 },
     { id: "next-1", lineNumber: 3 },
   ]);
+});
+
+test("finds an inventory draft row by spoken product name", () => {
+  const rows = [
+    resolveInventoryRowState({
+      id: "row-1",
+      lineNumber: 1,
+      rawText: "Pan Blanco, 100",
+      name: "Pan Blanco",
+      quantity: 100,
+      status: "matched",
+      action: "match_existing",
+      matchedStoreProductId: "sp-pan-blanco",
+    }),
+    resolveInventoryRowState({
+      id: "row-2",
+      lineNumber: 2,
+      rawText: "Panque Nuez, 10",
+      name: "Panque Nuez",
+      quantity: 10,
+      status: "matched",
+      action: "match_existing",
+      matchedStoreProductId: "sp-panque-nuez",
+    }),
+  ];
+
+  const match = findInventoryDraftRowByQuery(rows, "el panque de nuez");
+
+  expect(match.status).toBe("matched");
+  if (match.status !== "matched") {
+    throw new Error("Expected row match");
+  }
+  expect(match.row.id).toBe("row-2");
+});
+
+test("finds a row when the model keeps correction words in the query", () => {
+  const rows = [
+    resolveInventoryRowState({
+      id: "row-2",
+      lineNumber: 2,
+      rawText: "Panque Nuez, 10",
+      name: "Panque Nuez",
+      quantity: 10,
+      status: "matched",
+      action: "match_existing",
+      matchedStoreProductId: "sp-panque-nuez",
+    }),
+  ];
+
+  const match = findInventoryDraftRowByQuery(rows, "corrige el panque de nuez son 15 unidades");
+
+  expect(match.status).toBe("matched");
+});
+
+test("applies quantity correction to a matched inventory row", () => {
+  const row = resolveInventoryRowState({
+    id: "row-2",
+    lineNumber: 2,
+    rawText: "Panque Nuez, 10",
+    name: "Panque Nuez",
+    quantity: 10,
+    status: "matched",
+    action: "match_existing",
+    matchedStoreProductId: "sp-panque-nuez",
+  });
+
+  const corrected = applyInventoryDraftRowPatch(row, { quantity: 15 });
+
+  expect(corrected.quantity).toBe(15);
+  expect(corrected.status).toBe("matched");
+  expect(corrected.action).toBe("match_existing");
+});
+
+test("reports ambiguous inventory row matches", () => {
+  const rows = [
+    resolveInventoryRowState({
+      id: "row-1",
+      lineNumber: 1,
+      rawText: "Panque Nuez, 10",
+      name: "Panque Nuez",
+      quantity: 10,
+      status: "matched",
+      action: "match_existing",
+      matchedStoreProductId: "sp-panque-nuez",
+    }),
+    resolveInventoryRowState({
+      id: "row-2",
+      lineNumber: 2,
+      rawText: "Panque Marmoleado, 8",
+      name: "Panque Marmoleado",
+      quantity: 8,
+      status: "matched",
+      action: "match_existing",
+      matchedStoreProductId: "sp-panque-marmoleado",
+    }),
+  ];
+
+  const match = findInventoryDraftRowByQuery(rows, "panque");
+
+  expect(match.status).toBe("ambiguous");
+});
+
+test("parses spoken quantity correction text", () => {
+  expect(parseInventoryQuantityCorrection("corrige el panque de nuez son 15 unidades")).toEqual({
+    query: "panque de nuez",
+    quantity: 15,
+  });
 });
