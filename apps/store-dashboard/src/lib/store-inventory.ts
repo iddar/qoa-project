@@ -164,22 +164,157 @@ export const findInventoryDraftRowByQuery = (rows: InventoryDraftRow[], query: s
 };
 
 export const parseInventoryQuantityCorrection = (content: string) => {
-  const normalized = content
+  const corrections = parseInventoryCorrections(content);
+  return corrections[0] ?? null;
+};
+
+export type InventoryCorrection = {
+  query: string;
+  quantity?: number;
+  price?: number;
+};
+
+const normalizeCorrectionText = (value: string) =>
+  value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
-  const match = normalized.match(/(?:corrige|corrigir|cambia|actualiza|ajusta)\s+(?:el|la|los|las)?\s*(.+?)\s+(?:son|a|en|por)\s+(\d+)\s*(?:unidades|piezas|pz|uds)?\b/);
 
-  if (!match?.[1] || !match[2]) {
-    return null;
+const CORRECTION_VERBS = /^(?:corrige|corrigir|cambia|actualiza|ajusta|modifica|pon|haz)\s+/i;
+const ARTICLES = /^(?:el|la|los|las|un|una|unos|unas)\s+/i;
+const CONNECTORS = /^(?:y\s+|,\s+|;\s+|\/\s+)/i;
+
+const QUANTITY_PATTERN = /\b(son|a|en|por)\s+(\d+)\s*(?:unidades|piezas|pz|uds|cajas|bolsas|botellas|latas)?\b/i;
+const PRICE_PATTERN = /\b(?:precio(?:\s+de\s+venta)?|cuesta|vale)\s*(?:es|a|en|por)?\s*\$?(\d+(?:\.\d{1,2})?)\s*(?:pesos|mxn)?\b/i;
+const INLINE_PRICE_PATTERN = /\b(?:y|con)\s+(?:precio(?:\s+de\s+venta)?\s+|a\s+)?\$?(\d+(?:\.\d{1,2})?)\s*(?:pesos|mxn)?\b/i;
+const DIRECT_PRICE_PATTERN = /\b(?:precio(?:\s+de\s+venta)?|cuesta|vale)\s+(?:es|a|en|por)?\s*\$?(\d+(?:\.\d{1,2})?)\s*(?:pesos|mxn)?\b/i;
+
+const stripLeadingVerbsAndArticles = (segment: string): string => {
+  let cleaned = segment.replace(CORRECTION_VERBS, "").trim();
+  // Strip connectors and articles repeatedly
+  while (true) {
+    const next = cleaned.replace(CONNECTORS, "").trim();
+    if (next === cleaned) break;
+    cleaned = next;
+  }
+  while (true) {
+    const next = cleaned.replace(ARTICLES, "").trim();
+    if (next === cleaned) break;
+    cleaned = next;
+  }
+  return cleaned;
+};
+
+const extractQuantity = (segment: string): { value: number; raw: string; index: number } | null => {
+  const match = segment.match(QUANTITY_PATTERN);
+  if (!match) return null;
+  return {
+    value: Number(match[2]),
+    raw: match[0],
+    index: match.index ?? 0,
+  };
+};
+
+const extractPrice = (segment: string): { value: number; raw: string; index: number } | null => {
+  const match = segment.match(PRICE_PATTERN);
+  if (!match) return null;
+  return {
+    value: Number(match[1]),
+    raw: match[0],
+    index: match.index ?? 0,
+  };
+};
+
+const extractInlinePriceAfter = (segment: string, afterIndex: number): { value: number; raw: string } | null => {
+  const substring = segment.slice(afterIndex);
+  const match = substring.match(INLINE_PRICE_PATTERN);
+  if (!match) return null;
+  return {
+    value: Number(match[1]),
+    raw: match[0],
+  };
+};
+
+export const parseInventoryCorrections = (content: string): InventoryCorrection[] => {
+  const normalized = normalizeCorrectionText(content);
+  if (!normalized) return [];
+
+  const results: InventoryCorrection[] = [];
+  let remaining = normalized;
+
+  while (remaining.length > 0) {
+    const qty = extractQuantity(remaining);
+    if (!qty) break;
+
+    // The product name is everything before the quantity marker
+    const beforeQty = remaining.slice(0, qty.index).trim();
+    const query = stripLeadingVerbsAndArticles(beforeQty);
+
+    if (!query) {
+      // Move past this quantity to avoid infinite loop
+      remaining = remaining.slice(qty.index + qty.raw.length);
+      continue;
+    }
+
+    const correction: InventoryCorrection = { query, quantity: qty.value };
+
+    // Look for an inline price right after the quantity
+    // e.g. "son 15 y precio 25" or "son 15 piezas precio 25"
+    const afterQtyText = remaining.slice(qty.index + qty.raw.length);
+    let inlinePrice = extractInlinePriceAfter(remaining, qty.index + qty.raw.length);
+    if (!inlinePrice) {
+      const directPriceMatch = afterQtyText.match(DIRECT_PRICE_PATTERN);
+      if (directPriceMatch) {
+        inlinePrice = {
+          value: Number(directPriceMatch[1]),
+          raw: directPriceMatch[0],
+        };
+      }
+    }
+    if (inlinePrice) {
+      correction.price = inlinePrice.value;
+    }
+
+    results.push(correction);
+
+    // Advance remaining text to after the quantity (and inline price if found)
+    const advanceTo = inlinePrice
+      ? qty.index + qty.raw.length + (remaining.slice(qty.index + qty.raw.length).indexOf(inlinePrice.raw) + inlinePrice.raw.length)
+      : qty.index + qty.raw.length;
+    remaining = remaining.slice(advanceTo).trim();
   }
 
-  return {
-    query: match[1].trim(),
-    quantity: Number(match[2]),
-  };
+  // Handle price-only corrections (no quantity mentioned)
+  // e.g. "cambia el precio del panque a 25" or "panque precio 25"
+  // Only process if we haven't already captured a price for this product
+  const remainingPrice = extractPrice(normalized);
+  if (remainingPrice && results.length === 0) {
+    const beforePrice = normalized.slice(0, remainingPrice.index).trim();
+    // Try to extract product name from "precio del [producto]" pattern
+    const priceOfMatch = beforePrice.match(/(?:precio|precio de venta|cuesta|vale)\s+(?:del|de\s+la|de\s+los|de\s+las)\s+(.+)$/i);
+    if (priceOfMatch) {
+      results.push({
+        query: stripLeadingVerbsAndArticles(priceOfMatch[1]),
+        price: remainingPrice.value,
+      });
+    }
+  }
+
+  // If nothing found with quantities but the whole text looks like a single
+  // product reference with a trailing number, try one more heuristic
+  if (results.length === 0) {
+    const fallbackMatch = normalized.match(/(?:corrige|corrigir|cambia|actualiza|ajusta|modifica|pon|haz)?\s*(?:el|la|los|las|un|una)?\s*(.+?)\s+(?:a|en|por)\s+\$?(\d+(?:\.\d{1,2})?)\s*(?:pesos|mxn)?\b/i);
+    if (fallbackMatch) {
+      results.push({
+        query: fallbackMatch[1].trim(),
+        price: Number(fallbackMatch[2]),
+      });
+    }
+  }
+
+  return results;
 };
 
 export const applyInventoryDraftRowPatch = (
