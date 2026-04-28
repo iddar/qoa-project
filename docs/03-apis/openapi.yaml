@@ -830,12 +830,15 @@ paths:
   /stores/{storeId}/customer-resolve:
     post:
       tags: [Stores]
-      summary: Resolver cliente por QR o código de tarjeta
+      summary: Resolver cliente por QR, código de tarjeta o teléfono
       description: |
-        Resuelve un cliente a partir del QR de su tarjeta, el `cardId` o el `card code`.
+        Resuelve un cliente a partir del QR de su tarjeta, el `cardId`, el `card code` o su número de teléfono.
 
         - Acepta el payload JSON del QR completo.
-        - Si encuentra la tarjeta, devuelve `userId`, `cardId` y `cardCode` listos para POS.
+        - Acepta un número de teléfono en formato nacional (10 dígitos) o internacional (+52...).
+        - Si el teléfono no existe, crea automáticamente un usuario `consumer`, lo enrola a la tienda,
+          genera una tarjeta universal y envía un mensaje de WhatsApp de bienvenida.
+        - Si encuentra la tarjeta o el teléfono, devuelve `userId`, `cardId` y `cardCode` listos para POS.
       operationId: resolveStoreCustomer
       security:
         - bearerAuth: []
@@ -860,8 +863,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-        '409':
-          description: Sin stock suficiente para completar la venta
+        '404':
+          description: Tarjeta o cliente no encontrado
 
   /stores/{storeId}/transactions:
     get:
