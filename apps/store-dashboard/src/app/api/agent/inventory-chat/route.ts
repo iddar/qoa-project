@@ -10,7 +10,8 @@ import { api } from "@/lib/api";
 import { buildInventoryPreviewTextFromImageRows, inventoryImageExtractionSchema } from "@/lib/inventory-image-extraction";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { type AgentAction, type AgentAttachment, type AgentMessage } from "@/lib/store-pos";
-import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, parseInventoryQuantityCorrection, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { extractDraftCorrectionsWithContext } from "@/lib/inventory-draft-corrector";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 const execFileAsync = promisify(execFile);
@@ -728,7 +729,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const applyCorrections = async (corrections: Array<{ query: string; quantity?: number; price?: number }>, sourceText?: string) => {
+  const applyCorrections = async (corrections: Array<{ query: string; quantity?: number; price?: number }>) => {
     const updated: Array<{ name: string; quantity?: number; price?: number }> = [];
     const notFound: string[] = [];
     const ambiguous: Array<{ query: string; candidates: Array<{ rowId: string; name: string; quantity: number; score: number }> }> = [];
@@ -792,30 +793,61 @@ export async function POST(request: Request) {
   }
 
   const audioTranscript = await transcribeLatestAudio();
-  const audioCorrections = audioTranscript ? parseInventoryCorrections(audioTranscript) : [];
-  if (audioCorrections.length > 0) {
-    const content = await applyCorrections(audioCorrections, audioTranscript);
-    const renderedHtml = await renderAssistantMarkdownToHtml(content);
-    return Response.json({
-      message: {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content,
-        renderedHtml: renderedHtml || undefined,
-        actions: buildActions(workingDraft),
-      } as AgentMessage,
-      userMessage: normalizedUserMessage
-        ? {
-            ...normalizedUserMessage,
-            attachments: normalizedUserMessage.attachments?.map((attachment) =>
-              getAttachmentKind(attachment) === "audio"
-                ? { ...attachment, transcript: audioTranscript, status: "transcribed" as const }
-                : attachment,
-            ),
-          }
-        : normalizedUserMessage,
-      draft: workingDraft,
-    });
+  if (audioTranscript && workingDraft.rows.length > 0) {
+    try {
+      const draftCorrections = await extractDraftCorrectionsWithContext(audioTranscript, workingDraft.rows);
+      if (draftCorrections.length > 0) {
+        const updated: Array<{ name: string; quantity?: number; price?: number }> = [];
+
+        for (const correction of draftCorrections) {
+          const row = workingDraft.rows.find((r) => r.id === correction.rowId);
+          if (!row) continue;
+
+          const nextRow = applyInventoryDraftRowPatch(row, {
+            quantity: correction.quantity,
+            price: correction.price,
+          });
+          workingDraft.rows = workingDraft.rows.map((r) => (r.id === nextRow.id ? nextRow : r));
+          updated.push({
+            name: nextRow.name,
+            quantity: correction.quantity,
+            price: correction.price,
+          });
+        }
+
+        const items = updated.map((u) => {
+          const qtyPart = u.quantity !== undefined ? `**${u.quantity} unidades**` : "";
+          const pricePart = u.price !== undefined ? `**$${u.price}**` : "";
+          const changes = [qtyPart, pricePart].filter(Boolean).join(" / ");
+          return `**${u.name}** → ${changes}`;
+        });
+
+        const content = `Escuché "${audioTranscript}". Listo, corregí:\n${items.join("\n")}`;
+        const renderedHtml = await renderAssistantMarkdownToHtml(content);
+        return Response.json({
+          message: {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content,
+            renderedHtml: renderedHtml || undefined,
+            actions: buildActions(workingDraft),
+          } as AgentMessage,
+          userMessage: normalizedUserMessage
+            ? {
+                ...normalizedUserMessage,
+                attachments: normalizedUserMessage.attachments?.map((attachment) =>
+                  getAttachmentKind(attachment) === "audio"
+                    ? { ...attachment, transcript: audioTranscript, status: "transcribed" as const }
+                    : attachment,
+                ),
+              }
+            : normalizedUserMessage,
+          draft: workingDraft,
+        });
+      }
+    } catch {
+      // Si el LLM con contexto falla, cae al flujo normal de tools
+    }
   }
 
   const modelMessages = await buildModelMessages(normalizedMessages as AgentMessage[], normalizedUserMessage?.id);
