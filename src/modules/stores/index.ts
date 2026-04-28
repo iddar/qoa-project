@@ -6,7 +6,8 @@ import type { AuthContext } from "../../app/plugins/auth";
 import { parseLimit, parseCursor } from "../../app/utils/pagination";
 import { generateCode } from "../../app/utils/generateCode";
 import { db } from "../../db/client";
-import { stores, cpgs, cpgStoreRelations, storeProducts, products, brands, cards, users, transactions, transactionItems, inventoryMovements } from "../../db/schema";
+import { stores, cpgs, cpgStoreRelations, storeProducts, products, brands, cards, users, transactions, transactionItems, inventoryMovements, storeCheckins } from "../../db/schema";
+import { findPendingCheckinsForStore, matchCheckinWithTransaction } from "../../services/store-checkin";
 import { generateStoreQrPayload } from "../../services/stores";
 import { resolveCustomerByPhone } from "../../services/phone-customer-resolve";
 import { createStorePosTransaction, toDetailPayload } from "../transactions";
@@ -2230,5 +2231,73 @@ export const storesModule = new Elysia({
       query: storeTransactionListQuery,
       response: { 200: storeTransactionListResponse },
       detail: { summary: "Listar transacciones de tienda" },
+    },
+  )
+  .get(
+    "/:storeId/checkins",
+    async ({ auth, params, query, status }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      const limit = parseLimit(query.limit);
+      const statusFilter = query.status;
+      const rows = await findPendingCheckinsForStore(params.storeId, { status: statusFilter as 'pending' | undefined, limit });
+
+      const userIds = [...new Set(rows.map((r) => r.userId))];
+      const userRows = userIds.length > 0
+        ? await db.select({ id: users.id, name: users.name, phone: users.phone }).from(users).where(or(...userIds.map((id) => eq(users.id, id))))
+        : [];
+      const userById = new Map(userRows.map((u) => [u.id, u]));
+
+      return {
+        data: rows.map((row) => ({
+          id: row.id,
+          userId: row.userId,
+          userName: userById.get(row.userId)?.name ?? undefined,
+          userPhone: userById.get(row.userId)?.phone ?? undefined,
+          status: row.status,
+          checkedInAt: row.checkedInAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          matchedTransactionId: row.matchedTransactionId ?? undefined,
+        })),
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      params: t.Object({ storeId: t.String() }),
+      query: t.Object({ status: t.Optional(t.String()), limit: t.Optional(t.String()) }),
+      response: { 200: t.Object({ data: t.Array(t.Object({
+        id: t.String(),
+        userId: t.String(),
+        userName: t.Optional(t.String()),
+        userPhone: t.Optional(t.String()),
+        status: t.String(),
+        checkedInAt: t.String(),
+        expiresAt: t.String(),
+        matchedTransactionId: t.Optional(t.String()),
+      })) }) },
+      detail: { summary: "Listar check-ins de tienda" },
+    },
+  )
+  .post(
+    "/:storeId/checkins/:checkinId/match",
+    async ({ auth, params, status }) => {
+      if (!auth) {
+        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+      }
+
+      try {
+        await matchCheckinWithTransaction(params.checkinId, params.transactionId);
+        return { data: { matched: true } };
+      } catch {
+        return status(404, { error: { code: "CHECKIN_NOT_FOUND", message: "Check-in no encontrado" } });
+      }
+    },
+    {
+      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      params: t.Object({ storeId: t.String(), checkinId: t.String(), transactionId: t.String() }),
+      response: { 200: t.Object({ data: t.Object({ matched: t.Boolean() }) }) },
+      detail: { summary: "Emparejar check-in con transacción" },
     },
   );
