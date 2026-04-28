@@ -26,6 +26,7 @@ export default function StoresPage() {
   const [qrModal, setQrModal] = useState<{
     storeName: string;
     code: string;
+    registrationUrl?: string;
     payload: unknown;
   } | null>(null);
 
@@ -134,7 +135,12 @@ export default function StoresPage() {
                       type="button"
                       onClick={async () => {
                         const result = await fetchQr.mutateAsync(store.id);
-                        setQrModal({ storeName: store.name, code: result.payload.code, payload: result.payload.payload });
+                        setQrModal({
+                          storeName: store.name,
+                          code: result.payload.code,
+                          registrationUrl: result.payload.registrationUrl,
+                          payload: result.payload.payload,
+                        });
                       }}
                       className="rounded-md border border-zinc-200 bg-zinc-900 px-3 py-1.5 text-xs text-white transition hover:bg-zinc-700 dark:border-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
                     >
@@ -258,7 +264,7 @@ export default function StoresPage() {
 
             <div className="flex justify-center rounded-lg bg-white p-0">
               <ReactQRCode
-                value={JSON.stringify({ code: qrModal.code, payload: qrModal.payload })}
+                value={qrModal.registrationUrl ?? qrModal.code}
                 size={320}
                 bgColor="#FFFFFF"
                 fgColor="#111111"
@@ -268,7 +274,11 @@ export default function StoresPage() {
             <div className="mt-4 rounded-md bg-zinc-50 p-3 text-xs text-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300">
               <p className="mb-1 font-semibold">Payload</p>
               <pre className="overflow-auto whitespace-pre-wrap">
-                {JSON.stringify({ code: qrModal.code, payload: qrModal.payload }, null, 2)}
+                {JSON.stringify(
+                  { code: qrModal.code, registrationUrl: qrModal.registrationUrl, payload: qrModal.payload },
+                  null,
+                  2,
+                )}
               </pre>
             </div>
           </div>

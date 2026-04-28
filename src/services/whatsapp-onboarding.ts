@@ -47,6 +47,7 @@ export type ProcessWhatsappOnboardingResult = {
 
 const STORE_CODE_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)+$/i;
 const STORE_SIGNUP_PATTERN = /^alta\s+([a-z0-9]+(?:[_-][a-z0-9]+)+)$/i;
+const STORE_CHECKIN_PATTERN = /(?:quiero\s+)?registrar\s+(?:mi\s+)?compra\s+(?:en\s+)?([a-z0-9]+(?:[_-][a-z0-9]+)+)/i;
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').slice(0, 100);
 
@@ -74,7 +75,7 @@ const parseBirthDate = (value: string) => {
   return candidate;
 };
 
-export const extractStoreCodeFromText = (value: string | null | undefined) => {
+export const extractStoreCodeFromText = (value: string | null | undefined): string | null => {
   if (!value) {
     return null;
   }
@@ -85,7 +86,42 @@ export const extractStoreCodeFromText = (value: string | null | undefined) => {
   }
 
   const altaMatch = trimmed.match(STORE_SIGNUP_PATTERN);
-  return altaMatch?.[1]?.toLowerCase() ?? null;
+  if (altaMatch?.[1]) {
+    return altaMatch[1].toLowerCase();
+  }
+
+  const checkinMatch = trimmed.match(STORE_CHECKIN_PATTERN);
+  if (checkinMatch?.[1]) {
+    return checkinMatch[1].toLowerCase();
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      code?: unknown;
+      payload?: {
+        entityType?: unknown;
+        code?: unknown;
+      };
+    };
+    const code = parsed.payload?.entityType === 'store' ? parsed.payload.code : parsed.code;
+    if (typeof code === 'string' && STORE_CODE_PATTERN.test(code.trim())) {
+      return code.trim().toLowerCase();
+    }
+  } catch {
+    // Older printed QRs may not be JSON; continue with URL parsing below.
+  }
+
+  try {
+    const parsedUrl = new URL(trimmed);
+    const text = parsedUrl.searchParams.get('text');
+    if (text) {
+      return extractStoreCodeFromText(text);
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 };
 
 const findUserByPhone = async (phone: string) => {
@@ -490,6 +526,18 @@ export const processWhatsappOnboardingMessage = async (
 
     return {
       ...completed,
+      sessionState: 'completed',
+      userId: user.id,
+      storeId: session.pendingStoreId ?? undefined,
+    };
+  }
+
+  if (session.state === 'completed') {
+    await updateSession(session.id, {
+      lastInboundMessageId: input.messageSid,
+    });
+    return {
+      replyBody: 'Para registrarte en una tienda, escanea el QR de la tienda o envíame `alta CODIGO_DE_TIENDA`.',
       sessionState: 'completed',
       userId: user.id,
       storeId: session.pendingStoreId ?? undefined,

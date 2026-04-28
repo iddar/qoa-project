@@ -62,6 +62,7 @@ export const qrPayloadSchema = t.Object({
 export const qrResponse = t.Object({
   data: t.Object({
     code: t.String(),
+    registrationUrl: t.Optional(t.String()),
     payload: qrPayloadSchema,
     expiresAt: t.Optional(t.String()),
   }),
