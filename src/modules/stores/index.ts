@@ -2282,13 +2282,13 @@ export const storesModule = new Elysia({
   )
   .post(
     "/:storeId/checkins/:checkinId/match",
-    async ({ auth, params, status }) => {
+    async ({ auth, params, body, status }) => {
       if (!auth) {
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
 
       try {
-        await matchCheckinWithTransaction(params.checkinId, params.transactionId);
+        await matchCheckinWithTransaction(params.checkinId, body.transactionId);
         return { data: { matched: true } };
       } catch {
         return status(404, { error: { code: "CHECKIN_NOT_FOUND", message: "Check-in no encontrado" } });
@@ -2296,7 +2296,8 @@ export const storesModule = new Elysia({
     },
     {
       beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
-      params: t.Object({ storeId: t.String(), checkinId: t.String(), transactionId: t.String() }),
+      params: t.Object({ storeId: t.String(), checkinId: t.String() }),
+      body: t.Object({ transactionId: t.String() }),
       response: { 200: t.Object({ data: t.Object({ matched: t.Boolean() }) }) },
       detail: { summary: "Emparejar check-in con transacción" },
     },
