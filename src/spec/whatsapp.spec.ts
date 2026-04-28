@@ -5,7 +5,7 @@ import { createHmac } from 'node:crypto';
 import { getExpectedTwilioSignature } from 'twilio/lib/webhooks/webhooks';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { cards, stores, userStoreEnrollments, users, whatsappMessages, whatsappOnboardingSessions } from '../db/schema';
+import { cards, stores, userStoreEnrollments, users, whatsappMessages, whatsappOnboardingSessions, balances, transactions, transactionItems, accumulations, campaigns } from '../db/schema';
 import { buildSignedWhatsappCardQrImageUrl } from '../services/twilio-whatsapp';
 
 process.env.AUTH_DEV_MODE = 'true';
@@ -357,6 +357,167 @@ describe('WhatsApp module', () => {
 
       expect(response.status).toBe(201);
       expect(body.data.sessionState).toBe('awaiting_name');
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('returns balance for a completed user', async () => {
+    const phone = '+5215512000010';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Balance');
+
+    try {
+      // Complete onboarding
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Balance', WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+
+      const [createdUser] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone));
+      const [card] = await db.select({ id: cards.id }).from(cards).where(eq(cards.userId, createdUser?.id ?? ''));
+
+      // Seed balance
+      await db.insert(balances).values({ cardId: card.id, current: 150, lifetime: 150 });
+
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'saldo', WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('completed');
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('returns recent activity for a completed user', async () => {
+    const phone = '+5215512000011';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Actividad');
+
+    try {
+      // Complete onboarding
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Actividad', WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+
+      const [createdUser] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone));
+      const [card] = await db.select({ id: cards.id }).from(cards).where(eq(cards.userId, createdUser?.id ?? ''));
+
+      // Seed a transaction
+      const [tx] = await db.insert(transactions).values({
+        userId: createdUser.id,
+        storeId: store.id,
+        cardId: card.id,
+        totalAmount: 250,
+      }).returning({ id: transactions.id });
+
+      const [item] = await db.insert(transactionItems).values({
+        transactionId: tx.id,
+        productId: 'prod_test',
+        quantity: 1,
+        amount: 250,
+      }).returning({ id: transactionItems.id });
+
+      // Seed campaign for accumulation
+      const [campaign] = await db.insert(campaigns).values({
+        name: 'Test Campaign',
+        status: 'active',
+        enrollmentMode: 'open',
+        accumulationMode: 'amount',
+      }).returning({ id: campaigns.id });
+
+      await db.insert(accumulations).values({
+        transactionItemId: item.id,
+        cardId: card.id,
+        campaignId: campaign.id,
+        amount: 15,
+        balanceAfter: 15,
+        sourceType: 'transaction_item',
+      });
+
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'actividad', WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('completed');
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('resends QR for a completed user', async () => {
+    const phone = '+5215512000012';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda QR Resend');
+
+    try {
+      // Complete onboarding
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente QR', WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'qr', WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('completed');
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('shows help menu for a completed user', async () => {
+    const phone = '+5215512000013';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Ayuda');
+
+    try {
+      // Complete onboarding
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Ayuda', WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'ayuda', WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('completed');
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('shows help for unknown command from completed user', async () => {
+    const phone = '+5215512000014';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Unknown');
+
+    try {
+      // Complete onboarding
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Unknown', WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'xyz nonsense', WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('completed');
     } finally {
       await cleanupPhoneData(phone);
       await db.delete(stores).where(eq(stores.id, store.id));
