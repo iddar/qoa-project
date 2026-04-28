@@ -63,7 +63,7 @@ const normalizeQuery = (q: string) =>
     .trim();
 
 const scoreMatch = (actual: { productQuery?: string; query?: string; quantity?: number; price?: number }, expected: { query: string; quantity?: number; price?: number }) => {
-  const actualQuery = normalizeQuery(actual.productQuery ?? (actual as any).query ?? "");
+  const actualQuery = normalizeQuery(actual.productQuery ?? actual.query ?? "");
   const expectedQuery = normalizeQuery(expected.query);
   const queryScore = actualQuery.includes(expectedQuery) || expectedQuery.includes(actualQuery) ? 1 : 0;
   const qtyScore = expected.quantity !== undefined ? (actual.quantity === expected.quantity ? 1 : 0) : 1;

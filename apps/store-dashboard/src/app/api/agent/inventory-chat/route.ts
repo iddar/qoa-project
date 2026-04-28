@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { buildInventoryPreviewTextFromImageRows, inventoryImageExtractionSchema } from "@/lib/inventory-image-extraction";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { type AgentAction, type AgentAttachment, type AgentMessage } from "@/lib/store-pos";
-import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, parseInventoryQuantityCorrection, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
 import { extractDraftCorrectionsWithContext } from "@/lib/inventory-draft-corrector";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
@@ -729,7 +729,7 @@ export async function POST(request: Request) {
     });
   }
 
-  const applyCorrections = async (corrections: Array<{ query: string; quantity?: number; price?: number }>, sourceText?: string) => {
+  const applyCorrections = async (corrections: Array<{ query: string; quantity?: number; price?: number }>) => {
     const updated: Array<{ name: string; quantity?: number; price?: number }> = [];
     const notFound: string[] = [];
     const ambiguous: Array<{ query: string; candidates: Array<{ rowId: string; name: string; quantity: number; score: number }> }> = [];
