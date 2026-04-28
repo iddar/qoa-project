@@ -955,7 +955,10 @@ export async function POST(request: Request) {
             { headers: { authorization } },
           );
           if (error || !data?.data) {
-            throw new Error("CUSTOMER_NOT_FOUND");
+            const apiMessage = (error?.value as { error?: { code?: string; message?: string } } | undefined)?.error?.message;
+            const apiCode = (error?.value as { error?: { code?: string; message?: string } } | undefined)?.error?.code;
+            console.error("[pos-agent] resolveCustomer error", { status: error?.status, code: apiCode, message: apiMessage });
+            throw new Error(apiMessage || "CUSTOMER_NOT_FOUND");
           }
 
           workingDraft.customer = data.data as DraftCustomer;
@@ -1004,7 +1007,11 @@ export async function POST(request: Request) {
           );
 
           if (error || !data?.data) {
-            throw new Error("CONFIRM_FAILED");
+            const apiMessage = (error?.value as { error?: { code?: string; message?: string } } | undefined)?.error?.message;
+            const apiCode = (error?.value as { error?: { code?: string; message?: string } } | undefined)?.error?.code;
+            const detail = apiMessage ? `${apiCode ? `[${apiCode}] ` : ""}${apiMessage}` : "CONFIRM_FAILED";
+            console.error("[pos-agent] confirmTransaction error", { status: error?.status, code: apiCode, message: apiMessage });
+            throw new Error(detail);
           }
 
           const transaction = data.data as DraftTransaction;
