@@ -10,8 +10,8 @@ import { db } from '../../db/client';
 import { cards, whatsappMessages } from '../../db/schema';
 import {
   attachWhatsappOutboundMessageToSession,
-  processWhatsappOnboardingMessage,
 } from '../../services/whatsapp-onboarding';
+import { processWhatsappMessage } from '../../services/whatsapp-message-processor';
 import {
   markInboundWhatsappMessageError,
   sendTwilioWhatsappMessage,
@@ -286,7 +286,7 @@ export const whatsappModule = new Elysia({
       });
 
       try {
-        const onboarding = await processWhatsappOnboardingMessage({
+        const result = await processWhatsappMessage({
           messageSid: messageId,
           from: payload.From ?? payload.WaId ?? '',
           body: payload.Body ?? null,
@@ -294,8 +294,8 @@ export const whatsappModule = new Elysia({
 
         const outbound = await sendTwilioWhatsappMessage({
           to: payload.From ?? payload.WaId ?? '',
-          body: onboarding.replyBody,
-          mediaUrl: onboarding.mediaUrl,
+          body: result.replyBody,
+          mediaUrl: result.mediaUrl,
         });
 
         await attachWhatsappOutboundMessageToSession(payload.From ?? payload.WaId ?? '', outbound.sid);
@@ -305,12 +305,12 @@ export const whatsappModule = new Elysia({
             messageId,
             status: 'processed',
             replayed: false,
-            sessionState: onboarding.sessionState,
+            sessionState: result.sessionState,
           },
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'WHATSAPP_ONBOARDING_FAILED';
-        console.error('[whatsapp][twilio][onboarding-failed]', {
+        const message = error instanceof Error ? error.message : 'WHATSAPP_PROCESSING_FAILED';
+        console.error('[whatsapp][twilio][processing-failed]', {
           messageId,
           from: payload.From ?? payload.WaId ?? '',
           to: payload.To ?? '',
@@ -321,7 +321,7 @@ export const whatsappModule = new Elysia({
 
         return status(500, {
           error: {
-            code: 'WHATSAPP_ONBOARDING_FAILED',
+            code: 'WHATSAPP_PROCESSING_FAILED',
             message,
           },
         });
