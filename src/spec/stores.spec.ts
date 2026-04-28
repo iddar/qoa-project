@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { accumulations, balances, brands, campaignBalances, campaigns, cards, cpgs, inventoryMovements, products, storeProducts, stores, transactionItems, transactions, users } from '../db/schema';
+import { accumulations, balances, brands, campaignBalances, campaigns, cards, cpgs, inventoryMovements, products, storeProducts, stores, transactionItems, transactions, userStoreEnrollments, users, whatsappMessages } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
+process.env.TWILIO_ACCOUNT = 'ACtesttwilioaccount';
+process.env.TWILIO_AUTH = 'test_twilio_auth';
+process.env.TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886';
 
 const app = createApp();
 const api = treaty<App>(app);
@@ -434,6 +437,91 @@ describe('Stores module', () => {
     await db.delete(cpgs).where(eq(cpgs.id, catalog.cpgId));
     await db.delete(stores).where(eq(stores.id, store.id));
     await db.delete(users).where(eq(users.id, user.id));
+  });
+
+  it('resolves customer by phone, creates user and sends welcome WhatsApp', async () => {
+    const [store] = (await db
+      .insert(stores)
+      .values({
+        name: `Phone Resolve Store ${crypto.randomUUID().slice(0, 6)}`,
+        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        type: 'tiendita',
+      })
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+
+    if (!store) {
+      throw new Error('Failed to create phone resolve test store');
+    }
+
+    const storeHeaders = buildStoreDevHeaders(store.id);
+    const phoneNumber = `55123${Math.floor(Math.random() * 100_000).toString().padStart(5, '0')}`;
+
+    // Resolve by phone (no existing user)
+    const resolvedByPhone = await api.v1.stores({ storeId: store.id })['customer-resolve'].post(
+      { input: phoneNumber },
+      { headers: storeHeaders },
+    );
+
+    if (resolvedByPhone.error || !resolvedByPhone.data) {
+      throw resolvedByPhone.error?.value ?? new Error('Phone customer resolve failed');
+    }
+
+    expect(resolvedByPhone.status).toBe(200);
+    expect(resolvedByPhone.data.data.phone).toBe(`+52${phoneNumber}`);
+    expect(resolvedByPhone.data.data.cardCode).toBeDefined();
+    expect(resolvedByPhone.data.data.userId).toBeDefined();
+
+    const createdUserId = resolvedByPhone.data.data.userId;
+
+    // Verify user was created
+    const [user] = (await db
+      .select({ id: users.id, role: users.role })
+      .from(users)
+      .where(eq(users.phone, `+52${phoneNumber}`))) as Array<{ id: string; role: string }>;
+    expect(user).toBeDefined();
+    expect(user!.role).toBe('consumer');
+
+    // Verify enrollment
+    const [enrollment] = (await db
+      .select({ source: userStoreEnrollments.source })
+      .from(userStoreEnrollments)
+      .where(and(eq(userStoreEnrollments.userId, createdUserId), eq(userStoreEnrollments.storeId, store.id)))) as Array<{
+      source: string;
+    }>;
+    expect(enrollment).toBeDefined();
+    expect(enrollment!.source).toBe('pos_phone');
+
+    // Verify card was created
+    const [card] = await db.select().from(cards).where(eq(cards.userId, createdUserId));
+    expect(card).toBeDefined();
+
+    // Verify WhatsApp welcome message was sent
+    const [whatsappMessage] = (await db
+      .select({ direction: whatsappMessages.direction, textBody: whatsappMessages.textBody })
+      .from(whatsappMessages)
+      .where(eq(whatsappMessages.toPhone, `whatsapp:+52${phoneNumber}`))
+      .orderBy(whatsappMessages.processedAt)) as Array<{
+      direction: string;
+      textBody: string | null;
+    }>;
+    expect(whatsappMessage).toBeDefined();
+    expect(whatsappMessage!.direction).toBe('outbound');
+    expect(whatsappMessage!.textBody).toContain('Bienvenido a Qoa');
+
+    // Second call with same phone should return same user
+    const resolvedAgain = await api.v1.stores({ storeId: store.id })['customer-resolve'].post(
+      { input: `+52 ${phoneNumber.slice(0, 2)} ${phoneNumber.slice(2, 6)} ${phoneNumber.slice(6)}` },
+      { headers: storeHeaders },
+    );
+
+    expect(resolvedAgain.data?.data.userId).toBe(createdUserId);
+
+    // Cleanup
+    await db.delete(whatsappMessages).where(eq(whatsappMessages.toPhone, `whatsapp:+52${phoneNumber}`));
+    await db.delete(userStoreEnrollments).where(eq(userStoreEnrollments.userId, createdUserId));
+    await db.delete(cards).where(eq(cards.userId, createdUserId));
+    await db.delete(users).where(eq(users.id, createdUserId));
+    await db.delete(stores).where(eq(stores.id, store.id));
   });
 
   it('previews and confirms inventory intake with idempotent replay', async () => {

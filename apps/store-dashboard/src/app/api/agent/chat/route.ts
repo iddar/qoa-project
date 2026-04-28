@@ -752,6 +752,7 @@ export async function POST(request: Request) {
     "Usa herramientas para cambiar el pedido, ligar clientes y confirmar ventas.",
     "No digas que una venta fue registrada si no ejecutaste confirmDraftTransaction.",
     "Si el usuario pide escanear una imagen, usa resolveCustomerCard sin input y toma el adjunto mas reciente.",
+    "Tambien puedes ligar clientes por numero de telefono usando resolveCustomerCard.",
     "Tolera errores pequenos de transcripcion o dictado en nombres de producto.",
     "Cuando el tendero pida agregar un producto por nombre, intenta primero addProductToDraftByQuery.",
     "Si acabas de ofrecer opciones de producto y el tendero responde con una palabra corta como un sabor, marca o variante, intenta primero resolvePendingProductChoice.",
@@ -926,7 +927,7 @@ export async function POST(request: Request) {
         },
       }),
       resolveCustomerCard: tool({
-        description: "Resuelve una tarjeta de cliente usando QR JSON, cardId, card code o el adjunto mas reciente.",
+        description: "Resuelve una tarjeta de cliente usando QR JSON, cardId, card code, numero de telefono o el adjunto mas reciente.",
         inputSchema: z.object({
           input: z.string().optional(),
         }),

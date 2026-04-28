@@ -45,11 +45,12 @@ export function StoreInventoryProvider({ children }: { children: React.ReactNode
 
     try {
       const parsed = JSON.parse(raw) as StoreInventoryDraft;
-      setDraft(normalizeDraft({
+      const restoredDraft = normalizeDraft({
         rows: parsed.rows ?? [],
         lastReceipt: parsed.lastReceipt ?? null,
         idempotencyKey: parsed.idempotencyKey ?? null,
-      }));
+      });
+      window.setTimeout(() => setDraft(restoredDraft), 0);
     } catch {
       // ignore restore failures
     }

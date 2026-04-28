@@ -1,0 +1,1 @@
+ALTER TYPE "public"."user_store_enrollment_source" ADD VALUE 'pos_phone';

@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { stores } from './stores';
 import { users } from './users';
 
-export const userStoreEnrollmentSource = pgEnum('user_store_enrollment_source', ['whatsapp_qr']);
+export const userStoreEnrollmentSource = pgEnum('user_store_enrollment_source', ['whatsapp_qr', 'pos_phone']);
 
 type UserStoreEnrollmentsTable = {
   userId: unknown;

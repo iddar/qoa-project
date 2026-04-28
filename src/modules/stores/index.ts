@@ -8,6 +8,7 @@ import { generateCode } from "../../app/utils/generateCode";
 import { db } from "../../db/client";
 import { stores, cpgs, cpgStoreRelations, storeProducts, products, brands, cards, users, transactions, transactionItems, inventoryMovements } from "../../db/schema";
 import { generateStoreQrPayload } from "../../services/stores";
+import { resolveCustomerByPhone } from "../../services/phone-customer-resolve";
 import { createStorePosTransaction, toDetailPayload } from "../transactions";
 import { previewInventoryImport, summarizeConfirmedInventoryRows } from "../../services/store-inventory";
 import {
@@ -246,6 +247,14 @@ const parseCardLookupInput = (value: string) => {
     return {
       kind: "cardId" as const,
       value: trimmed,
+    };
+  }
+
+  const cleanedForPhone = trimmed.replace(/[^\d+]/g, '');
+  if (/^\+?\d{10,16}$/.test(cleanedForPhone)) {
+    return {
+      kind: "phone" as const,
+      value: cleanedForPhone,
     };
   }
 
@@ -1748,7 +1757,44 @@ export const storesModule = new Elysia({
 
       const parsed = parseCardLookupInput(body.input);
       if (!parsed) {
-        return status(400, { error: { code: "INVALID_ARGUMENT", message: "Código de tarjeta inválido" } });
+        return status(400, { error: { code: "INVALID_ARGUMENT", message: "Código de tarjeta o teléfono inválido" } });
+      }
+
+      if (parsed.kind === "phone") {
+        try {
+          const resolved = await resolveCustomerByPhone(parsed.value, params.storeId);
+          return {
+            data: {
+              userId: resolved.userId,
+              cardId: resolved.cardId,
+              cardCode: resolved.cardCode,
+              name: resolved.name,
+              phone: resolved.phone,
+              email: resolved.email,
+            },
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message === "INVALID_PHONE_FORMAT") {
+            return status(400, {
+              error: {
+                code: "INVALID_PHONE_FORMAT",
+                message: "El formato del teléfono no es válido. Usa 10 dígitos o formato internacional (+52...).",
+              },
+            });
+          }
+          if (message === "USER_ROLE_NOT_ALLOWED") {
+            return status(403, {
+              error: {
+                code: "USER_ROLE_NOT_ALLOWED",
+                message: "Este teléfono pertenece a una cuenta que no puede usarse en el POS.",
+              },
+            });
+          }
+          return status(404, {
+            error: { code: "CUSTOMER_NOT_FOUND", message: "No pudimos registrar al cliente. Intenta de nuevo." },
+          });
+        }
       }
 
       const [resolved] = (await db
@@ -2042,7 +2088,7 @@ export const storesModule = new Elysia({
           ...toDetailPayload(outcome.transaction, outcome.items, outcome.accumulations),
           items: itemResponses,
           guestFlag: !outcome.transaction.userId,
-          customer: resolvedCustomer,
+          ...(resolvedCustomer ? { customer: resolvedCustomer } : {}),
         },
       });
     },

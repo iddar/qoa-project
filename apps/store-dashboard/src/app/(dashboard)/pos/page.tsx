@@ -139,7 +139,7 @@ export default function StorePOSPage() {
   const errorMessage = useMemo(() => {
     const customerError = resolveCustomer.error;
     if (customerError) {
-      return "No pudimos ligar esa tarjeta. Revisa el QR o el código e intenta otra vez.";
+      return "No pudimos ligar esa tarjeta o teléfono. Revisa el dato e intenta otra vez.";
     }
 
     if (confirmTransaction.error) {
@@ -184,7 +184,7 @@ export default function StorePOSPage() {
               type="text"
               value={customerInput}
               onChange={(event) => setCustomerInput(event.target.value)}
-              placeholder='QR JSON, cardId o card code'
+              placeholder='QR JSON, cardId, card code o teléfono'
               className="min-w-0 flex-1 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
             />
             <button
