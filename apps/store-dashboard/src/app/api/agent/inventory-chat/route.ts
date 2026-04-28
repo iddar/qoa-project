@@ -1,11 +1,19 @@
 import { generateObject, generateText, stepCountIs, tool } from "ai";
 import { openrouter } from "@openrouter/ai-sdk-provider";
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { z } from "zod";
 import { api } from "@/lib/api";
 import { buildInventoryPreviewTextFromImageRows, inventoryImageExtractionSchema } from "@/lib/inventory-image-extraction";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { type AgentAction, type AgentAttachment, type AgentMessage } from "@/lib/store-pos";
-import { appendInventoryDraftRows, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, getInventoryDraftSummary, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryQuantityCorrection, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+
+const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
+const execFileAsync = promisify(execFile);
 
 const matchedProductSchema = z.object({
   id: z.string(),
@@ -170,6 +178,121 @@ const parseDataUrl = (dataUrl: string) => {
     buffer: Buffer.from(encoded, "base64"),
   };
 };
+
+const getBaseContentType = (contentType: string) => contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+
+const getAudioExtension = (contentType: string) => {
+  const baseContentType = getBaseContentType(contentType);
+
+  if (baseContentType === "audio/aac") return "aac";
+  if (baseContentType === "audio/aiff" || baseContentType === "audio/x-aiff") return "aiff";
+  if (baseContentType === "audio/flac") return "flac";
+  if (baseContentType === "audio/m4a") return "m4a";
+  if (baseContentType === "audio/mp4") return "m4a";
+  if (baseContentType === "audio/mp3" || baseContentType === "audio/mpeg") return "mp3";
+  if (baseContentType === "audio/ogg") return "ogg";
+  if (baseContentType === "audio/wav" || baseContentType === "audio/x-wav") return "wav";
+  if (baseContentType === "audio/webm") return "webm";
+
+  return "bin";
+};
+
+const transcodeAudioToMp3 = async (buffer: Buffer, contentType: string) => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "qoa-openrouter-inventory-audio-"));
+  const inputPath = path.join(tempDir, `input.${getAudioExtension(contentType)}`);
+  const outputPath = path.join(tempDir, "output.mp3");
+
+  try {
+    await writeFile(inputPath, buffer);
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i",
+      inputPath,
+      "-vn",
+      "-acodec",
+      "libmp3lame",
+      "-ar",
+      "16000",
+      "-ac",
+      "1",
+      outputPath,
+    ]);
+
+    return Buffer.from(await readFile(outputPath));
+  } catch {
+    throw new Error("AUDIO_TRANSCODE_FAILED");
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+};
+
+const normalizeAudioForOpenRouter = async (buffer: Buffer, contentType: string) => {
+  const baseContentType = getBaseContentType(contentType);
+
+  switch (baseContentType) {
+    case "audio/aac":
+      return { buffer, mediaType: "audio/aac" };
+    case "audio/aiff":
+    case "audio/x-aiff":
+      return { buffer, mediaType: "audio/aiff" };
+    case "audio/flac":
+      return { buffer, mediaType: "audio/flac" };
+    case "audio/m4a":
+    case "audio/mp4":
+      return { buffer, mediaType: "audio/m4a" };
+    case "audio/mp3":
+    case "audio/mpeg":
+      return { buffer, mediaType: "audio/mpeg" };
+    case "audio/ogg":
+      return { buffer, mediaType: "audio/ogg" };
+    case "audio/wav":
+    case "audio/x-wav":
+      return { buffer, mediaType: "audio/wav" };
+    default:
+      return {
+        buffer: await transcodeAudioToMp3(buffer, baseContentType || contentType),
+        mediaType: "audio/mpeg",
+      };
+  }
+};
+
+const buildModelMessages = async (messages: AgentMessage[], latestUserMessageId?: string) =>
+  Promise.all(messages.map(async (message) => {
+    const isLatestUserMessage = message.role === "user" && message.id === latestUserMessageId;
+    const audioAttachments = isLatestUserMessage
+      ? (message.attachments ?? []).filter((attachment) => getAttachmentKind(attachment) === "audio")
+      : [];
+
+    if (audioAttachments.length === 0) {
+      return {
+        role: message.role,
+        content: buildTextMessageContent(message),
+      };
+    }
+
+    const typedContent = message.content.trim();
+    const textParts = [
+      typedContent && typedContent !== AUDIO_PLACEHOLDER ? typedContent : "Nota de voz del tendero para ajustar el borrador de inventario.",
+      message.attachments?.some((attachment) => getAttachmentKind(attachment) === "image") ? "Tambien hay adjuntos de imagen en este turno." : "",
+    ].filter(Boolean);
+
+    return {
+      role: message.role,
+      content: [
+        ...textParts.map((text) => ({ type: "text" as const, text })),
+        ...(await Promise.all(audioAttachments.map(async (attachment) => {
+          const { buffer, contentType } = parseDataUrl(attachment.dataUrl);
+          const normalizedAudio = await normalizeAudioForOpenRouter(buffer, contentType);
+          return {
+            type: "file" as const,
+            data: normalizedAudio.buffer,
+            mediaType: normalizedAudio.mediaType,
+          };
+        }))),
+      ],
+    };
+  }));
+
 
 const mapImagePreviewError = (error: unknown) => {
   if (error instanceof Error) {
@@ -424,6 +547,61 @@ export async function POST(request: Request) {
     return buildSummaryText(workingDraft);
   };
 
+  const updateDraftRowByQuery = async (input: {
+    query: string;
+    name?: string;
+    sku?: string;
+    quantity?: number;
+    price?: number;
+    action?: "match_existing" | "create_new";
+    storeProductId?: string;
+  }) => {
+    const match = findInventoryDraftRowByQuery(workingDraft.rows, input.query);
+    if (match.status === "not_found") {
+      return {
+        updated: false,
+        reason: "row_not_found" as const,
+        query: input.query,
+      };
+    }
+
+    if (match.status === "ambiguous") {
+      return {
+        updated: false,
+        reason: "ambiguous" as const,
+        query: input.query,
+        candidates: match.candidates.map((candidate) => ({
+          rowId: candidate.row.id,
+          name: candidate.row.name,
+          quantity: candidate.row.quantity,
+          score: Number(candidate.score.toFixed(3)),
+        })),
+      };
+    }
+
+    const matchedProduct = input.storeProductId
+      ? (await getStoreProducts()).find((product) => product.id === input.storeProductId)
+      : input.action === "create_new"
+        ? undefined
+        : match.row.matchedProduct;
+    const nextRow = applyInventoryDraftRowPatch(match.row, {
+      name: input.name,
+      sku: input.sku,
+      quantity: input.quantity,
+      price: input.price,
+      action: input.action,
+      matchedStoreProductId: input.storeProductId ?? (input.action === "create_new" ? undefined : match.row.matchedStoreProductId),
+      matchedProduct,
+    });
+
+    workingDraft.rows = workingDraft.rows.map((row) => row.id === nextRow.id ? nextRow : row);
+    return {
+      updated: true,
+      row: nextRow,
+      draft: buildSummaryText(workingDraft),
+    };
+  };
+
   const removeDraftRow = async (rowId: string) => {
     workingDraft.rows = workingDraft.rows.filter((row) => row.id !== rowId);
     return buildSummaryText(workingDraft);
@@ -466,6 +644,32 @@ export async function POST(request: Request) {
     };
 
     return data.data;
+  };
+
+  const transcribeLatestAudio = async () => {
+    const audioAttachments = latestAttachments.filter((attachment) => getAttachmentKind(attachment) === "audio");
+    const latestAudio = audioAttachments.at(-1);
+    if (!latestAudio) {
+      return null;
+    }
+
+    const { buffer, contentType } = parseDataUrl(latestAudio.dataUrl);
+    const normalizedAudio = await normalizeAudioForOpenRouter(buffer, contentType);
+    const transcription = await generateText({
+      model: openrouter(process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash"),
+      system: "Transcribe la nota de voz del tendero en espanol. Devuelve solo el texto dicho, sin explicaciones.",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Transcribe esta nota de voz de inventario." },
+            { type: "file", data: normalizedAudio.buffer, mediaType: normalizedAudio.mediaType },
+          ],
+        },
+      ],
+    });
+
+    return transcription.text.trim();
   };
 
   const hasLatestImage = latestAttachments.some((attachment) => getAttachmentKind(attachment) === "image");
@@ -524,14 +728,65 @@ export async function POST(request: Request) {
     });
   }
 
+  const deterministicCorrection = latestUserMessage ? parseInventoryQuantityCorrection(latestUserMessage.content) : null;
+  if (deterministicCorrection) {
+    const update = await updateDraftRowByQuery(deterministicCorrection);
+    const content = update.updated
+      ? `Listo, corregí **${update.row.name}** a **${update.row.quantity} unidades** en el borrador.`
+      : update.reason === "ambiguous"
+        ? `Encontré varias filas parecidas para "${deterministicCorrection.query}". Dime cuál quieres corregir.`
+        : `No encontré una fila para "${deterministicCorrection.query}" en el borrador actual.`;
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        actions: buildActions(workingDraft),
+      } as AgentMessage,
+      userMessage: normalizedUserMessage,
+      draft: workingDraft,
+    });
+  }
+
   if (!process.env.OPENROUTER_API_KEY) {
     return Response.json({ error: "OPENROUTER_NOT_CONFIGURED" }, { status: 500 });
   }
 
-  const modelMessages = normalizedMessages.map((message) => ({
-    role: message.role,
-    content: buildTextMessageContent(message),
-  }));
+  const audioTranscript = await transcribeLatestAudio();
+  const audioCorrection = audioTranscript ? parseInventoryQuantityCorrection(audioTranscript) : null;
+  if (audioCorrection) {
+    const update = await updateDraftRowByQuery(audioCorrection);
+    const content = update.updated
+      ? `Listo, escuché "${audioTranscript}" y corregí **${update.row.name}** a **${update.row.quantity} unidades** en el borrador.`
+      : update.reason === "ambiguous"
+        ? `Escuché "${audioTranscript}", pero encontré varias filas parecidas para "${audioCorrection.query}". Dime cuál quieres corregir.`
+        : `Escuché "${audioTranscript}", pero no encontré una fila para "${audioCorrection.query}" en el borrador actual.`;
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        actions: buildActions(workingDraft),
+      } as AgentMessage,
+      userMessage: normalizedUserMessage
+        ? {
+            ...normalizedUserMessage,
+            attachments: normalizedUserMessage.attachments?.map((attachment) =>
+              getAttachmentKind(attachment) === "audio"
+                ? { ...attachment, transcript: audioTranscript, status: "transcribed" as const }
+                : attachment,
+            ),
+          }
+        : normalizedUserMessage,
+      draft: workingDraft,
+    });
+  }
+
+  const modelMessages = await buildModelMessages(normalizedMessages as AgentMessage[], normalizedUserMessage?.id);
 
   const result = await generateText({
     model: openrouter(process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash"),
@@ -542,8 +797,11 @@ export async function POST(request: Request) {
       "No digas que la entrada fue aplicada si no ejecutaste confirmInventoryIntake.",
       "Si el usuario pega una lista o tabla, usa previewInventoryFromText.",
       "Si el usuario adjunta una foto de nota o ticket, usa previewInventoryFromLatestImage.",
+      "Si el usuario manda audio, interpretalo como instruccion del tendero para preparar, corregir o confirmar el borrador.",
       "Cuando el borrador ya tenga filas y llegue otra foto o lista, agregala al borrador actual salvo que el usuario pida reemplazarlo por completo.",
-      "Si hay filas ambiguas o invalidas, pide correccion puntual o usa updateInventoryDraftRow cuando ya tengas la instruccion.",
+      "Si el usuario pide corregir un producto por nombre, usa updateInventoryDraftRowByQuery antes de pedir rowId.",
+      "Ejemplo: 'corrige el panque de nuez son 15 unidades' significa buscar Panque Nuez y cambiar quantity a 15.",
+      "Si hay filas ambiguas o invalidas, pide correccion puntual o usa updateInventoryDraftRow/updateInventoryDraftRowByQuery cuando ya tengas la instruccion.",
       `Estado actual del inventario en borrador:\n${buildSummaryText(workingDraft)}`,
     ].join("\n\n"),
     messages: modelMessages,
@@ -581,6 +839,19 @@ export async function POST(request: Request) {
           storeProductId: z.string().optional(),
         }),
         execute: async (input) => updateDraftRow(input),
+      }),
+      updateInventoryDraftRowByQuery: tool({
+        description: "Edita una fila del borrador buscando por nombre hablado o escrito.",
+        inputSchema: z.object({
+          query: z.string().min(1),
+          name: z.string().optional(),
+          sku: z.string().optional(),
+          quantity: z.number().int().min(1).optional(),
+          price: z.number().min(0).optional(),
+          action: z.enum(["match_existing", "create_new"]).optional(),
+          storeProductId: z.string().optional(),
+        }),
+        execute: async (input) => updateDraftRowByQuery(input),
       }),
       removeInventoryDraftRow: tool({
         description: "Elimina una fila del borrador de inventario.",

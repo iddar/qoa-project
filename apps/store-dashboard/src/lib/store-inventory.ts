@@ -99,6 +99,104 @@ export const appendInventoryDraftRows = (currentRows: InventoryDraftRow[], nextR
   ];
 };
 
+const normalizeInventorySearchText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\b(de|del|la|las|el|los|un|una|unos|unas)\b/g, " ")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const scoreInventoryRowMatch = (row: InventoryDraftRow, query: string) => {
+  const normalizedQuery = normalizeInventorySearchText(query);
+  const normalizedName = normalizeInventorySearchText(row.name);
+  const normalizedRawText = normalizeInventorySearchText(row.rawText);
+  const normalizedSku = normalizeInventorySearchText(row.sku ?? "");
+
+  if (!normalizedQuery || (!normalizedName && !normalizedRawText && !normalizedSku)) {
+    return 0;
+  }
+
+  if (normalizedName === normalizedQuery || normalizedSku === normalizedQuery) {
+    return 1;
+  }
+
+  const compactQuery = normalizedQuery.replace(/\s+/g, "");
+  const compactName = normalizedName.replace(/\s+/g, "");
+
+  if (normalizedName.includes(normalizedQuery) || normalizedQuery.includes(normalizedName) || compactQuery.includes(compactName)) {
+    return 0.92;
+  }
+
+  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+  const haystackTokens = new Set(`${normalizedName} ${normalizedRawText} ${normalizedSku}`.split(" ").filter(Boolean));
+  const matchedTokens = queryTokens.filter((token) => haystackTokens.has(token));
+  if (queryTokens.length === 0) {
+    return 0;
+  }
+
+  return matchedTokens.length / queryTokens.length;
+};
+
+export type InventoryDraftRowQueryMatch =
+  | { status: "matched"; row: InventoryDraftRow; score: number }
+  | { status: "ambiguous"; candidates: Array<{ row: InventoryDraftRow; score: number }> }
+  | { status: "not_found" };
+
+export const findInventoryDraftRowByQuery = (rows: InventoryDraftRow[], query: string): InventoryDraftRowQueryMatch => {
+  const ranked = rows
+    .map((row) => ({ row, score: scoreInventoryRowMatch(row, query) }))
+    .filter((entry) => entry.score >= 0.5)
+    .sort((left, right) => right.score - left.score);
+
+  const [best, second] = ranked;
+  if (!best) {
+    return { status: "not_found" };
+  }
+
+  if (second && best.score - second.score < 0.18) {
+    return { status: "ambiguous", candidates: ranked.slice(0, 3) };
+  }
+
+  return { status: "matched", row: best.row, score: best.score };
+};
+
+export const parseInventoryQuantityCorrection = (content: string) => {
+  const normalized = content
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  const match = normalized.match(/(?:corrige|corrigir|cambia|actualiza|ajusta)\s+(?:el|la|los|las)?\s*(.+?)\s+(?:son|a|en|por)\s+(\d+)\s*(?:unidades|piezas|pz|uds)?\b/);
+
+  if (!match?.[1] || !match[2]) {
+    return null;
+  }
+
+  return {
+    query: match[1].trim(),
+    quantity: Number(match[2]),
+  };
+};
+
+export const applyInventoryDraftRowPatch = (
+  row: InventoryDraftRow,
+  patch: Partial<Pick<InventoryDraftRow, "name" | "sku" | "quantity" | "price" | "action" | "matchedStoreProductId" | "matchedProduct">>,
+) => resolveInventoryRowState({
+  ...row,
+  name: patch.name ?? row.name,
+  sku: patch.sku ?? row.sku,
+  quantity: patch.quantity ?? row.quantity,
+  price: patch.price ?? row.price,
+  action: patch.action ?? row.action,
+  matchedStoreProductId: patch.matchedStoreProductId ?? row.matchedStoreProductId,
+  matchedProduct: patch.matchedProduct ?? row.matchedProduct,
+  rawText: patch.name ?? row.rawText,
+});
+
 export const getInventoryDraftSummary = (draft: StoreInventoryDraft) => ({
   rows: draft.rows.length,
   quantity: draft.rows.reduce((sum, row) => sum + (row.status === 'invalid' ? 0 : row.quantity), 0),
@@ -138,7 +236,7 @@ export const resolveInventoryRowState = (row: InventoryDraftRow): InventoryDraft
     };
   }
 
-  if (row.action === 'match_existing' && row.matchedStoreProductId && row.matchedProduct) {
+  if (row.action === 'match_existing' && row.matchedStoreProductId) {
     return {
       ...row,
       status: 'matched',

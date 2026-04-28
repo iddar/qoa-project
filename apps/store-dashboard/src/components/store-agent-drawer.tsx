@@ -143,6 +143,11 @@ const mergeClientAttachmentFields = (serverMessage: AgentMessage, localMessages:
   };
 };
 
+const stripMessageAttachments = (message: AgentMessage): AgentMessage => ({
+  ...message,
+  attachments: undefined,
+});
+
 const getRecordingSupportMessage = () => {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return "La grabación solo está disponible en el navegador.";
@@ -215,6 +220,7 @@ export function StoreAgentDrawer() {
   const [qrScannerError, setQrScannerError] = useState<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const qrCaptureInputRef = useRef<HTMLInputElement | null>(null);
+  const imageUploadInputRef = useRef<HTMLInputElement | null>(null);
   const audioUploadInputRef = useRef<HTMLInputElement | null>(null);
   const qrScannerContainerRef = useRef<HTMLDivElement | null>(null);
   const qrVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -390,6 +396,10 @@ export function StoreAgentDrawer() {
       attachments: preparedAttachments,
     };
 
+    const requestMessages = isInventoryMode
+      ? [...messages.map(stripMessageAttachments), userMessage]
+      : [...messages, userMessage];
+
     setMessages((current) => [...current, userMessage]);
     setInput("");
     setAttachments((current) => {
@@ -410,7 +420,7 @@ export function StoreAgentDrawer() {
           authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          messages: [...messages, userMessage],
+          messages: requestMessages,
           draft: isInventoryMode ? inventoryDraft : draft,
         }),
       });
@@ -918,6 +928,10 @@ export function StoreAgentDrawer() {
     qrCaptureInputRef.current?.click();
   };
 
+  const handleImageUploadButtonClick = () => {
+    imageUploadInputRef.current?.click();
+  };
+
   const handleAudioButtonClick = () => {
     if (canUseLiveAudio) {
       void startRecording();
@@ -1229,6 +1243,17 @@ export function StoreAgentDrawer() {
             }}
           />
           <input
+            ref={imageUploadInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={async (event) => {
+              const input = event.currentTarget;
+              await attachImageFiles(input.files ?? []);
+              input.value = "";
+            }}
+          />
+          <input
             ref={audioUploadInputRef}
             type="file"
             accept="audio/*"
@@ -1266,7 +1291,7 @@ export function StoreAgentDrawer() {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               rows={2}
-              placeholder={isInventoryMode ? "Ej. 12 Refresco 600ml, adjunta una foto de la nota del proveedor o confirma la entrada" : "Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"}
+              placeholder={isInventoryMode ? "Ej. 12 Refresco 600ml, sube una foto, graba una corrección o confirma la entrada" : "Ej. agrega 2 refrescos, escanea esta tarjeta o confirma la venta"}
               className="w-full resize-none rounded-3xl border border-zinc-200 bg-white px-4 py-3 pb-14 text-sm text-zinc-900 outline-none transition focus:border-emerald-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 sm:pb-12"
             />
 
@@ -1279,11 +1304,22 @@ export function StoreAgentDrawer() {
                   className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
                   aria-label={isInventoryMode ? "Adjuntar foto de inventario" : canUseLiveQrScanner ? "Escanear QR en vivo" : "Adjuntar foto del QR"}
                 >
-                  {isInventoryMode ? <Paperclip className="h-4 w-4" /> : canUseLiveQrScanner ? <ScanLine className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+                  {isInventoryMode ? <Camera className="h-4 w-4" /> : canUseLiveQrScanner ? <ScanLine className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
                 </button>
 
-                {!isInventoryMode ? (
-                  <>
+                {isInventoryMode ? (
+                  <button
+                    type="button"
+                    onClick={handleImageUploadButtonClick}
+                    disabled={pending}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/95 text-zinc-600 shadow-sm backdrop-blur transition hover:border-zinc-300 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950/95 dark:text-zinc-300 dark:hover:text-zinc-50 sm:h-9 sm:w-9"
+                    aria-label="Subir foto de inventario desde fotos"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                  </button>
+                ) : null}
+
+                <>
                     <button
                       type="button"
                       onClick={handleAudioButtonClick}
@@ -1305,7 +1341,6 @@ export function StoreAgentDrawer() {
                       </button>
                     ) : null}
                   </>
-                ) : null}
               </div>
 
               <button
