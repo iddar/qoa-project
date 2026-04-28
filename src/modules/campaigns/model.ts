@@ -92,6 +92,16 @@ export const campaignSchema = t.Object({
   updatedAt: t.Optional(t.String()),
   daysRemaining: t.Optional(t.Number()),
   isExpired: t.Optional(t.Boolean()),
+  storeEnrollmentStatus: t.Optional(
+    t.Union([
+      t.Literal("visible"),
+      t.Literal("invited"),
+      t.Literal("enrolled"),
+      t.Literal("declined"),
+      t.Literal("removed"),
+      t.Literal("suspended"),
+    ]),
+  ),
   policySummaries: t.Optional(
     t.Array(
       t.Object({

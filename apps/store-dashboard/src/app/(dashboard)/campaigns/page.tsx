@@ -14,6 +14,9 @@ type Campaign = {
   cpgId?: string;
   startsAt?: string;
   endsAt?: string;
+  storeEnrollmentStatus?: StoreCampaignAssignment["status"];
+  storeAccessMode?: string;
+  storeEnrollmentMode?: string;
   createdAt: string;
 };
 
@@ -70,7 +73,7 @@ export default function CampaignsPage() {
     enabled: Boolean(tenantId) && tenantType === "store",
     queryFn: async () => {
       if (!tenantId) return null;
-      const { data, error } = await api.v1.campaigns({ campaignId: tenantId }).stores({ storeId: tenantId }).campaigns.get({
+      const { data, error } = await api.v1.campaigns.stores({ storeId: tenantId }).campaigns.get({
         headers: { authorization: `Bearer ${token}` },
       });
       if (error) throw error;
@@ -115,9 +118,7 @@ export default function CampaignsPage() {
 
   // Determine enrollment status for display
   const getEnrollmentStatus = (campaign: Campaign): StoreCampaignAssignment["status"] => {
-    // If campaign has all_related_stores + auto_enroll, they are enrolled
-    // For now, we'll show all visible campaigns as "visible" and let them enroll
-    return "visible";
+    return campaign.storeEnrollmentStatus ?? "visible";
   };
 
   if (tenantType !== "store") {
