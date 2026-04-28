@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { treaty } from '@elysiajs/eden';
-import { and, eq, or } from 'drizzle-orm';
+import { and, desc, eq, or } from 'drizzle-orm';
 import { createHmac } from 'node:crypto';
 import { getExpectedTwilioSignature } from 'twilio/lib/webhooks/webhooks';
 import { createApp, type App } from '../app';
@@ -363,6 +363,66 @@ describe('WhatsApp module', () => {
     }
   });
 
+  it('accepts legacy JSON store QR payloads for onboarding', async () => {
+    const phone = '+5215512000005';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda JSON QR');
+    const qrBody = JSON.stringify({
+      code: store.code,
+      payload: {
+        entityType: 'store',
+        entityId: store.id,
+        code: store.code,
+      },
+    });
+
+    try {
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: qrBody, WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('awaiting_name');
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('does not route completed user registration intent to the help menu', async () => {
+    const phone = '+5215512000006';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Registro Intent');
+
+    try {
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Registro', WaId: phone.slice(1) })));
+      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'registrarme', WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('completed');
+
+      const [outbound] = (await db
+        .select({ textBody: whatsappMessages.textBody })
+        .from(whatsappMessages)
+        .where(and(eq(whatsappMessages.direction, 'outbound'), eq(whatsappMessages.toPhone, waPhone)))
+        .orderBy(desc(whatsappMessages.processedAt))
+        .limit(1)) as Array<{ textBody: string | null }>;
+
+      expect(outbound?.textBody).toContain('escanea el QR de la tienda');
+      expect(outbound?.textBody).not.toContain('Estas son las opciones disponibles');
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
   it('returns balance for a completed user', async () => {
     const phone = '+5215512000010';
     const waPhone = `whatsapp:${phone}`;
@@ -518,6 +578,25 @@ describe('WhatsApp module', () => {
 
       expect(response.status).toBe(201);
       expect(body.data.sessionState).toBe('completed');
+    } finally {
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
+    }
+  });
+
+  it('accepts check-in message with "quiero registrar mi compra en" format', async () => {
+    const phone = '+5215512000015';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Checkin Natural');
+
+    try {
+      const response = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: `Quiero registrar mi compra en ${store.code}`, WaId: phone.slice(1) })),
+      );
+      const body = (await response.json()) as { data: { sessionState?: string } };
+
+      expect(response.status).toBe(201);
+      expect(body.data.sessionState).toBe('awaiting_name');
     } finally {
       await cleanupPhoneData(phone);
       await db.delete(stores).where(eq(stores.id, store.id));

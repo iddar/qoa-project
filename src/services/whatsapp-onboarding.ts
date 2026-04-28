@@ -84,7 +84,37 @@ export const extractStoreCodeFromText = (value: string | null | undefined) => {
   }
 
   const altaMatch = trimmed.match(STORE_SIGNUP_PATTERN);
-  return altaMatch?.[1]?.toLowerCase() ?? null;
+  if (altaMatch?.[1]) {
+    return altaMatch[1].toLowerCase();
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      code?: unknown;
+      payload?: {
+        entityType?: unknown;
+        code?: unknown;
+      };
+    };
+    const code = parsed.payload?.entityType === 'store' ? parsed.payload.code : parsed.code;
+    if (typeof code === 'string' && STORE_CODE_PATTERN.test(code.trim())) {
+      return code.trim().toLowerCase();
+    }
+  } catch {
+    // Older printed QRs may not be JSON; continue with URL parsing below.
+  }
+
+  try {
+    const parsedUrl = new URL(trimmed);
+    const text = parsedUrl.searchParams.get('text');
+    if (text) {
+      return extractStoreCodeFromText(text);
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 };
 
 const findUserByPhone = async (phone: string) => {
@@ -455,6 +485,18 @@ export const processWhatsappOnboardingMessage = async (
 
     return {
       ...completed,
+      sessionState: 'completed',
+      userId: user.id,
+      storeId: session.pendingStoreId ?? undefined,
+    };
+  }
+
+  if (session.state === 'completed') {
+    await updateSession(session.id, {
+      lastInboundMessageId: input.messageSid,
+    });
+    return {
+      replyBody: 'Para registrarte en una tienda, escanea el QR de la tienda o envíame `alta CODIGO_DE_TIENDA`.',
       sessionState: 'completed',
       userId: user.id,
       storeId: session.pendingStoreId ?? undefined,
