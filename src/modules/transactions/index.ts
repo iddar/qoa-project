@@ -26,6 +26,7 @@ import { UNIVERSAL_CAMPAIGN_KEY, ensureUserUniversalWalletCard } from '../../ser
 import { evaluateCardTier } from '../../services/tier-engine';
 import { touchStoreCpgRelations, getRelatedCpgIdsForStore } from '../../services/store-cpg-relations';
 import { isStoreParticipatingInCampaign } from '../../services/campaign-store-access';
+import { autoMatchCheckinWithTransaction } from '../../services/store-checkin';
 import type { StatusHandler } from '../../types/handlers';
 import {
   transactionCreateRequest,
@@ -588,6 +589,11 @@ export const createOrReplayTransaction = async (payload: {
 
   if (!created) {
     return null;
+  }
+
+  // Auto-match pending store check-in if available
+  if (resolvedUserId) {
+    await autoMatchCheckinWithTransaction(resolvedUserId, payload.storeId, created.id);
   }
 
   // Touch CPG-Store relations based on products in the transaction

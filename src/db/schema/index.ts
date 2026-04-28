@@ -17,4 +17,5 @@ export * from './operations';
 export * from './store-products';
 export * from './inventory';
 export * from './user-store-enrollments';
+export * from './store-checkins';
 export * from './whatsapp-onboarding-sessions';
