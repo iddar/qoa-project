@@ -1510,6 +1510,29 @@ const upsertSeedCpg = async (scope: string): Promise<string> => {
   return inserted!.id;
 };
 
+const upsertCpgByName = async (name: string): Promise<string> => {
+  const [existing] = (await db
+    .select({ id: cpgs.id })
+    .from(cpgs)
+    .where(eq(cpgs.name, name))
+    .limit(1)) as Array<{ id: string }>;
+
+  if (existing) {
+    await db
+      .update(cpgs)
+      .set({ status: "active", updatedAt: new Date() })
+      .where(eq(cpgs.id, existing.id));
+    return existing.id;
+  }
+
+  const [inserted] = (await db
+    .insert(cpgs)
+    .values({ name, status: "active" })
+    .returning({ id: cpgs.id })) as Array<{ id: string }>;
+
+  return inserted!.id;
+};
+
 const ensureSubscribed = async (userId: string, campaignId: string) => {
   const [existing] = (await db
     .select({ id: campaignSubscriptions.id })
@@ -2209,6 +2232,199 @@ export const seedUsers = async (scope: "development" | "local" | "staging" | "te
         });
       }
     }
+
+  // ── CPG 2: Refrescos del Norte S.A. ───────────────────────────────────────
+  const cpg2Id = await upsertCpgByName(`Refrescos del Norte S.A. (${scope})`);
+    const cpg2BrandId = await upsertBrandByName(cpg2Id, `Bebidas Norte (${scope})`);
+    const cpg2Catalog = [
+      {
+        productId: await upsertProductBySku(cpg2BrandId, `RDN-MINERAL-500-${scope.toUpperCase()}`, `Agua Mineral 500 ml (${scope})`),
+        brandId: cpg2BrandId,
+        sku: `RDN-MINERAL-500-${scope.toUpperCase()}`,
+        name: `Agua Mineral 500 ml (${scope})`,
+        price: 12,
+      },
+      {
+        productId: await upsertProductBySku(cpg2BrandId, `RDN-JUGO-NARANJA-330-${scope.toUpperCase()}`, `Jugo Naranja 330 ml (${scope})`),
+        brandId: cpg2BrandId,
+        sku: `RDN-JUGO-NARANJA-330-${scope.toUpperCase()}`,
+        name: `Jugo Naranja 330 ml (${scope})`,
+        price: 22,
+      },
+      {
+        productId: await upsertProductBySku(cpg2BrandId, `RDN-ISOTONIC-600-${scope.toUpperCase()}`, `Bebida Isotónica 600 ml (${scope})`),
+        brandId: cpg2BrandId,
+        sku: `RDN-ISOTONIC-600-${scope.toUpperCase()}`,
+        name: `Bebida Isotónica 600 ml (${scope})`,
+        price: 28,
+      },
+    ];
+
+    for (const sid of managedStoreIds) {
+      await upsertSeedStoreProducts(scope, sid, cpg2Catalog);
+    }
+
+    const cpg2Campaign1Id = await upsertCampaignByKey({
+      key: `qoa_seed_norte_promo_${scope}`,
+      name: `Promo Norte (${scope})`,
+      description: "Campaña de acumulación abierta para todas las tiendas relacionadas.",
+      cpgId: cpg2Id,
+      storeAccessMode: "all_related_stores",
+      storeEnrollmentMode: "auto_enroll",
+      enrollmentMode: "open",
+      status: "active",
+    });
+
+    const cpg2Campaign2Id = await upsertCampaignByKey({
+      key: `qoa_seed_norte_reto_${scope}`,
+      name: `Reto Norte (${scope})`,
+      description: "Reto de temporada para tiendas seleccionadas.",
+      cpgId: cpg2Id,
+      storeAccessMode: "selected_stores",
+      storeEnrollmentMode: "store_opt_in",
+      enrollmentMode: "opt_in",
+      status: "active",
+    });
+
+    await upsertRewardByName({
+      campaignId: cpg2Campaign1Id,
+      name: `Cupón Norte Bebidas (${scope})`,
+      description: "Descuento en compra de bebidas Refrescos del Norte.",
+      cost: 15,
+      stock: 200,
+    });
+    await upsertRewardByName({
+      campaignId: cpg2Campaign2Id,
+      name: `Premio Reto Norte (${scope})`,
+      description: "Premio exclusivo al completar el reto de temporada.",
+      cost: 40,
+      stock: 60,
+    });
+
+    const cpg2ActiveStoreIds = new Set([storeId, secondaryStoreId, ...bulkStoreIds.slice(0, 30)]);
+    for (const sid of managedStoreIds) {
+      await upsertCpgStoreRelation({
+        cpgId: cpg2Id,
+        storeId: sid,
+        status: cpg2ActiveStoreIds.has(sid) ? "active" : "inactive",
+        source: "manual",
+        actorUserId: cpgAdminId,
+      });
+    }
+
+    await syncCampaignStoreAssignments({
+      campaignId: cpg2Campaign2Id,
+      storeIds: [storeId, secondaryStoreId, ...bulkStoreIds.slice(0, 8)],
+      actorUserId: cpgAdminId,
+      status: "visible",
+      visibilitySource: "manual",
+      enrollmentSource: "cpg_managed",
+    });
+
+    // ── CPG 3: Grupo Abarrotes Universal ──────────────────────────────────────
+    const cpg3Id = await upsertCpgByName(`Grupo Abarrotes Universal (${scope})`);
+    const cpg3BrandId = await upsertBrandByName(cpg3Id, `Abarrotes Universal (${scope})`);
+    const cpg3Catalog = [
+      {
+        productId: await upsertProductBySku(cpg3BrandId, `GAU-ARROZ-1KG-${scope.toUpperCase()}`, `Arroz Blanco 1 kg (${scope})`),
+        brandId: cpg3BrandId,
+        sku: `GAU-ARROZ-1KG-${scope.toUpperCase()}`,
+        name: `Arroz Blanco 1 kg (${scope})`,
+        price: 28,
+      },
+      {
+        productId: await upsertProductBySku(cpg3BrandId, `GAU-FRIJOL-900G-${scope.toUpperCase()}`, `Frijol Negro 900 g (${scope})`),
+        brandId: cpg3BrandId,
+        sku: `GAU-FRIJOL-900G-${scope.toUpperCase()}`,
+        name: `Frijol Negro 900 g (${scope})`,
+        price: 34,
+      },
+      {
+        productId: await upsertProductBySku(cpg3BrandId, `GAU-ACEITE-900ML-${scope.toUpperCase()}`, `Aceite Vegetal 900 ml (${scope})`),
+        brandId: cpg3BrandId,
+        sku: `GAU-ACEITE-900ML-${scope.toUpperCase()}`,
+        name: `Aceite Vegetal 900 ml (${scope})`,
+        price: 42,
+      },
+      {
+        productId: await upsertProductBySku(cpg3BrandId, `GAU-AZUCAR-1KG-${scope.toUpperCase()}`, `Azúcar Estándar 1 kg (${scope})`),
+        brandId: cpg3BrandId,
+        sku: `GAU-AZUCAR-1KG-${scope.toUpperCase()}`,
+        name: `Azúcar Estándar 1 kg (${scope})`,
+        price: 26,
+      },
+    ];
+
+    for (const sid of managedStoreIds) {
+      await upsertSeedStoreProducts(scope, sid, cpg3Catalog);
+    }
+
+    const cpg3Campaign1Id = await upsertCampaignByKey({
+      key: `qoa_seed_universal_promo_${scope}`,
+      name: `Promo Universal (${scope})`,
+      description: "Acumulación automática para tiendas relacionadas con Abarrotes Universal.",
+      cpgId: cpg3Id,
+      storeAccessMode: "all_related_stores",
+      storeEnrollmentMode: "auto_enroll",
+      enrollmentMode: "open",
+      status: "active",
+    });
+
+    const cpg3Campaign2Id = await upsertCampaignByKey({
+      key: `qoa_seed_universal_flash_${scope}`,
+      name: `Flash Universal (${scope})`,
+      description: "Promoción flash quincenal de abarrotes básicos.",
+      cpgId: cpg3Id,
+      storeAccessMode: "selected_stores",
+      storeEnrollmentMode: "store_opt_in",
+      enrollmentMode: "opt_in",
+      status: "active",
+    });
+
+    await upsertRewardByName({
+      campaignId: cpg3Campaign1Id,
+      name: `Reward Universal Básico (${scope})`,
+      description: "Canjeable por productos básicos de la canasta.",
+      cost: 20,
+      stock: 180,
+    });
+    await upsertRewardByName({
+      campaignId: cpg3Campaign1Id,
+      name: `Reward Universal Premium (${scope})`,
+      description: "Reward de alto valor para consumidores frecuentes.",
+      cost: 50,
+      stock: 70,
+    });
+    await upsertRewardByName({
+      campaignId: cpg3Campaign2Id,
+      name: `Flash Despensa (${scope})`,
+      description: "Premio especial campaña flash.",
+      cost: 30,
+      stock: 90,
+    });
+
+    const cpg3ActiveStoreIds = new Set([storeId, secondaryStoreId, ...bulkStoreIds.slice(0, 35)]);
+    for (const sid of managedStoreIds) {
+      await upsertCpgStoreRelation({
+        cpgId: cpg3Id,
+        storeId: sid,
+        status: cpg3ActiveStoreIds.has(sid) ? "active" : "inactive",
+        source: "manual",
+        actorUserId: cpgAdminId,
+      });
+    }
+
+    await syncCampaignStoreAssignments({
+      campaignId: cpg3Campaign2Id,
+      storeIds: [storeId, secondaryStoreId, ...bulkStoreIds.slice(0, 12)],
+      actorUserId: cpgAdminId,
+      status: "visible",
+      visibilitySource: "manual",
+      enrollmentSource: "cpg_managed",
+    });
+
+    console.log(`[seed:${scope}] CPG2 seed: ${cpg2Id} (Refrescos del Norte S.A.)`);
+    console.log(`[seed:${scope}] CPG3 seed: ${cpg3Id} (Grupo Abarrotes Universal)`);
   }
 
   console.log(`[seed:${scope}] CPG seed: ${cpgId} (Acme CPG)`);
