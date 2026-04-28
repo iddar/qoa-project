@@ -3,6 +3,7 @@ import { db } from '../db/client';
 import { cards, stores, userStoreEnrollments, users, whatsappOnboardingSessions } from '../db/schema';
 import { ensureUserUniversalWalletCard } from './wallet-onboarding';
 import { buildSignedWhatsappCardQrImageUrl, normalizeWhatsappPhone } from './twilio-whatsapp';
+import { createStoreCheckin } from './store-checkin';
 
 type UserRow = {
   id: string;
@@ -251,6 +252,10 @@ const recordStoreEnrollment = async (userId: string, storeId: string) => {
   });
 };
 
+const recordStoreCheckin = async (userId: string, storeId: string) => {
+  await createStoreCheckin({ userId, storeId });
+};
+
 const getCardCode = async (cardId: string) => {
   const [card] = (await db.select({ code: cards.code }).from(cards).where(eq(cards.id, cardId))) as Array<{
     code: string;
@@ -285,6 +290,19 @@ const buildCompletionMessage = async (payload: { userId: string; storeName: stri
   };
 };
 
+const buildCheckinMessage = async (payload: { userId: string; storeName: string }) => {
+  const ensuredCard = await ensureUserUniversalWalletCard(payload.userId);
+  const cardCode = await getCardCode(ensuredCard.cardId);
+  if (!cardCode) {
+    throw new Error('WHATSAPP_CARD_NOT_FOUND');
+  }
+
+  return {
+    replyBody: `¡Gracias por tu visita a ${payload.storeName}! 🎉\n\nAquí está tu QR de lealtad. Muéstralo al pagar para acumular puntos.\n\nCódigo: ${cardCode}`,
+    mediaUrl: buildSignedWhatsappCardQrImageUrl(ensuredCard.cardId),
+  };
+};
+
 export const processWhatsappOnboardingMessage = async (
   input: ProcessWhatsappOnboardingInput,
 ): Promise<ProcessWhatsappOnboardingResult> => {
@@ -314,6 +332,22 @@ export const processWhatsappOnboardingMessage = async (
         replyBody: 'No reconocí ese código de tienda. Escanea otra vez el QR o envíame `alta CODIGO_DE_TIENDA`.',
         sessionState: session.state,
         userId: session.userId ?? undefined,
+      };
+    }
+
+    // If user already exists and is complete, treat as check-in
+    if (user && user.name && user.birthDate) {
+      await recordStoreEnrollment(user.id, store.id);
+      await recordStoreCheckin(user.id, store.id);
+      const checkin = await buildCheckinMessage({ userId: user.id, storeName: store.name });
+      await updateSession(session.id, {
+        lastInboundMessageId: input.messageSid,
+      });
+      return {
+        ...checkin,
+        sessionState: 'completed',
+        userId: user.id,
+        storeId: store.id,
       };
     }
 
@@ -356,6 +390,7 @@ export const processWhatsappOnboardingMessage = async (
     }
 
     const completed = await buildCompletionMessage({ userId: user.id, storeName: store.name });
+    await recordStoreCheckin(user.id, store.id);
     await updateSession(session.id, {
       userId: user.id,
       pendingStoreId: store.id,
