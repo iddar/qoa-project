@@ -2235,7 +2235,12 @@ export const storesModule = new Elysia({
   )
   .get(
     "/:storeId/checkins",
-    async ({ auth, params, query, status }) => {
+    async ({ auth, params, query, status }: {
+      auth: AuthContext | null;
+      params: { storeId: string };
+      query: { status?: string; limit?: string };
+      status: StatusHandler;
+    }) => {
       if (!auth) {
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }
@@ -2245,9 +2250,9 @@ export const storesModule = new Elysia({
       const rows = await findPendingCheckinsForStore(params.storeId, { status: statusFilter as 'pending' | undefined, limit });
 
       const userIds = [...new Set(rows.map((r) => r.userId))];
-      const userRows = userIds.length > 0
+      const userRows = (userIds.length > 0
         ? await db.select({ id: users.id, name: users.name, phone: users.phone }).from(users).where(or(...userIds.map((id) => eq(users.id, id))))
-        : [];
+        : []) as Array<{ id: string; name: string | null; phone: string | null }>;
       const userById = new Map(userRows.map((u) => [u.id, u]));
 
       return {
@@ -2282,7 +2287,12 @@ export const storesModule = new Elysia({
   )
   .post(
     "/:storeId/checkins/:checkinId/match",
-    async ({ auth, params, body, status }) => {
+    async ({ auth, params, body, status }: {
+      auth: AuthContext | null;
+      params: { storeId: string; checkinId: string };
+      body: { transactionId: string };
+      status: StatusHandler;
+    }) => {
       if (!auth) {
         return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
       }

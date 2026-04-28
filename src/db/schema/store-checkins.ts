@@ -10,15 +10,6 @@ export const storeCheckinStatus = pgEnum('store_checkin_status', [
   'expired',
 ]);
 
-type StoreCheckinsTable = {
-  userId: unknown;
-  storeId: unknown;
-  status: unknown;
-  checkedInAt: unknown;
-  expiresAt: unknown;
-  matchedTransactionId: unknown;
-};
-
 export const storeCheckins = pgTable(
   'store_checkins',
   {
@@ -41,7 +32,7 @@ export const storeCheckins = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
   },
-  (table: StoreCheckinsTable) => [
+  (table) => [
     index('store_checkins_user_idx').on(table.userId),
     index('store_checkins_store_idx').on(table.storeId),
     index('store_checkins_status_idx').on(table.status),

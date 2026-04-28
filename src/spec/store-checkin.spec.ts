@@ -26,16 +26,20 @@ const storeStaffHeaders = {
 describe('Store checkin module', () => {
   it('creates a pending checkin and lists it for the store', async () => {
     const phone = `+52155${Date.now().toString().slice(-8)}`;
-    const [user] = await db
+    const userRows = (await db
       .insert(users)
       .values({ phone, name: 'Cliente Checkin', role: 'consumer' })
-      .returning({ id: users.id });
+      .returning({ id: users.id })) as Array<{ id: string }>;
+    const user = userRows[0];
+    if (!user) throw new Error('Failed to create user');
 
     const storeCode = `chk_${Date.now().toString(36)}`;
-    const [store] = await db
+    const storeRows = (await db
       .insert(stores)
       .values({ name: 'Tienda Checkin Test', code: storeCode, type: 'tiendita' })
-      .returning({ id: stores.id });
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+    const store = storeRows[0];
+    if (!store) throw new Error('Failed to create store');
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
@@ -66,21 +70,25 @@ describe('Store checkin module', () => {
 
   it('matches a checkin with a transaction', async () => {
     const phone = `+52155${(Date.now() + 1).toString().slice(-8)}`;
-    const [user] = await db
+    const userRows = (await db
       .insert(users)
       .values({ phone, name: 'Cliente Match', role: 'consumer' })
-      .returning({ id: users.id });
+      .returning({ id: users.id })) as Array<{ id: string }>;
+    const user = userRows[0];
+    if (!user) throw new Error('Failed to create user');
 
     const storeCode = `mtc_${(Date.now() + 1).toString(36)}`;
-    const [store] = await db
+    const storeRows = (await db
       .insert(stores)
       .values({ name: 'Tienda Match Test', code: storeCode, type: 'tiendita' })
-      .returning({ id: stores.id });
+      .returning({ id: stores.id })) as Array<{ id: string }>;
+    const store = storeRows[0];
+    if (!store) throw new Error('Failed to create store');
 
     const now = new Date();
     const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-    const [checkin] = await db
+    const checkinRows = (await db
       .insert(storeCheckins)
       .values({
         userId: user.id,
@@ -89,23 +97,29 @@ describe('Store checkin module', () => {
         checkedInAt: now,
         expiresAt,
       })
-      .returning({ id: storeCheckins.id });
+      .returning({ id: storeCheckins.id })) as Array<{ id: string }>;
+    const checkin = checkinRows[0];
+    if (!checkin) throw new Error('Failed to create checkin');
 
-    const [tx] = await db
+    const txRows = (await db
       .insert(transactions)
       .values({
         userId: user.id,
         storeId: store.id,
         totalAmount: 100,
       })
-      .returning({ id: transactions.id });
+      .returning({ id: transactions.id })) as Array<{ id: string }>;
+    const tx = txRows[0];
+    if (!tx) throw new Error('Failed to create transaction');
 
     await matchCheckinWithTransaction(checkin.id, tx.id);
 
-    const [matched] = await db
+    const matchedRows = (await db
       .select({ status: storeCheckins.status, matchedTransactionId: storeCheckins.matchedTransactionId })
       .from(storeCheckins)
-      .where(eq(storeCheckins.id, checkin.id));
+      .where(eq(storeCheckins.id, checkin.id))) as Array<{ status: string; matchedTransactionId: string | null }>;
+    const matched = matchedRows[0];
+    if (!matched) throw new Error('Checkin not found after match');
 
     expect(matched.status).toBe('matched');
     expect(matched.matchedTransactionId).toBe(tx.id);
