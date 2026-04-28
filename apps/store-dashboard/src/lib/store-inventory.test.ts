@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, parseInventoryQuantityCorrection, resolveInventoryRowState } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, parseInventoryCorrections, parseInventoryQuantityCorrection, resolveInventoryRowState } from "@/lib/store-inventory";
 
 test("marks row as new once required intake fields are completed", () => {
   const row = resolveInventoryRowState({
@@ -232,4 +232,48 @@ test("parses spoken quantity correction text", () => {
     query: "panque de nuez",
     quantity: 15,
   });
+});
+
+test("parses single correction with quantity and price", () => {
+  const corrections = parseInventoryCorrections("cambia el panque de nuez a 15 piezas y precio 25");
+  expect(corrections).toHaveLength(1);
+  expect(corrections[0]).toEqual({
+    query: "panque de nuez",
+    quantity: 15,
+    price: 25,
+  });
+});
+
+test("parses multiple quantity corrections in one message", () => {
+  const corrections = parseInventoryCorrections("el panque de nuez son 15 y el refresco son 20");
+  expect(corrections).toHaveLength(2);
+  expect(corrections[0]).toEqual({ query: "panque de nuez", quantity: 15 });
+  expect(corrections[1]).toEqual({ query: "refresco", quantity: 20 });
+});
+
+test("parses multiple corrections with mixed quantity and price", () => {
+  const corrections = parseInventoryCorrections(
+    "cambia el panque de nuez a 15 piezas y precio 25, y el refresco a 20 unidades"
+  );
+  expect(corrections).toHaveLength(2);
+  expect(corrections[0]).toEqual({ query: "panque de nuez", quantity: 15, price: 25 });
+  expect(corrections[1]).toEqual({ query: "refresco", quantity: 20 });
+});
+
+test("parses audio-style multi-correction with prices", () => {
+  const corrections = parseInventoryCorrections(
+    "corrige el panque de nuez son 15 piezas precio 25 pesos y el pan molido son 10 unidades precio 18"
+  );
+  expect(corrections).toHaveLength(2);
+  expect(corrections[0]).toEqual({ query: "panque de nuez", quantity: 15, price: 25 });
+  expect(corrections[1]).toEqual({ query: "pan molido", quantity: 10, price: 18 });
+});
+
+test("returns empty array when no corrections are found", () => {
+  expect(parseInventoryCorrections("hola como estas")).toHaveLength(0);
+});
+
+test("backward compat: parseInventoryQuantityCorrection still works", () => {
+  const result = parseInventoryQuantityCorrection("corrige las galletas son 30 unidades");
+  expect(result).toEqual({ query: "galletas", quantity: 30 });
 });

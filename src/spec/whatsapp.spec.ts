@@ -374,11 +374,11 @@ describe('WhatsApp module', () => {
       await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Balance', WaId: phone.slice(1) })));
       await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
 
-      const [createdUser] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone));
-      const [card] = await db.select({ id: cards.id }).from(cards).where(eq(cards.userId, createdUser?.id ?? ''));
+      const [createdUser] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, phone))) as Array<{ id: string }>;
+      const [card] = (await db.select({ id: cards.id }).from(cards).where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{ id: string }>;
 
       // Seed balance
-      await db.insert(balances).values({ cardId: card.id, current: 150, lifetime: 150 });
+      await db.insert(balances).values({ cardId: card!.id, current: 150, lifetime: 150 });
 
       const response = await app.handle(
         buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'saldo', WaId: phone.slice(1) })),
@@ -404,36 +404,36 @@ describe('WhatsApp module', () => {
       await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Actividad', WaId: phone.slice(1) })));
       await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
 
-      const [createdUser] = await db.select({ id: users.id }).from(users).where(eq(users.phone, phone));
-      const [card] = await db.select({ id: cards.id }).from(cards).where(eq(cards.userId, createdUser?.id ?? ''));
+      const [createdUser] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, phone))) as Array<{ id: string }>;
+      const [card] = (await db.select({ id: cards.id }).from(cards).where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{ id: string }>;
 
       // Seed a transaction
-      const [tx] = await db.insert(transactions).values({
-        userId: createdUser.id,
+      const [tx] = (await db.insert(transactions).values({
+        userId: createdUser!.id,
         storeId: store.id,
-        cardId: card.id,
+        cardId: card!.id,
         totalAmount: 250,
-      }).returning({ id: transactions.id });
+      }).returning({ id: transactions.id })) as Array<{ id: string }>;
 
-      const [item] = await db.insert(transactionItems).values({
-        transactionId: tx.id,
+      const [item] = (await db.insert(transactionItems).values({
+        transactionId: tx!.id,
         productId: 'prod_test',
         quantity: 1,
         amount: 250,
-      }).returning({ id: transactionItems.id });
+      }).returning({ id: transactionItems.id })) as Array<{ id: string }>;
 
       // Seed campaign for accumulation
-      const [campaign] = await db.insert(campaigns).values({
+      const [campaign] = (await db.insert(campaigns).values({
         name: 'Test Campaign',
         status: 'active',
         enrollmentMode: 'open',
         accumulationMode: 'amount',
-      }).returning({ id: campaigns.id });
+      }).returning({ id: campaigns.id })) as Array<{ id: string }>;
 
       await db.insert(accumulations).values({
-        transactionItemId: item.id,
-        cardId: card.id,
-        campaignId: campaign.id,
+        transactionItemId: item!.id,
+        cardId: card!.id,
+        campaignId: campaign!.id,
         amount: 15,
         balanceAfter: 15,
         sourceType: 'transaction_item',

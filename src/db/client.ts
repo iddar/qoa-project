@@ -18,6 +18,7 @@ type DbQuery = Promise<unknown[]> & {
   rightJoin: (...args: unknown[]) => DbQuery;
   where: (...args: unknown[]) => DbQuery;
   orderBy: (...args: unknown[]) => DbQuery;
+  groupBy: (...args: unknown[]) => DbQuery;
   limit: (value: number) => DbQuery;
   offset: (value: number) => DbQuery;
   returning: (...args: unknown[]) => Promise<unknown[]>;

@@ -1970,6 +1970,7 @@ export const storesModule = new Elysia({
 
         const storeProduct = storeProductMap.get(item.storeProductId)!;
         if (storeProduct.status !== 'active') {
+          console.warn(`[transactions] PRODUCT_INACTIVE storeId=${params.storeId} productId=${storeProduct.id} name="${storeProduct.name}"`);
           return status(409, {
             error: {
               code: 'PRODUCT_INACTIVE',
@@ -1979,6 +1980,7 @@ export const storesModule = new Elysia({
         }
 
         if (storeProduct.stock < item.quantity) {
+          console.warn(`[transactions] OUT_OF_STOCK storeId=${params.storeId} productId=${storeProduct.id} name="${storeProduct.name}" requested=${item.quantity} available=${storeProduct.stock}`);
           return status(409, {
             error: {
               code: 'OUT_OF_STOCK',
@@ -2050,6 +2052,7 @@ export const storesModule = new Elysia({
         });
       } catch (error) {
         if (error instanceof Error && error.message === 'OUT_OF_STOCK_RACE') {
+          console.warn(`[transactions] OUT_OF_STOCK_RACE storeId=${params.storeId}`);
           return status(409, {
             error: {
               code: 'OUT_OF_STOCK',
@@ -2058,6 +2061,7 @@ export const storesModule = new Elysia({
           });
         }
 
+        console.error(`[transactions] unexpected error storeId=${params.storeId}`, error);
         throw error;
       }
 

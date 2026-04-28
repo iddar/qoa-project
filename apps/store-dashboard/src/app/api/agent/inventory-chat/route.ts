@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { buildInventoryPreviewTextFromImageRows, inventoryImageExtractionSchema } from "@/lib/inventory-image-extraction";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { type AgentAction, type AgentAttachment, type AgentMessage } from "@/lib/store-pos";
-import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryQuantityCorrection, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, parseInventoryQuantityCorrection, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 const execFileAsync = promisify(execFile);
@@ -728,14 +728,51 @@ export async function POST(request: Request) {
     });
   }
 
-  const deterministicCorrection = latestUserMessage ? parseInventoryQuantityCorrection(latestUserMessage.content) : null;
-  if (deterministicCorrection) {
-    const update = await updateDraftRowByQuery(deterministicCorrection);
-    const content = update.updated
-      ? `Listo, corregí **${update.row.name}** a **${update.row.quantity} unidades** en el borrador.`
-      : update.reason === "ambiguous"
-        ? `Encontré varias filas parecidas para "${deterministicCorrection.query}". Dime cuál quieres corregir.`
-        : `No encontré una fila para "${deterministicCorrection.query}" en el borrador actual.`;
+  const applyCorrections = async (corrections: Array<{ query: string; quantity?: number; price?: number }>, sourceText?: string) => {
+    const updated: Array<{ name: string; quantity?: number; price?: number }> = [];
+    const notFound: string[] = [];
+    const ambiguous: Array<{ query: string; candidates: Array<{ rowId: string; name: string; quantity: number; score: number }> }> = [];
+
+    for (const correction of corrections) {
+      const result = await updateDraftRowByQuery(correction);
+      if (result.updated) {
+        updated.push({ name: result.row.name, quantity: correction.quantity, price: correction.price });
+      } else if (result.reason === "ambiguous") {
+        ambiguous.push({ query: correction.query, candidates: result.candidates ?? [] });
+      } else {
+        notFound.push(correction.query);
+      }
+    }
+
+    const parts: string[] = [];
+    if (updated.length > 0) {
+      const items = updated.map((u) => {
+        const qtyPart = u.quantity !== undefined ? `**${u.quantity} unidades**` : "";
+        const pricePart = u.price !== undefined ? `**$${u.price}**` : "";
+        const changes = [qtyPart, pricePart].filter(Boolean).join(" / ");
+        return `**${u.name}** → ${changes}`;
+      });
+      parts.push(`Listo, corregí:\n${items.join("\n")}`);
+    }
+    if (ambiguous.length > 0) {
+      const names = ambiguous.map((a) => `"${a.query}"`).join(", ");
+      parts.push(`Encontré varias filas parecidas para ${names}. Dime cuál quieres corregir.`);
+    }
+    if (notFound.length > 0) {
+      const names = notFound.map((q) => `"${q}"`).join(", ");
+      parts.push(`No encontré filas para ${names} en el borrador actual.`);
+    }
+
+    if (parts.length === 0) {
+      return "No entendí qué corregir. ¿Puedes repetirlo?";
+    }
+
+    return parts.join("\n\n");
+  };
+
+  const textCorrections = latestUserMessage ? parseInventoryCorrections(latestUserMessage.content) : [];
+  if (textCorrections.length > 0) {
+    const content = await applyCorrections(textCorrections);
     const renderedHtml = await renderAssistantMarkdownToHtml(content);
     return Response.json({
       message: {
@@ -755,14 +792,9 @@ export async function POST(request: Request) {
   }
 
   const audioTranscript = await transcribeLatestAudio();
-  const audioCorrection = audioTranscript ? parseInventoryQuantityCorrection(audioTranscript) : null;
-  if (audioCorrection) {
-    const update = await updateDraftRowByQuery(audioCorrection);
-    const content = update.updated
-      ? `Listo, escuché "${audioTranscript}" y corregí **${update.row.name}** a **${update.row.quantity} unidades** en el borrador.`
-      : update.reason === "ambiguous"
-        ? `Escuché "${audioTranscript}", pero encontré varias filas parecidas para "${audioCorrection.query}". Dime cuál quieres corregir.`
-        : `Escuché "${audioTranscript}", pero no encontré una fila para "${audioCorrection.query}" en el borrador actual.`;
+  const audioCorrections = audioTranscript ? parseInventoryCorrections(audioTranscript) : [];
+  if (audioCorrections.length > 0) {
+    const content = await applyCorrections(audioCorrections, audioTranscript);
     const renderedHtml = await renderAssistantMarkdownToHtml(content);
     return Response.json({
       message: {
