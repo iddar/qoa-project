@@ -20,8 +20,8 @@ export type ProcessWhatsappMessageResult = {
   storeId?: string;
 };
 
-const findUserByPhone = async (phone: string) => {
-  const [user] = await db
+const findUserByPhone = async (phone: string): Promise<{ id: string; name: string | null; role: string; status: string } | null> => {
+  const [user] = (await db
     .select({
       id: users.id,
       name: users.name,
@@ -29,12 +29,12 @@ const findUserByPhone = async (phone: string) => {
       status: users.status,
     })
     .from(users)
-    .where(eq(users.phone, phone));
+    .where(eq(users.phone, phone))) as Array<{ id: string; name: string | null; role: string; status: string }>;
   return user ?? null;
 };
 
-const getSessionByPhone = async (phone: string) => {
-  const [session] = await db
+const getSessionByPhone = async (phone: string): Promise<{ id: string; phone: string; userId: string | null; pendingStoreId: string | null; state: string; lastInboundMessageId: string | null; lastOutboundMessageId: string | null; completedAt: Date | null } | null> => {
+  const [session] = (await db
     .select({
       id: whatsappOnboardingSessions.id,
       phone: whatsappOnboardingSessions.phone,
@@ -46,7 +46,7 @@ const getSessionByPhone = async (phone: string) => {
       completedAt: whatsappOnboardingSessions.completedAt,
     })
     .from(whatsappOnboardingSessions)
-    .where(eq(whatsappOnboardingSessions.phone, phone));
+    .where(eq(whatsappOnboardingSessions.phone, phone))) as Array<{ id: string; phone: string; userId: string | null; pendingStoreId: string | null; state: string; lastInboundMessageId: string | null; lastOutboundMessageId: string | null; completedAt: Date | null }>;
   return session ?? null;
 };
 
