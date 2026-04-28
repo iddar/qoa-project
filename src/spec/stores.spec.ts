@@ -218,6 +218,7 @@ describe('Stores module', () => {
     expect(qrData.data.payload.entityType).toBe('store');
     expect(qrData.data.payload.entityId).toBe(storeId);
     expect(qrData.data.code).toBe(created.data.code);
+    expect(qrData.data.registrationUrl).toBe(`https://wa.me/14155238886?text=${created.data.code}`);
 
     await db.delete(stores).where(eq(stores.id, storeId));
     await db.delete(users).where(eq(users.id, user.id));

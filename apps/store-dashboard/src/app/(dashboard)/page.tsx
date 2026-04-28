@@ -89,10 +89,7 @@ export default function StoreHomePage() {
   const dailyLastWeek = daily.slice(-7);
   const maxTx = Math.max(...dailyLastWeek.map((item) => item.transactions), 1);
   const storeQrValue = storeQrQuery.data
-    ? JSON.stringify({
-        code: storeQrQuery.data.data.code,
-        payload: storeQrQuery.data.data.payload,
-      })
+    ? (storeQrQuery.data.data.registrationUrl ?? storeQrQuery.data.data.code)
     : "";
 
   const today = useMemo(

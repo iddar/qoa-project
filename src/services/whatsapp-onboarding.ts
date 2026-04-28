@@ -46,6 +46,7 @@ export type ProcessWhatsappOnboardingResult = {
 
 const STORE_CODE_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)+$/i;
 const STORE_SIGNUP_PATTERN = /^alta\s+([a-z0-9]+(?:[_-][a-z0-9]+)+)$/i;
+const STORE_CHECKIN_PATTERN = /(?:quiero\s+)?registrar\s+(?:mi\s+)?compra\s+(?:en\s+)?([a-z0-9]+(?:[_-][a-z0-9]+)+)/i;
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').slice(0, 100);
 
@@ -86,6 +87,11 @@ export const extractStoreCodeFromText = (value: string | null | undefined) => {
   const altaMatch = trimmed.match(STORE_SIGNUP_PATTERN);
   if (altaMatch?.[1]) {
     return altaMatch[1].toLowerCase();
+  }
+
+  const checkinMatch = trimmed.match(STORE_CHECKIN_PATTERN);
+  if (checkinMatch?.[1]) {
+    return checkinMatch[1].toLowerCase();
   }
 
   try {

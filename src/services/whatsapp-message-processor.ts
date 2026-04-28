@@ -59,6 +59,7 @@ export const processWhatsappMessage = async (
   const session = await getSessionByPhone(phone);
 
   const storeCode = extractStoreCodeFromText(input.body);
+  const intent = detectIntent(input.body ?? '');
 
   // Route to onboarding if user doesn't exist, has no session,
   // the session is not yet completed, or they sent a store code
@@ -68,15 +69,14 @@ export const processWhatsappMessage = async (
     !session ||
     session.state !== 'completed' ||
     !['consumer', 'customer'].includes(user.role) ||
-    storeCode;
+    storeCode ||
+    intent === 'onboarding';
 
   if (needsOnboarding) {
     return processWhatsappOnboardingMessage(input);
   }
 
   // User is fully onboarded — detect intent and route
-  const intent = detectIntent(input.body ?? '');
-
   switch (intent) {
     case 'balance': {
       const replyBody = await getUserBalanceSummary(phone);
