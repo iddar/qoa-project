@@ -593,7 +593,7 @@ export const createOrReplayTransaction = async (payload: {
 
   // Auto-match pending store check-in if available
   if (resolvedUserId) {
-    await autoMatchCheckinWithTransaction(resolvedUserId, payload.storeId, created.id);
+    await autoMatchCheckinWithTransaction(resolvedUserId, payload.storeId, created.id, database);
   }
 
   // Touch CPG-Store relations based on products in the transaction

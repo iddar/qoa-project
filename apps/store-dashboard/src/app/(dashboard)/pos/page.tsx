@@ -32,12 +32,42 @@ type CustomerResolveResult = {
   email?: string;
 };
 
+type StoreCheckin = {
+  id: string;
+  userId: string;
+  userName?: string;
+  userPhone?: string;
+  status: string;
+  checkedInAt: string;
+  expiresAt: string;
+  matchedTransactionId?: string;
+};
+
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("es-MX", {
     style: "currency",
     currency: "MXN",
     maximumFractionDigits: 0,
   }).format(value);
+
+const formatRelativeCheckinTime = (value: string) => {
+  const timestamp = new Date(value).getTime();
+  const diffMs = Date.now() - timestamp;
+
+  if (!Number.isFinite(timestamp) || diffMs < 60_000) {
+    return "ahora";
+  }
+
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 60) {
+    return `hace ${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  return `hace ${hours} h`;
+};
+
+const formatPhoneForDisplay = (value?: string) => value?.replace(/^\+52/, "") ?? "Sin teléfono";
 
 export default function StorePOSPage() {
   const token = getAccessToken();
@@ -76,14 +106,29 @@ export default function StorePOSPage() {
     },
   });
 
+  const checkinsQuery = useQuery({
+    queryKey: ["store-checkins", storeId, "pending"],
+    enabled: Boolean(token) && Boolean(storeId),
+    refetchInterval: 10_000,
+    queryFn: async () => {
+      const { data, error } = await api.v1.stores[storeId].checkins.get({
+        query: { status: "pending", limit: "10" },
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return (data?.data ?? []) as StoreCheckin[];
+    },
+  });
+
   const resolveCustomer = useMutation({
-    mutationFn: async () => {
-      if (!token || !storeId || !customerInput.trim()) {
+    mutationFn: async (input?: string) => {
+      const customerLookup = (input ?? customerInput).trim();
+      if (!token || !storeId || !customerLookup) {
         throw new Error("CUSTOMER_INPUT_REQUIRED");
       }
 
       const { data, error } = await api.v1.stores[storeId]["customer-resolve"].post(
-        { input: customerInput.trim() },
+        { input: customerLookup },
         { headers: { authorization: `Bearer ${token}` } },
       );
 
@@ -94,6 +139,7 @@ export default function StorePOSPage() {
     onSuccess: (customer) => {
       setCustomer(customer);
       setCustomerInput("");
+      queryClient.invalidateQueries({ queryKey: ["store-checkins", storeId, "pending"] });
     },
   });
 
@@ -129,10 +175,12 @@ export default function StorePOSPage() {
       });
       setShowCheckout(false);
       queryClient.invalidateQueries({ queryKey: ["store-sales"] });
+      queryClient.invalidateQueries({ queryKey: ["store-checkins", storeId, "pending"] });
     },
   });
 
   const catalog = searchQuery.trim().length >= 2 ? searchResultsQuery.data ?? [] : productsQuery.data ?? [];
+  const pendingCheckins = (checkinsQuery.data ?? []).filter((checkin) => checkin.userPhone && checkin.userId !== draft.customer?.userId);
   const cartTotal = getDraftTotal(draft);
   const cartItemCount = getDraftItemCount(draft);
 
@@ -189,7 +237,7 @@ export default function StorePOSPage() {
             />
             <button
               type="button"
-              onClick={() => resolveCustomer.mutate()}
+              onClick={() => resolveCustomer.mutate(undefined)}
               disabled={resolveCustomer.isPending || !customerInput.trim()}
               className="inline-flex items-center justify-center gap-2 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm font-medium text-zinc-700 transition hover:border-zinc-300 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             >
@@ -198,6 +246,42 @@ export default function StorePOSPage() {
             </button>
           </div>
         </div>
+
+        {pendingCheckins.length > 0 ? (
+          <section className="mb-4 rounded-3xl border border-sky-200 bg-sky-50/80 px-4 py-3 dark:border-sky-900/60 dark:bg-sky-950/20">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700 dark:text-sky-300">En tienda ahora</p>
+                <p className="mt-1 text-sm text-sky-900 dark:text-sky-100">Clientes que hicieron check-in recientemente.</p>
+              </div>
+              {checkinsQuery.isFetching ? <p className="text-xs text-sky-600 dark:text-sky-300">Actualizando...</p> : null}
+            </div>
+
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {pendingCheckins.map((checkin) => (
+                <div key={checkin.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-3 shadow-sm dark:bg-zinc-900">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{checkin.userName ?? formatPhoneForDisplay(checkin.userPhone)}</p>
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      {formatPhoneForDisplay(checkin.userPhone)} · {formatRelativeCheckinTime(checkin.checkedInAt)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => resolveCustomer.mutate(checkin.userPhone)}
+                    disabled={resolveCustomer.isPending || !checkin.userPhone}
+                    className="rounded-full bg-sky-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {resolveCustomer.isPending ? "Ligando..." : "Ligar"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         {draft.customer ? (
           <div className="mb-4 flex items-center justify-between rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">

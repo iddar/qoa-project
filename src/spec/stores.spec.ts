@@ -3,7 +3,7 @@ import { treaty } from '@elysiajs/eden';
 import { and, eq } from 'drizzle-orm';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { accumulations, balances, brands, campaignBalances, campaigns, cards, cpgs, inventoryMovements, products, storeProducts, stores, transactionItems, transactions, userStoreEnrollments, users, whatsappMessages } from '../db/schema';
+import { accumulations, balances, brands, campaignBalances, campaigns, cards, cpgs, inventoryMovements, products, storeCheckins, storeProducts, stores, transactionItems, transactions, userStoreEnrollments, users, whatsappMessages } from '../db/schema';
 
 process.env.AUTH_DEV_MODE = 'true';
 process.env.NODE_ENV = 'test';
@@ -376,6 +376,22 @@ describe('Stores module', () => {
     expect(resolvedByQr.data.data.userId).toBe(user.id);
     expect(resolvedByQr.data.data.cardId).toBe(card.id);
 
+    const now = new Date();
+    const [checkin] = (await db
+      .insert(storeCheckins)
+      .values({
+        userId: user.id,
+        storeId: store.id,
+        status: 'pending',
+        checkedInAt: now,
+        expiresAt: new Date(now.getTime() + 30 * 60_000),
+      })
+      .returning({ id: storeCheckins.id })) as Array<{ id: string }>;
+
+    if (!checkin) {
+      throw new Error('Failed to create POS checkin');
+    }
+
     const created = await api.v1.stores({ storeId: store.id }).transactions.post(
       {
         cardId: card.id,
@@ -412,6 +428,13 @@ describe('Stores module', () => {
     expect(storedTransaction?.userId).toBe(user.id);
     expect(storedTransaction?.cardId).toBe(card.id);
 
+    const [matchedCheckin] = (await db
+      .select({ status: storeCheckins.status, matchedTransactionId: storeCheckins.matchedTransactionId })
+      .from(storeCheckins)
+      .where(eq(storeCheckins.id, checkin.id))) as Array<{ status: string; matchedTransactionId: string | null }>;
+    expect(matchedCheckin?.status).toBe('matched');
+    expect(matchedCheckin?.matchedTransactionId).toBe(txId);
+
     const [storedItem] = (await db
       .select({ metadata: transactionItems.metadata })
       .from(transactionItems)
@@ -429,6 +452,7 @@ describe('Stores module', () => {
     await db.delete(balances).where(eq(balances.cardId, card.id));
     await db.delete(cards).where(eq(cards.id, card.id));
     await db.delete(campaigns).where(eq(campaigns.id, campaign.id));
+    await db.delete(storeCheckins).where(eq(storeCheckins.id, checkin.id));
     await db.delete(inventoryMovements).where(eq(inventoryMovements.referenceId, txId));
     await db.delete(transactionItems).where(eq(transactionItems.transactionId, txId));
     await db.delete(transactions).where(eq(transactions.id, txId));
