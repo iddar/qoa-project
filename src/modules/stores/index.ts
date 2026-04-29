@@ -1307,7 +1307,7 @@ export const storesModule = new Elysia({
       const storeProductsRows = (await db.execute(sql`
         select "id", "store_id", "product_id", "cpg_id", "name", "sku", "unit_type", "price", "stock", "status", "created_at"
         from "store_products"
-        where "store_id" = ${params.storeId} and "status" = 'active' and "name" ILIKE ${searchTerm}
+        where "store_id" = ${params.storeId} and "status" = 'active' and ("name" ILIKE ${searchTerm} or "sku" ILIKE ${searchTerm})
         order by "name"
         limit ${sql.raw(String(limit))}
       `)) as StoreProductRow[];
@@ -1317,7 +1317,7 @@ export const storesModule = new Elysia({
         from "products" p
         inner join "brands" b on p."brand_id" = b."id"
         inner join "cpgs" c on b."cpg_id" = c."id"
-        where p."status" = 'active' and p."name" ILIKE ${searchTerm}
+        where p."status" = 'active' and (p."name" ILIKE ${searchTerm} or p."sku" ILIKE ${searchTerm})
         order by p."name"
         limit ${sql.raw(String(limit))}
       `)) as Array<{

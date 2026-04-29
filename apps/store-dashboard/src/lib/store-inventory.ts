@@ -63,6 +63,21 @@ export type StoreInventoryDraft = {
   idempotencyKey: string | null;
 };
 
+export type InventoryStockAddRequest = {
+  query: string;
+  quantity: number;
+};
+
+export type InventoryProductQueryMatch =
+  | { status: "matched"; product: InventoryDraftMatchedProduct; score: number }
+  | { status: "ambiguous"; candidates: Array<{ product: InventoryDraftMatchedProduct; score: number }> }
+  | { status: "not_found" };
+
+export type InventoryStockAddDraftRowResult =
+  | { status: "matched"; row: InventoryDraftRow; score: number }
+  | { status: "ambiguous"; row: InventoryDraftRow; candidates: InventoryDraftCandidate[] }
+  | { status: "not_found"; query: string; quantity: number };
+
 const buildDraftKeySuffix = () => {
   if (typeof globalThis !== "undefined") {
     const runtimeCrypto = globalThis.crypto;
@@ -109,6 +124,52 @@ const normalizeInventorySearchText = (value: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const levenshteinDistance = (left: string, right: string) => {
+  if (left === right) {
+    return 0;
+  }
+
+  if (!left.length) {
+    return right.length;
+  }
+
+  if (!right.length) {
+    return left.length;
+  }
+
+  const matrix = Array.from({ length: left.length + 1 }, () => new Array<number>(right.length + 1).fill(0));
+  for (let row = 0; row <= left.length; row += 1) {
+    matrix[row]![0] = row;
+  }
+  for (let column = 0; column <= right.length; column += 1) {
+    matrix[0]![column] = column;
+  }
+
+  for (let row = 1; row <= left.length; row += 1) {
+    for (let column = 1; column <= right.length; column += 1) {
+      const cost = left[row - 1] === right[column - 1] ? 0 : 1;
+      matrix[row]![column] = Math.min(
+        matrix[row - 1]![column]! + 1,
+        matrix[row]![column - 1]! + 1,
+        matrix[row - 1]![column - 1]! + cost,
+      );
+    }
+  }
+
+  return matrix[left.length]![right.length]!;
+};
+
+const similarityScore = (left: string, right: string) => {
+  if (!left || !right) {
+    return 0;
+  }
+
+  const longest = Math.max(left.length, right.length);
+  return 1 - levenshteinDistance(left, right) / longest;
+};
+
+const compactInventoryText = (value: string) => normalizeInventorySearchText(value).replace(/\s+/g, "");
+
 const scoreInventoryRowMatch = (row: InventoryDraftRow, query: string) => {
   const normalizedQuery = normalizeInventorySearchText(query);
   const normalizedName = normalizeInventorySearchText(row.name);
@@ -138,6 +199,192 @@ const scoreInventoryRowMatch = (row: InventoryDraftRow, query: string) => {
   }
 
   return matchedTokens.length / queryTokens.length;
+};
+
+const scoreInventoryProductMatch = (product: InventoryDraftMatchedProduct, query: string) => {
+  const normalizedQuery = normalizeInventorySearchText(query);
+  const normalizedName = normalizeInventorySearchText(product.name);
+  const normalizedSku = normalizeInventorySearchText(product.sku ?? "");
+
+  if (!normalizedQuery || (!normalizedName && !normalizedSku)) {
+    return 0;
+  }
+
+  const compactQuery = compactInventoryText(query);
+  const compactName = compactInventoryText(product.name);
+  const compactSku = compactInventoryText(product.sku ?? "");
+
+  if (normalizedName === normalizedQuery || normalizedSku === normalizedQuery || (compactSku && compactSku === compactQuery)) {
+    return 1;
+  }
+
+  let score = similarityScore(normalizedQuery, normalizedName) * 0.82;
+
+  if (normalizedName.includes(normalizedQuery) || normalizedQuery.includes(normalizedName) || (compactName && compactQuery.includes(compactName))) {
+    score = Math.max(score, 0.9);
+  }
+
+  if (compactSku && compactQuery.length >= 4 && (compactSku.includes(compactQuery) || compactQuery.includes(compactSku))) {
+    score = Math.max(score, compactSku === compactQuery ? 1 : 0.96);
+  }
+
+  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+  const nameTokens = normalizedName.split(" ").filter(Boolean);
+  if (queryTokens.length > 0 && nameTokens.length > 0) {
+    const tokenScores = queryTokens.map((token) =>
+      nameTokens.reduce((best, candidate) => Math.max(best, similarityScore(token, candidate)), 0),
+    );
+    const tokenHits = tokenScores.filter((tokenScore) => tokenScore >= 0.72).length;
+    const averageTokenScore = tokenScores.reduce((sum, tokenScore) => sum + tokenScore, 0) / tokenScores.length;
+    const minimumTokenScore = Math.min(...tokenScores);
+
+    score = Math.max(score, averageTokenScore * 0.92);
+
+    if (tokenHits === queryTokens.length) {
+      score = Math.max(score, minimumTokenScore >= 0.9 ? 0.98 : minimumTokenScore >= 0.8 ? 0.94 : 0.9);
+    } else if (tokenHits > 0) {
+      score = Math.max(score, 0.62 + (tokenHits / queryTokens.length) * 0.18 + averageTokenScore * 0.08);
+    }
+  }
+
+  return score;
+};
+
+const numberWords = new Map<string, number>([
+  ["un", 1],
+  ["una", 1],
+  ["uno", 1],
+  ["dos", 2],
+  ["tres", 3],
+  ["cuatro", 4],
+  ["cinco", 5],
+  ["seis", 6],
+  ["siete", 7],
+  ["ocho", 8],
+  ["nueve", 9],
+  ["diez", 10],
+]);
+
+const normalizeInventoryCommandText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+const INVENTORY_ADD_VERBS = /^(?:agrega|agregar|anade|anadir|suma|sumar|carga|cargar|ingresa|ingresar|registra|registrar|mete|meter|pon|poner)\s+/i;
+const INVENTORY_CONTEXT_PREFIX = /^(?:(?:al|a la|en el|en la)\s+)?(?:inventario|existencia|existencias|stock)\s+/i;
+const INVENTORY_UNIT_WORDS = /(?:piezas?|pzas?|pz|unidades?|uds?|cajas?|bolsas?|botellas?|latas?)?/i;
+const INVENTORY_CONTEXT_SUFFIX = /\s+(?:(?:al|a la|en el|en la)\s+)?(?:inventario|existencia|existencias|stock)\s*$/i;
+
+export const extractInventoryStockAddRequest = (content: string): InventoryStockAddRequest | null => {
+  const normalized = normalizeInventoryCommandText(content);
+  if (!normalized || !INVENTORY_ADD_VERBS.test(normalized)) {
+    return null;
+  }
+
+  let remaining = normalized.replace(INVENTORY_ADD_VERBS, "").trim();
+  remaining = remaining.replace(INVENTORY_CONTEXT_PREFIX, "").trim();
+
+  const quantityPattern = new RegExp(`^(\\d+|${[...numberWords.keys()].join("|")})\\s*${INVENTORY_UNIT_WORDS.source}\\s*(?:de\\s+|del\\s+|la\\s+|el\\s+|los\\s+|las\\s+)?(.+)$`, "i");
+  const match = remaining.match(quantityPattern);
+  if (!match) {
+    return null;
+  }
+
+  const quantityToken = match[1]!.toLowerCase();
+  const quantity = Number.isNaN(Number(quantityToken)) ? (numberWords.get(quantityToken) ?? 0) : Number(quantityToken);
+  const query = match[2]!.replace(INVENTORY_CONTEXT_SUFFIX, "").trim();
+
+  if (!query || quantity <= 0) {
+    return null;
+  }
+
+  return {
+    query,
+    quantity,
+  };
+};
+
+export const rankInventoryProductsByQuery = (products: InventoryDraftMatchedProduct[], query: string) =>
+  products
+    .map((product) => ({ product, score: scoreInventoryProductMatch(product, query) }))
+    .filter((entry) => entry.score >= 0.45)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 8);
+
+export const findInventoryProductByQuery = (products: InventoryDraftMatchedProduct[], query: string): InventoryProductQueryMatch => {
+  const ranked = rankInventoryProductsByQuery(products, query);
+  const [best, second] = ranked;
+  if (!best) {
+    return { status: "not_found" };
+  }
+
+  const confidentSingleMatch = best.score >= 0.64 && (!second || best.score - second.score >= 0.08 || second.score < 0.56);
+  if (!confidentSingleMatch) {
+    return { status: "ambiguous", candidates: ranked.slice(0, 3) };
+  }
+
+  return { status: "matched", product: best.product, score: best.score };
+};
+
+export const buildInventoryStockAddDraftRow = (
+  request: InventoryStockAddRequest,
+  products: InventoryDraftMatchedProduct[],
+  options: { id: string; lineNumber: number },
+): InventoryStockAddDraftRowResult => {
+  const match = findInventoryProductByQuery(products, request.query);
+  if (match.status === "not_found") {
+    return {
+      status: "not_found",
+      query: request.query,
+      quantity: request.quantity,
+    };
+  }
+
+  if (match.status === "ambiguous") {
+    const candidates = match.candidates.map((candidate) => ({
+      storeProductId: candidate.product.id,
+      name: candidate.product.name,
+      sku: candidate.product.sku,
+      price: candidate.product.price,
+      stock: candidate.product.stock,
+      score: Number(candidate.score.toFixed(3)),
+    }));
+
+    return {
+      status: "ambiguous",
+      candidates,
+      row: resolveInventoryRowState({
+        id: options.id,
+        lineNumber: options.lineNumber,
+        rawText: `${request.quantity} ${request.query}`,
+        name: request.query,
+        quantity: request.quantity,
+        status: "ambiguous",
+        candidates,
+      }),
+    };
+  }
+
+  return {
+    status: "matched",
+    score: match.score,
+    row: resolveInventoryRowState({
+      id: options.id,
+      lineNumber: options.lineNumber,
+      rawText: `${request.quantity} ${request.query}`,
+      name: match.product.name,
+      sku: match.product.sku,
+      quantity: request.quantity,
+      price: match.product.price,
+      status: "matched",
+      action: "match_existing",
+      matchedStoreProductId: match.product.id,
+      matchedProduct: match.product,
+    }),
+  };
 };
 
 export type InventoryDraftRowQueryMatch =

@@ -583,6 +583,18 @@ describe('Stores module', () => {
     }
 
     const headers = buildStoreDevHeaders(store.id);
+    const skuSearch = await api.v1.stores({ storeId: store.id })['products-search'].get({
+      query: { q: existingProduct.sku ?? '', limit: '5' },
+      headers,
+    });
+
+    if (skuSearch.error || !skuSearch.data) {
+      throw skuSearch.error?.value ?? new Error('Store product SKU search failed');
+    }
+
+    expect(skuSearch.status).toBe(200);
+    expect(skuSearch.data.data.storeProducts.some((entry: { id: string }) => entry.id === existingProduct.id)).toBe(true);
+
     const preview = await api.v1.stores({ storeId: store.id }).inventory.intake.preview.post(
       {
         text: `2 Refresco 600ml\nGalletas Mantequilla, GAL-001, 6, 30\nSolo texto roto`,
