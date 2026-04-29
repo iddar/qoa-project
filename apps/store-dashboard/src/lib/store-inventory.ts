@@ -66,6 +66,7 @@ export type StoreInventoryDraft = {
 export type InventoryStockAddRequest = {
   query: string;
   quantity: number;
+  mode?: "single" | "all_matching";
 };
 
 export type InventoryProductQueryMatch =
@@ -137,7 +138,7 @@ const levenshteinDistance = (left: string, right: string) => {
     return left.length;
   }
 
-  const matrix = Array.from({ length: left.length + 1 }, () => new Array<number>(right.length + 1).fill(0));
+  const matrix = Array.from({ length: left.length + 1 }, () => Array.from({ length: right.length + 1 }, () => 0));
   for (let row = 0; row <= left.length; row += 1) {
     matrix[row]![0] = row;
   }
@@ -277,25 +278,31 @@ const INVENTORY_ADD_VERBS = /^(?:agrega|agregar|anade|anadir|suma|sumar|carga|ca
 const INVENTORY_CONTEXT_PREFIX = /^(?:(?:al|a la|en el|en la)\s+)?(?:inventario|existencia|existencias|stock)\s+/i;
 const INVENTORY_UNIT_WORDS = /(?:piezas?|pzas?|pz|unidades?|uds?|cajas?|bolsas?|botellas?|latas?)?/i;
 const INVENTORY_CONTEXT_SUFFIX = /\s+(?:(?:al|a la|en el|en la)\s+)?(?:inventario|existencia|existencias|stock)\s*$/i;
+const INVENTORY_ALL_MATCHING_PREFIX = /^(?:cada|todos?\s+los?|todas?\s+las?)\s+/i;
 
-export const extractInventoryStockAddRequest = (content: string): InventoryStockAddRequest | null => {
-  const normalized = normalizeInventoryCommandText(content);
-  if (!normalized || !INVENTORY_ADD_VERBS.test(normalized)) {
-    return null;
-  }
+const cleanInventoryProductQuery = (value: string) =>
+  value
+    .replace(INVENTORY_CONTEXT_SUFFIX, "")
+    .replace(INVENTORY_ALL_MATCHING_PREFIX, "")
+    .replace(/^(?:de|del|la|el|los|las)\s+/i, "")
+    .trim();
 
-  let remaining = normalized.replace(INVENTORY_ADD_VERBS, "").trim();
-  remaining = remaining.replace(INVENTORY_CONTEXT_PREFIX, "").trim();
+const parseInventoryQuantityToken = (value: string) => {
+  const quantityToken = value.toLowerCase();
+  return Number.isNaN(Number(quantityToken)) ? (numberWords.get(quantityToken) ?? 0) : Number(quantityToken);
+};
 
+const parseInventoryStockAddSegment = (segment: string): InventoryStockAddRequest | null => {
   const quantityPattern = new RegExp(`^(\\d+|${[...numberWords.keys()].join("|")})\\s*${INVENTORY_UNIT_WORDS.source}\\s*(?:de\\s+|del\\s+|la\\s+|el\\s+|los\\s+|las\\s+)?(.+)$`, "i");
-  const match = remaining.match(quantityPattern);
+  const match = segment.trim().match(quantityPattern);
   if (!match) {
     return null;
   }
 
-  const quantityToken = match[1]!.toLowerCase();
-  const quantity = Number.isNaN(Number(quantityToken)) ? (numberWords.get(quantityToken) ?? 0) : Number(quantityToken);
-  const query = match[2]!.replace(INVENTORY_CONTEXT_SUFFIX, "").trim();
+  const quantity = parseInventoryQuantityToken(match[1]!);
+  const rawQuery = match[2]!.trim();
+  const mode = INVENTORY_ALL_MATCHING_PREFIX.test(rawQuery) ? "all_matching" : "single";
+  const query = cleanInventoryProductQuery(rawQuery);
 
   if (!query || quantity <= 0) {
     return null;
@@ -304,7 +311,46 @@ export const extractInventoryStockAddRequest = (content: string): InventoryStock
   return {
     query,
     quantity,
+    ...(mode === "all_matching" ? { mode } : {}),
   };
+};
+
+export const extractInventoryStockAddRequests = (content: string): InventoryStockAddRequest[] => {
+  const normalized = normalizeInventoryCommandText(content);
+  if (!normalized || !INVENTORY_ADD_VERBS.test(normalized)) {
+    return [];
+  }
+
+  let remaining = normalized.replace(INVENTORY_ADD_VERBS, "").trim();
+  remaining = remaining.replace(INVENTORY_CONTEXT_PREFIX, "").trim();
+
+  const firstRequest = parseInventoryStockAddSegment(remaining);
+  if (!firstRequest) {
+    return [];
+  }
+
+  const segmentPattern = new RegExp(`(?:^|\\s+(?:y|,|;|ademas|tambien)\\s+)(\\d+|${[...numberWords.keys()].join("|")})\\s*${INVENTORY_UNIT_WORDS.source}\\s*(?:de\\s+|del\\s+|la\\s+|el\\s+|los\\s+|las\\s+)?(.+?)(?=\\s+(?:y|,|;|ademas|tambien)\\s+(?:\\d+|${[...numberWords.keys()].join("|")})\\s*${INVENTORY_UNIT_WORDS.source}\\s*(?:de\\s+|del\\s+|la\\s+|el\\s+|los\\s+|las\\s+)?|$)`, "gi");
+  const requests: InventoryStockAddRequest[] = [];
+
+  for (const match of remaining.matchAll(segmentPattern)) {
+    const quantity = parseInventoryQuantityToken(match[1]!);
+    const rawQuery = match[2]!.trim();
+    const mode = INVENTORY_ALL_MATCHING_PREFIX.test(rawQuery) ? "all_matching" : "single";
+    const query = cleanInventoryProductQuery(rawQuery);
+    if (query && quantity > 0) {
+      requests.push({
+        query,
+        quantity,
+        ...(mode === "all_matching" ? { mode } : {}),
+      });
+    }
+  }
+
+  return requests.length > 0 ? requests : [firstRequest];
+};
+
+export const extractInventoryStockAddRequest = (content: string): InventoryStockAddRequest | null => {
+  return extractInventoryStockAddRequests(content)[0] ?? null;
 };
 
 export const rankInventoryProductsByQuery = (products: InventoryDraftMatchedProduct[], query: string) =>
@@ -587,6 +633,71 @@ export const getInventoryDraftSummary = (draft: StoreInventoryDraft) => ({
   ambiguous: draft.rows.filter((row) => row.status === 'ambiguous').length,
   invalid: draft.rows.filter((row) => row.status === 'invalid').length,
 });
+
+export const formatInventoryCount = (count: number, singular: string, plural: string) => `${count} ${count === 1 ? singular : plural}`;
+
+export const buildInventoryDraftSummaryText = (draft: StoreInventoryDraft) => {
+  const summary = getInventoryDraftSummary(draft);
+  if (summary.rows === 0) {
+    return "El borrador de inventario está vacío.";
+  }
+
+  const rowLines = draft.rows.map((row) => {
+    const state = row.status === "matched"
+      ? "existente"
+      : row.status === "new"
+        ? "nuevo"
+        : row.status === "ambiguous"
+          ? "pendiente"
+          : "inválido";
+    const sku = row.sku ? `, SKU ${row.sku}` : "";
+    const price = row.price !== undefined ? `, precio $${row.price}` : "";
+    return `- Línea ${row.lineNumber}: ${row.quantity} x ${row.name}${sku}${price} (${state})`;
+  });
+
+  return [
+    `Resumen: ${formatInventoryCount(summary.rows, "fila", "filas")}, ${formatInventoryCount(summary.quantity, "pieza", "piezas")}, ${formatInventoryCount(summary.ambiguous + summary.invalid, "pendiente", "pendientes")}.`,
+    ...rowLines,
+  ].join("\n");
+};
+
+export const buildInventoryAgentActions = (draft: StoreInventoryDraft) => {
+  const firstPending = draft.rows.find((row) => row.status === "ambiguous" && row.candidates && row.candidates.length > 0);
+  if (firstPending?.candidates?.length) {
+    return firstPending.candidates.slice(0, 4).map((candidate) => ({
+      id: `inventory-choice-${firstPending.id}-${candidate.storeProductId}`,
+      label: candidate.name,
+      prompt: `Selecciona el producto existente para la fila de inventario. rowId=${firstPending.id} storeProductId=${candidate.storeProductId}`,
+      variant: "secondary" as const,
+    }));
+  }
+
+  const actions = [];
+  if (canConfirmInventoryDraft(draft)) {
+    actions.push({
+      id: "inventory-confirm",
+      label: "Confirmar entrada",
+      prompt: "Confirma la entrada de inventario actual.",
+      variant: "primary" as const,
+    });
+  }
+  if (draft.rows.length > 0) {
+    actions.push({
+      id: "inventory-summary",
+      label: "Resumen",
+      prompt: "Dame un resumen del borrador de inventario actual.",
+      variant: "secondary" as const,
+    });
+    actions.push({
+      id: "inventory-clear",
+      label: "Vaciar borrador",
+      prompt: "Vacía el borrador de inventario actual.",
+      variant: "danger" as const,
+    });
+  }
+
+  return actions;
+};
 
 export const canConfirmInventoryDraft = (draft: StoreInventoryDraft) =>
   draft.rows.length > 0 && draft.rows.every((row) => {

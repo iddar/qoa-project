@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { appendInventoryDraftRows, applyInventoryDraftRowPatch, buildInventoryStockAddDraftRow, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, extractInventoryStockAddRequest, findInventoryDraftRowByQuery, findInventoryProductByQuery, parseInventoryCorrections, parseInventoryQuantityCorrection, resolveInventoryRowState, type InventoryDraftMatchedProduct } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, buildInventoryAgentActions, buildInventoryDraftSummaryText, buildInventoryStockAddDraftRow, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, extractInventoryStockAddRequest, extractInventoryStockAddRequests, findInventoryDraftRowByQuery, findInventoryProductByQuery, parseInventoryCorrections, parseInventoryQuantityCorrection, resolveInventoryRowState, type InventoryDraftMatchedProduct } from "@/lib/store-inventory";
 
 const product = (overrides: Partial<InventoryDraftMatchedProduct> & Pick<InventoryDraftMatchedProduct, "id" | "name">): InventoryDraftMatchedProduct => ({
   storeId: "store-1",
@@ -142,6 +142,19 @@ test("extracts inventory stock add requests from direct commands", () => {
     query: "refresco de lima",
     quantity: 10,
   });
+});
+
+test("extracts multiple stock add requests from one command", () => {
+  expect(extractInventoryStockAddRequests("agrega 10 pza del QOA-COLA-600-STAGING y 20 de Papas Chile y Limon")).toEqual([
+    { query: "qoa-cola-600-staging", quantity: 10 },
+    { query: "papas chile y limon", quantity: 20 },
+  ]);
+});
+
+test("marks all-matching inventory add requests", () => {
+  expect(extractInventoryStockAddRequests("agrega 10 de cada refresco")).toEqual([
+    { query: "refresco", quantity: 10, mode: "all_matching" },
+  ]);
 });
 
 test("finds inventory products by exact or partial SKU", () => {
@@ -312,6 +325,48 @@ test("reports ambiguous inventory row matches", () => {
   const match = findInventoryDraftRowByQuery(rows, "panque");
 
   expect(match.status).toBe("ambiguous");
+});
+
+test("builds inventory agent actions for ambiguous candidate selection", () => {
+  const draft = createEmptyInventoryDraft();
+  const row = resolveInventoryRowState({
+    id: "row-refresco",
+    lineNumber: 1,
+    rawText: "10 refresco",
+    name: "refresco",
+    quantity: 10,
+    status: "ambiguous",
+    candidates: [
+      { storeProductId: "sp-cola", name: "Refresco Cola", price: 18, stock: 0, score: 0.9 },
+      { storeProductId: "sp-naranja", name: "Refresco Naranja", price: 18, stock: 0, score: 0.88 },
+    ],
+  });
+
+  const actions = buildInventoryAgentActions({ ...draft, rows: [row] });
+  expect(actions.map((action) => action.label)).toEqual(["Refresco Cola", "Refresco Naranja"]);
+  expect(actions[0]?.prompt).toContain("rowId=row-refresco");
+  expect(actions[0]?.prompt).toContain("storeProductId=sp-cola");
+});
+
+test("builds inventory draft summary text with counts and row details", () => {
+  const row = resolveInventoryRowState({
+    id: "row-cola",
+    lineNumber: 1,
+    rawText: "10 cola",
+    name: "Refresco Cola",
+    sku: "QOA-COLA",
+    quantity: 10,
+    price: 18,
+    status: "matched",
+    action: "match_existing",
+    matchedStoreProductId: "sp-cola",
+  });
+
+  const summary = buildInventoryDraftSummaryText({ ...createEmptyInventoryDraft(), rows: [row] });
+  expect(summary).toContain("1 fila");
+  expect(summary).toContain("10 piezas");
+  expect(summary).toContain("Refresco Cola");
+  expect(summary).toContain("SKU QOA-COLA");
 });
 
 test("parses spoken quantity correction text", () => {
