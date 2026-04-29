@@ -266,8 +266,10 @@ export default function StoresPage() {
               <ReactQRCode
                 value={qrModal.registrationUrl ?? qrModal.code}
                 size={320}
-                bgColor="#FFFFFF"
-                fgColor="#111111"
+                background="#FFFFFF"
+                dataModulesSettings={{ color: "#111111" }}
+                finderPatternOuterSettings={{ color: "#111111" }}
+                finderPatternInnerSettings={{ color: "#111111" }}
               />
             </div>
 

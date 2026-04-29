@@ -17,7 +17,20 @@ const makeRow = (name: string, quantity: number, price?: number): InventoryDraft
     matchedStoreProductId: "sp-test",
   });
 
-const TEST_CASES = [
+type ExpectedDraftCorrection = {
+  rowName: string;
+  quantity?: number;
+  price?: number;
+};
+
+type DraftCorrectionTestCase = {
+  name: string;
+  draft: InventoryDraftRow[];
+  input: string;
+  expected: ExpectedDraftCorrection[];
+};
+
+const TEST_CASES: DraftCorrectionTestCase[] = [
   {
     name: "single quantity",
     draft: [makeRow("Panque Nuez", 10, 20)],
@@ -61,7 +74,7 @@ const TEST_CASES = [
 
 const scoreResult = (
   actual: Array<{ rowId?: string; quantity?: number; price?: number; productQuery?: string }>,
-  expected: Array<{ rowName: string; quantity?: number; price?: number }>,
+  expected: ExpectedDraftCorrection[],
   draft: InventoryDraftRow[],
 ) => {
   let score = 0;

@@ -2,7 +2,16 @@ export type WhatsappIntent = 'onboarding' | 'balance' | 'activity' | 'qr' | 'hel
 
 const INTENT_KEYWORDS: Record<WhatsappIntent, string[]> = {
   balance: ['saldo', 'balance', 'puntos', 'cuanto tengo', 'cuántos puntos', 'mis puntos'],
-  activity: ['actividad', 'movimientos', 'compras', 'historial', 'transacciones', 'mis compras', 'ultimas compras', 'últimas compras'],
+  activity: [
+    'actividad',
+    'movimientos',
+    'compras',
+    'historial',
+    'transacciones',
+    'mis compras',
+    'ultimas compras',
+    'últimas compras',
+  ],
   qr: ['qr', 'tarjeta', 'código', 'codigo', 'mi qr', 'mi tarjeta', 'codigo qr'],
   help: ['ayuda', 'help', 'menu', 'menú', 'hola', 'info', 'comandos', 'opciones'],
   onboarding: ['alta', 'registro', 'registrarme'],

@@ -1,52 +1,45 @@
-import { t } from "elysia";
-import { paginationSchema } from "../common/model";
+import { t } from 'elysia';
+import { paginationSchema } from '../common/model';
 
 export const campaignStatusSchema = t.Union([
-  t.Literal("draft"),
-  t.Literal("ready_for_review"),
-  t.Literal("in_review"),
-  t.Literal("rejected"),
-  t.Literal("confirmed"),
-  t.Literal("active"),
-  t.Literal("paused"),
-  t.Literal("ended"),
+  t.Literal('draft'),
+  t.Literal('ready_for_review'),
+  t.Literal('in_review'),
+  t.Literal('rejected'),
+  t.Literal('confirmed'),
+  t.Literal('active'),
+  t.Literal('paused'),
+  t.Literal('ended'),
 ]);
 
 export const campaignEnrollmentModeSchema = t.Union([
-  t.Literal("open"),
-  t.Literal("opt_in"),
-  t.Literal("system_universal"),
+  t.Literal('open'),
+  t.Literal('opt_in'),
+  t.Literal('system_universal'),
 ]);
-export const campaignStoreAccessModeSchema = t.Union([
-  t.Literal("all_related_stores"),
-  t.Literal("selected_stores"),
-]);
+export const campaignStoreAccessModeSchema = t.Union([t.Literal('all_related_stores'), t.Literal('selected_stores')]);
 export const campaignStoreEnrollmentModeSchema = t.Union([
-  t.Literal("store_opt_in"),
-  t.Literal("cpg_managed"),
-  t.Literal("auto_enroll"),
+  t.Literal('store_opt_in'),
+  t.Literal('cpg_managed'),
+  t.Literal('auto_enroll'),
 ]);
 export const campaignStoreEnrollmentStatusSchema = t.Union([
-  t.Literal("visible"),
-  t.Literal("invited"),
-  t.Literal("enrolled"),
-  t.Literal("declined"),
-  t.Literal("removed"),
-  t.Literal("suspended"),
+  t.Literal('visible'),
+  t.Literal('invited'),
+  t.Literal('enrolled'),
+  t.Literal('declined'),
+  t.Literal('removed'),
+  t.Literal('suspended'),
 ]);
-export const campaignAccumulationModeSchema = t.Union([t.Literal("count"), t.Literal("amount")]);
+export const campaignAccumulationModeSchema = t.Union([t.Literal('count'), t.Literal('amount')]);
 
-export const tierWindowUnitSchema = t.Union([
-  t.Literal("day"),
-  t.Literal("month"),
-  t.Literal("year"),
-]);
-export const tierQualificationModeSchema = t.Union([t.Literal("any"), t.Literal("all")]);
+export const tierWindowUnitSchema = t.Union([t.Literal('day'), t.Literal('month'), t.Literal('year')]);
+export const tierQualificationModeSchema = t.Union([t.Literal('any'), t.Literal('all')]);
 export const tierBenefitTypeSchema = t.Union([
-  t.Literal("discount"),
-  t.Literal("reward"),
-  t.Literal("multiplier"),
-  t.Literal("free_product"),
+  t.Literal('discount'),
+  t.Literal('reward'),
+  t.Literal('multiplier'),
+  t.Literal('free_product'),
 ]);
 
 export const tierBenefitSchema = t.Object({
@@ -94,30 +87,30 @@ export const campaignSchema = t.Object({
   isExpired: t.Optional(t.Boolean()),
   storeEnrollmentStatus: t.Optional(
     t.Union([
-      t.Literal("visible"),
-      t.Literal("invited"),
-      t.Literal("enrolled"),
-      t.Literal("declined"),
-      t.Literal("removed"),
-      t.Literal("suspended"),
+      t.Literal('visible'),
+      t.Literal('invited'),
+      t.Literal('enrolled'),
+      t.Literal('declined'),
+      t.Literal('removed'),
+      t.Literal('suspended'),
     ]),
   ),
   policySummaries: t.Optional(
     t.Array(
       t.Object({
         policyType: t.Union([
-          t.Literal("max_accumulations"),
-          t.Literal("min_amount"),
-          t.Literal("min_quantity"),
-          t.Literal("cooldown"),
+          t.Literal('max_accumulations'),
+          t.Literal('min_amount'),
+          t.Literal('min_quantity'),
+          t.Literal('cooldown'),
         ]),
-        scopeType: t.Union([t.Literal("campaign"), t.Literal("brand"), t.Literal("product")]),
+        scopeType: t.Union([t.Literal('campaign'), t.Literal('brand'), t.Literal('product')]),
         period: t.Union([
-          t.Literal("transaction"),
-          t.Literal("day"),
-          t.Literal("week"),
-          t.Literal("month"),
-          t.Literal("lifetime"),
+          t.Literal('transaction'),
+          t.Literal('day'),
+          t.Literal('week'),
+          t.Literal('month'),
+          t.Literal('lifetime'),
         ]),
         value: t.Number(),
         label: t.String(),
@@ -138,30 +131,26 @@ export const campaignAuditLogSchema = t.Object({
 });
 
 export const campaignPolicyTypeSchema = t.Union([
-  t.Literal("max_accumulations"),
-  t.Literal("min_amount"),
-  t.Literal("min_quantity"),
-  t.Literal("cooldown"),
+  t.Literal('max_accumulations'),
+  t.Literal('min_amount'),
+  t.Literal('min_quantity'),
+  t.Literal('cooldown'),
 ]);
 
-export const campaignPolicyScopeTypeSchema = t.Union([
-  t.Literal("campaign"),
-  t.Literal("brand"),
-  t.Literal("product"),
-]);
+export const campaignPolicyScopeTypeSchema = t.Union([t.Literal('campaign'), t.Literal('brand'), t.Literal('product')]);
 
 export const campaignPolicyPeriodSchema = t.Union([
-  t.Literal("transaction"),
-  t.Literal("day"),
-  t.Literal("week"),
-  t.Literal("month"),
-  t.Literal("lifetime"),
+  t.Literal('transaction'),
+  t.Literal('day'),
+  t.Literal('week'),
+  t.Literal('month'),
+  t.Literal('lifetime'),
 ]);
 
 export const campaignAccumulationRuleScopeTypeSchema = t.Union([
-  t.Literal("campaign"),
-  t.Literal("brand"),
-  t.Literal("product"),
+  t.Literal('campaign'),
+  t.Literal('brand'),
+  t.Literal('product'),
 ]);
 
 export const campaignAccumulationRuleSchema = t.Object({
@@ -195,7 +184,7 @@ export const campaignCreateRequest = t.Object({
   name: t.String({ minLength: 3, maxLength: 160 }),
   description: t.Optional(t.String()),
   key: t.Optional(t.String({ minLength: 3, maxLength: 80 })),
-  cpgId: t.Optional(t.String({ format: "uuid" })),
+  cpgId: t.Optional(t.String({ format: 'uuid' })),
   enrollmentMode: t.Optional(campaignEnrollmentModeSchema),
   storeAccessMode: t.Optional(campaignStoreAccessModeSchema),
   storeEnrollmentMode: t.Optional(campaignStoreEnrollmentModeSchema),
@@ -217,7 +206,7 @@ export const campaignUpdateRequest = t.Object({
 
 export const campaignListQuery = t.Object({
   status: t.Optional(campaignStatusSchema),
-  cpgId: t.Optional(t.String({ format: "uuid" })),
+  cpgId: t.Optional(t.String({ format: 'uuid' })),
   enrollmentMode: t.Optional(campaignEnrollmentModeSchema),
   limit: t.Optional(t.String()),
   cursor: t.Optional(t.String()),
@@ -244,18 +233,18 @@ export const campaignSubscriptionSchema = t.Object({
     t.Array(
       t.Object({
         policyType: t.Union([
-          t.Literal("max_accumulations"),
-          t.Literal("min_amount"),
-          t.Literal("min_quantity"),
-          t.Literal("cooldown"),
+          t.Literal('max_accumulations'),
+          t.Literal('min_amount'),
+          t.Literal('min_quantity'),
+          t.Literal('cooldown'),
         ]),
-        scopeType: t.Union([t.Literal("campaign"), t.Literal("brand"), t.Literal("product")]),
+        scopeType: t.Union([t.Literal('campaign'), t.Literal('brand'), t.Literal('product')]),
         period: t.Union([
-          t.Literal("transaction"),
-          t.Literal("day"),
-          t.Literal("week"),
-          t.Literal("month"),
-          t.Literal("lifetime"),
+          t.Literal('transaction'),
+          t.Literal('day'),
+          t.Literal('week'),
+          t.Literal('month'),
+          t.Literal('lifetime'),
         ]),
         value: t.Number(),
         label: t.String(),
@@ -286,7 +275,7 @@ export const campaignNoteRequest = t.Object({
 export const campaignPolicyCreateRequest = t.Object({
   policyType: campaignPolicyTypeSchema,
   scopeType: campaignPolicyScopeTypeSchema,
-  scopeId: t.Optional(t.String({ format: "uuid" })),
+  scopeId: t.Optional(t.String({ format: 'uuid' })),
   period: campaignPolicyPeriodSchema,
   value: t.Number({ minimum: 1 }),
   config: t.Optional(t.String()),
@@ -296,7 +285,7 @@ export const campaignPolicyCreateRequest = t.Object({
 export const campaignPolicyUpdateRequest = t.Object({
   policyType: t.Optional(campaignPolicyTypeSchema),
   scopeType: t.Optional(campaignPolicyScopeTypeSchema),
-  scopeId: t.Optional(t.String({ format: "uuid" })),
+  scopeId: t.Optional(t.String({ format: 'uuid' })),
   period: t.Optional(campaignPolicyPeriodSchema),
   value: t.Optional(t.Number({ minimum: 1 })),
   config: t.Optional(t.String()),
@@ -345,7 +334,7 @@ export const campaignTierUpdateRequest = t.Object({
 
 export const campaignAccumulationRuleCreateRequest = t.Object({
   scopeType: campaignAccumulationRuleScopeTypeSchema,
-  scopeId: t.Optional(t.String({ format: "uuid" })),
+  scopeId: t.Optional(t.String({ format: 'uuid' })),
   multiplier: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
   flatBonus: t.Optional(t.Number({ minimum: 0, maximum: 1000000 })),
   priority: t.Optional(t.Number({ minimum: 1, maximum: 1000 })),
@@ -354,7 +343,7 @@ export const campaignAccumulationRuleCreateRequest = t.Object({
 
 export const campaignAccumulationRuleUpdateRequest = t.Object({
   scopeType: t.Optional(campaignAccumulationRuleScopeTypeSchema),
-  scopeId: t.Optional(t.String({ format: "uuid" })),
+  scopeId: t.Optional(t.String({ format: 'uuid' })),
   multiplier: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
   flatBonus: t.Optional(t.Number({ minimum: 0, maximum: 1000000 })),
   priority: t.Optional(t.Number({ minimum: 1, maximum: 1000 })),
@@ -401,9 +390,9 @@ export const campaignAccumulationRuleListResponse = t.Object({
 
 // Store targeting / enrollment schemas
 export const campaignStoreTargetRequest = t.Object({
-  storeIds: t.Array(t.String({ format: "uuid" })),
+  storeIds: t.Array(t.String({ format: 'uuid' })),
   status: t.Optional(campaignStoreEnrollmentStatusSchema),
-  source: t.Optional(t.Union([t.Literal("manual"), t.Literal("zone"), t.Literal("import")])),
+  source: t.Optional(t.Union([t.Literal('manual'), t.Literal('zone'), t.Literal('import')])),
 });
 
 export const campaignStoreEnrollRequest = t.Object({

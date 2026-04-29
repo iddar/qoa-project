@@ -127,7 +127,8 @@ test.describe.serial("Full platform flow", () => {
     await page.getByLabel("Contraseña").fill(consumerPassword);
     await page.getByRole("button", { name: "Crear cuenta" }).click();
 
-    await expect(page.getByText("Tu QR de lealtad")).toBeVisible();
+    await expect(page.getByText("Tarjeta de lealtad")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Ver tarjeta" })).toBeVisible();
 
     await page.goto(`${env.walletUrl}/campaigns`);
     const card = page.locator("article", { hasText: campaignName }).first();

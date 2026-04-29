@@ -23,12 +23,30 @@ export const findStoreByName = async (request: APIRequestContext, token: string,
 };
 
 export const findStoreByCode = async (request: APIRequestContext, token: string, code: string) => {
-  const response = await request.get(`${env.apiUrl}/v1/stores?limit=200`, {
-    headers: authHeaders(token),
-  });
-  expect(response.ok()).toBeTruthy();
-  const body = (await response.json()) as { data: Entity[] };
-  return body.data.find((entry) => entry.code === code);
+  let cursor: string | undefined;
+
+  for (let page = 0; page < 10; page += 1) {
+    const params = new URLSearchParams({ limit: "100" });
+    if (cursor) {
+      params.set("cursor", cursor);
+    }
+
+    const response = await request.get(`${env.apiUrl}/v1/stores?${params.toString()}`, {
+      headers: authHeaders(token),
+    });
+    expect(response.ok()).toBeTruthy();
+    const body = (await response.json()) as {
+      data: Entity[];
+      pagination?: { hasMore?: boolean; nextCursor?: string };
+    };
+    const found = body.data.find((entry) => entry.code === code);
+    if (found || !body.pagination?.hasMore || !body.pagination.nextCursor) {
+      return found;
+    }
+    cursor = body.pagination.nextCursor;
+  }
+
+  return undefined;
 };
 
 export const findProductBySku = async (request: APIRequestContext, token: string, sku: string) => {

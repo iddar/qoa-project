@@ -10,7 +10,12 @@ export const STORE_PARTICIPATING_STATUSES = ['enrolled'] as const;
 
 export const isStoreVisibleForCampaign = async (payload: { campaignId: string; storeId: string }) => {
   const [campaign] = (await db
-    .select({ id: campaigns.id, cpgId: campaigns.cpgId, status: campaigns.status, storeAccessMode: campaigns.storeAccessMode })
+    .select({
+      id: campaigns.id,
+      cpgId: campaigns.cpgId,
+      status: campaigns.status,
+      storeAccessMode: campaigns.storeAccessMode,
+    })
     .from(campaigns)
     .where(eq(campaigns.id, payload.campaignId))
     .limit(1)) as Array<{

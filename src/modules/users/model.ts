@@ -1,6 +1,6 @@
-import { t } from "elysia";
+import { t } from 'elysia';
 
-const tenantTypeSchema = t.Union([t.Literal("cpg"), t.Literal("store")]);
+const tenantTypeSchema = t.Union([t.Literal('cpg'), t.Literal('store')]);
 
 export const userMeResponse = t.Object({
   data: t.Object({
@@ -26,27 +26,27 @@ export const userWalletResponse = t.Object({
       currentTierId: t.Optional(t.String()),
       tierGraceUntil: t.Optional(t.String()),
       tierLastEvaluatedAt: t.Optional(t.String()),
-      tierState: t.Union([t.Literal("unqualified"), t.Literal("qualified"), t.Literal("at_risk")]),
+      tierState: t.Union([t.Literal('unqualified'), t.Literal('qualified'), t.Literal('at_risk')]),
       currentTier: t.Optional(
         t.Object({
           id: t.String(),
           name: t.String(),
           order: t.Number(),
           thresholdValue: t.Number(),
-          windowUnit: t.Union([t.Literal("day"), t.Literal("month"), t.Literal("year")]),
+          windowUnit: t.Union([t.Literal('day'), t.Literal('month'), t.Literal('year')]),
           windowValue: t.Number(),
           minPurchaseCount: t.Optional(t.Number()),
           minPurchaseAmount: t.Optional(t.Number()),
-          qualificationMode: t.Union([t.Literal("any"), t.Literal("all")]),
+          qualificationMode: t.Union([t.Literal('any'), t.Literal('all')]),
           graceDays: t.Number(),
           benefits: t.Array(
             t.Object({
               id: t.String(),
               type: t.Union([
-                t.Literal("discount"),
-                t.Literal("reward"),
-                t.Literal("multiplier"),
-                t.Literal("free_product"),
+                t.Literal('discount'),
+                t.Literal('reward'),
+                t.Literal('multiplier'),
+                t.Literal('free_product'),
               ]),
               config: t.Optional(t.String()),
             }),
@@ -64,11 +64,7 @@ export const userWalletResponse = t.Object({
       t.Object({
         campaignId: t.String(),
         campaignName: t.String(),
-        enrollmentMode: t.Union([
-          t.Literal("open"),
-          t.Literal("opt_in"),
-          t.Literal("system_universal"),
-        ]),
+        enrollmentMode: t.Union([t.Literal('open'), t.Literal('opt_in'), t.Literal('system_universal')]),
         subscriptionStatus: t.Optional(t.String()),
         current: t.Number(),
         lifetime: t.Number(),
@@ -99,7 +95,7 @@ export const userWalletResponse = t.Object({
 
 export const userMeUpdateRequest = t.Object({
   name: t.Optional(t.String()),
-  email: t.Optional(t.String({ format: "email" })),
+  email: t.Optional(t.String({ format: 'email' })),
 });
 
 export const userListQuery = t.Object({
@@ -107,16 +103,16 @@ export const userListQuery = t.Object({
   offset: t.Optional(t.Integer({ minimum: 0 })),
   role: t.Optional(
     t.Union([
-      t.Literal("consumer"),
-      t.Literal("customer"),
-      t.Literal("store_staff"),
-      t.Literal("store_admin"),
-      t.Literal("cpg_admin"),
-      t.Literal("qoa_support"),
-      t.Literal("qoa_admin"),
+      t.Literal('consumer'),
+      t.Literal('customer'),
+      t.Literal('store_staff'),
+      t.Literal('store_admin'),
+      t.Literal('cpg_admin'),
+      t.Literal('qoa_support'),
+      t.Literal('qoa_admin'),
     ]),
   ),
-  status: t.Optional(t.Union([t.Literal("active"), t.Literal("suspended")])),
+  status: t.Optional(t.Union([t.Literal('active'), t.Literal('suspended')])),
 });
 
 export const userListResponse = t.Object({
@@ -142,19 +138,19 @@ export const userListResponse = t.Object({
 
 export const adminCreateUserRequest = t.Object({
   phone: t.String({ minLength: 7 }),
-  email: t.Optional(t.String({ format: "email" })),
+  email: t.Optional(t.String({ format: 'email' })),
   name: t.Optional(t.String()),
   role: t.Union([
-    t.Literal("consumer"),
-    t.Literal("customer"),
-    t.Literal("store_staff"),
-    t.Literal("store_admin"),
-    t.Literal("cpg_admin"),
-    t.Literal("qoa_support"),
-    t.Literal("qoa_admin"),
+    t.Literal('consumer'),
+    t.Literal('customer'),
+    t.Literal('store_staff'),
+    t.Literal('store_admin'),
+    t.Literal('cpg_admin'),
+    t.Literal('qoa_support'),
+    t.Literal('qoa_admin'),
   ]),
   password: t.Optional(t.String({ minLength: 8 })),
-  tenantId: t.Optional(t.String({ format: "uuid" })),
+  tenantId: t.Optional(t.String({ format: 'uuid' })),
   tenantType: t.Optional(tenantTypeSchema),
 });
 

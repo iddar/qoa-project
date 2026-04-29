@@ -1,13 +1,4 @@
-import {
-  index,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  uniqueIndex,
-  uuid,
-  varchar,
-} from 'drizzle-orm/pg-core';
+import { index, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { decimal } from 'drizzle-orm/pg-core/columns/numeric';
 import { sql } from 'drizzle-orm';
 

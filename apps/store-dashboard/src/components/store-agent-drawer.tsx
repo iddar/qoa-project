@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { ArrowDown, AudioLines, Bot, Camera, LoaderCircle, MessageSquarePlus, Mic, Paperclip, QrCode, ScanLine, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
@@ -370,7 +371,7 @@ export function StoreAgentDrawer() {
     [draft, inventoryDraft, isInventoryMode],
   );
 
-  const sendMessage = async (content: string, outgoingAttachments: AgentAttachment[] = attachments) => {
+  const sendMessage = useCallback(async (content: string, outgoingAttachments: AgentAttachment[] = attachments) => {
     const trimmed = content.trim();
     if ((!trimmed && outgoingAttachments.length === 0) || !token) {
       return;
@@ -459,7 +460,7 @@ export function StoreAgentDrawer() {
     } finally {
       setPending(false);
     }
-  };
+  }, [attachments, draft, inventoryDraft, isInventoryMode, messages, replaceDraft, replaceInventoryDraft, token]);
 
   const removeAttachment = (attachmentId: string) => {
     setAttachments((current) => {
@@ -524,20 +525,22 @@ export function StoreAgentDrawer() {
 
     let isActive = true;
     let hasResolved = false;
+    let scannerVideoElement: HTMLVideoElement | null = null;
+    const scannerContainerElement = qrScannerContainerRef.current;
 
     logLiveQrDebug("effect-open", {
       regionId: qrScannerRegionIdRef.current,
       secureContext: window.isSecureContext,
       href: window.location.href,
       userAgent: navigator.userAgent,
-      regionExists: Boolean(qrScannerContainerRef.current),
+      regionExists: Boolean(scannerContainerElement),
     });
 
     const bootScanner = async () => {
       try {
         setQrScannerState("starting");
         setQrScannerError(null);
-        const containerElement = qrScannerContainerRef.current;
+        const containerElement = scannerContainerElement;
         const containerWidth = containerElement?.clientWidth ?? 0;
         const containerHeight = containerElement?.clientHeight ?? 0;
         logLiveQrDebug("boot-start", {
@@ -559,6 +562,7 @@ export function StoreAgentDrawer() {
         if (!video || !canvas) {
           throw new Error("QR_PREVIEW_NOT_READY");
         }
+        scannerVideoElement = video;
 
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: false,
@@ -596,7 +600,7 @@ export function StoreAgentDrawer() {
           hasResolved = true;
           logLiveQrDebug("decode-success", {
             decodedText,
-            regionExists: Boolean(qrScannerContainerRef.current),
+            regionExists: Boolean(containerElement),
           });
 
           if (qrScanFrameRef.current) {
@@ -639,7 +643,7 @@ export function StoreAgentDrawer() {
 
         qrScanFrameRef.current = window.requestAnimationFrame(scanFrame);
         logLiveQrDebug("start-success", {
-          regionExists: Boolean(qrScannerContainerRef.current),
+          regionExists: Boolean(containerElement),
         });
 
         window.setTimeout(() => {
@@ -647,8 +651,8 @@ export function StoreAgentDrawer() {
           const activeCanvas = qrCanvasRef.current;
 
           logLiveQrDebug("start-post-check", {
-            regionClientWidth: qrScannerContainerRef.current?.clientWidth,
-            regionClientHeight: qrScannerContainerRef.current?.clientHeight,
+            regionClientWidth: containerElement?.clientWidth,
+            regionClientHeight: containerElement?.clientHeight,
             hasVideo: Boolean(activeVideo),
             hasCanvas: Boolean(activeCanvas),
             videoReadyState: activeVideo?.readyState,
@@ -667,7 +671,7 @@ export function StoreAgentDrawer() {
         logLiveQrDebug("boot-error", {
           errorName: error instanceof Error ? error.name : String(error),
           errorMessage: error instanceof Error ? error.message : String(error),
-          regionExists: Boolean(qrScannerContainerRef.current),
+          regionExists: Boolean(scannerContainerElement),
         });
         setQrScannerState("error");
         setQrScannerError("No pude abrir la cámara para escanear. Usa foto del QR como alternativa.");
@@ -682,7 +686,7 @@ export function StoreAgentDrawer() {
       isActive = false;
       logLiveQrDebug("effect-cleanup", {
         hasStream: Boolean(qrStreamRef.current),
-        regionExists: Boolean(qrScannerContainerRef.current),
+        regionExists: Boolean(scannerContainerElement),
       });
       setQrScannerState("idle");
       setQrScannerError(null);
@@ -691,15 +695,15 @@ export function StoreAgentDrawer() {
         qrScanFrameRef.current = null;
       }
 
-      qrVideoRef.current?.pause();
-      if (qrVideoRef.current) {
-        qrVideoRef.current.srcObject = null;
+      scannerVideoElement?.pause();
+      if (scannerVideoElement) {
+        scannerVideoElement.srcObject = null;
       }
       qrStreamRef.current?.getTracks().forEach((track) => track.stop());
       qrStreamRef.current = null;
       logLiveQrDebug("cleanup-stop-finished");
     };
-  }, [showQrScanner]);
+  }, [sendMessage, showQrScanner]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1023,7 +1027,7 @@ export function StoreAgentDrawer() {
                       <audio controls preload="metadata" src={file.previewUrl ?? file.dataUrl} className="mt-2 w-full max-w-full" />
                     ) : null}
                     {file.kind === "image" ? (
-                      <img src={file.previewUrl ?? file.dataUrl} alt={file.name} className="mt-2 max-h-56 w-full rounded-xl object-cover" />
+                      <Image src={file.previewUrl ?? file.dataUrl} alt={file.name} width={640} height={360} unoptimized className="mt-2 max-h-56 w-full rounded-xl object-cover" />
                     ) : null}
                     {file.status === "processing" ? <p>Procesando audio...</p> : null}
                     {file.status === "failed" ? <p>No se pudo procesar el audio.</p> : null}
@@ -1194,7 +1198,7 @@ export function StoreAgentDrawer() {
             {attachments.filter((attachment) => attachment.kind === "image").map((attachment) => (
               <div key={`${attachment.id}-image-preview`} className="rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
                 <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Preview de imagen</p>
-                <img src={attachment.previewUrl ?? attachment.dataUrl} alt={attachment.name} className="max-h-64 w-full rounded-2xl object-cover" />
+                <Image src={attachment.previewUrl ?? attachment.dataUrl} alt={attachment.name} width={640} height={360} unoptimized className="max-h-64 w-full rounded-2xl object-cover" />
               </div>
             ))}
           </div>

@@ -11,9 +11,9 @@ const ensureSubscription = async (userId: string, campaignId: string): Promise<v
   const [existing] = (await db
     .select({ id: campaignSubscriptions.id })
     .from(campaignSubscriptions)
-    .where(
-      and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, campaignId)),
-    )) as Array<{ id: string }>;
+    .where(and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, campaignId)))) as Array<{
+    id: string;
+  }>;
 
   if (!existing) {
     await db.insert(campaignSubscriptions).values({

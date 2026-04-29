@@ -24,6 +24,11 @@ type WalletCard = {
   id: string;
 };
 
+type WalletStoreBreakdown = {
+  storeId: string;
+  storeName: string;
+};
+
 type StoreGroup = {
   storeId: string;
   storeName: string;
@@ -104,11 +109,14 @@ export default function WalletTransactionsPage() {
 
   const stores = useMemo(() => {
     const map = new Map<string, string>();
+    ((walletQuery.data?.data.storeBreakdown as WalletStoreBreakdown[] | undefined) ?? []).forEach(
+      (store) => map.set(store.storeId, store.storeName),
+    );
     ((storesQuery.data?.data as StoreItem[] | undefined) ?? []).forEach((store) =>
       map.set(store.id, store.name),
     );
     return map;
-  }, [storesQuery.data]);
+  }, [storesQuery.data, walletQuery.data]);
 
   const stats = useMemo(
     () => ({

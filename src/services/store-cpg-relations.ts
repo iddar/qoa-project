@@ -102,10 +102,7 @@ export const ensureOrganicRelation = async (storeId: string, cpgId: string) => {
   const existing = (await db
     .select({ id: cpgStoreRelations.id, source: cpgStoreRelations.source })
     .from(cpgStoreRelations)
-    .where(and(
-      eq(cpgStoreRelations.storeId, storeId),
-      eq(cpgStoreRelations.cpgId, cpgId),
-    ))
+    .where(and(eq(cpgStoreRelations.storeId, storeId), eq(cpgStoreRelations.cpgId, cpgId)))
     .limit(1)) as Array<{ id: string; source: string }>;
 
   if (existing && existing.length > 0) {
@@ -113,16 +110,19 @@ export const ensureOrganicRelation = async (storeId: string, cpgId: string) => {
   }
 
   const now = new Date();
-  const [created] = await db.insert(cpgStoreRelations).values({
-    storeId,
-    cpgId,
-    status: 'active',
-    source: 'organic',
-    firstActivityAt: now,
-    lastActivityAt: now,
-    createdAt: now,
-    updatedAt: now,
-  }).returning();
+  const [created] = await db
+    .insert(cpgStoreRelations)
+    .values({
+      storeId,
+      cpgId,
+      status: 'active',
+      source: 'organic',
+      firstActivityAt: now,
+      lastActivityAt: now,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
 
   return created;
 };

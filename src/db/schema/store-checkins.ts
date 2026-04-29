@@ -4,11 +4,7 @@ import { stores } from './stores';
 import { transactions } from './transactions';
 import { users } from './users';
 
-export const storeCheckinStatus = pgEnum('store_checkin_status', [
-  'pending',
-  'matched',
-  'expired',
-]);
+export const storeCheckinStatus = pgEnum('store_checkin_status', ['pending', 'matched', 'expired']);
 
 export const storeCheckins = pgTable(
   'store_checkins',

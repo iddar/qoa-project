@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
@@ -65,7 +64,6 @@ export default function CampaignsPage() {
   const queryClient = useQueryClient();
   const { tenantId, tenantType } = useAuth();
   const token = getAccessToken();
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null);
 
   // Get campaigns visible to this store
   const campaignsQuery = useQuery({
@@ -113,8 +111,6 @@ export default function CampaignsPage() {
   const campaigns = (campaignsQuery.data?.data ?? []) as Campaign[];
   const cpgs = (cpgsQuery.data?.data ?? []) as Array<{ id: string; name: string }>;
   const cpgMap = new Map(cpgs.map(c => [c.id, c.name]));
-
-  const selectedCampaign = campaigns.find(c => c.id === selectedCampaignId);
 
   // Determine enrollment status for display
   const getEnrollmentStatus = (campaign: Campaign): StoreCampaignAssignment["status"] => {

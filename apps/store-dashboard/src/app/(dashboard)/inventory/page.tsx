@@ -114,7 +114,7 @@ export default function StoreInventoryPage() {
     },
   });
 
-  const storeProducts = productsQuery.data ?? [];
+  const storeProducts = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
   const findProductById = (storeProductId: string) => storeProducts.find((product) => product.id === storeProductId);
 
   const confirmMutation = useMutation({

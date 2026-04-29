@@ -34,7 +34,6 @@ const nextConfig = {
     NEXT_PUBLIC_STORE_DASHBOARD_URL: storeDashboardUrl,
     NEXT_PUBLIC_WALLET_URL: walletUrl,
   },
-  typescript: { ignoreBuildErrors: true },
 };
 
 export default nextConfig;

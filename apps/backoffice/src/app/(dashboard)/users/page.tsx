@@ -181,7 +181,7 @@ export default function UsersPage() {
     },
   });
 
-  const allUsers = (data?.data ?? []) as UserListItem[];
+  const allUsers = useMemo(() => (data?.data ?? []) as UserListItem[], [data?.data]);
 
   const filteredUsers = useMemo(() => {
     return allUsers.filter((user) => {
