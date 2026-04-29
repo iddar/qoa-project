@@ -1,18 +1,27 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/client';
-import { balances, campaignBalances, campaigns, cards, stores, transactions, transactionItems, accumulations, users } from '../db/schema';
+import {
+  balances,
+  campaignBalances,
+  campaigns,
+  cards,
+  stores,
+  transactions,
+  transactionItems,
+  accumulations,
+  users,
+} from '../db/schema';
 import { normalizeWhatsappPhone, buildSignedWhatsappCardQrImageUrl } from './twilio-whatsapp';
 
 export const getUserBalanceSummary = async (phone: string): Promise<string> => {
   const normalizedPhone = normalizeWhatsappPhone(phone);
 
-  const [user] = (await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.phone, normalizedPhone))) as Array<{ id: string }>;
+  const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, normalizedPhone))) as Array<{
+    id: string;
+  }>;
 
   if (!user) {
-    return 'No encontré una cuenta registrada con este número. Escribe *alta* seguido del código de tu tienda para registrarte.';
+    return 'No encontré una cuenta registrada con este número. Escribe *Quiero registrar mi compra en CODIGO_TIENDA* para registrarte.';
   }
 
   const [card] = (await db
@@ -58,13 +67,12 @@ export const getUserBalanceSummary = async (phone: string): Promise<string> => {
 export const getUserRecentActivity = async (phone: string, limit = 5): Promise<string> => {
   const normalizedPhone = normalizeWhatsappPhone(phone);
 
-  const [user] = (await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.phone, normalizedPhone))) as Array<{ id: string }>;
+  const [user] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, normalizedPhone))) as Array<{
+    id: string;
+  }>;
 
   if (!user) {
-    return 'No encontré una cuenta registrada. Escribe *alta* seguido del código de tu tienda.';
+    return 'No encontré una cuenta registrada. Escribe *Quiero registrar mi compra en CODIGO_TIENDA*.';
   }
 
   const activityRows = (await db
@@ -106,7 +114,7 @@ export const resendUserQr = async (phone: string): Promise<{ message: string; me
     .where(eq(users.phone, normalizedPhone))) as Array<{ id: string; name: string | null }>;
 
   if (!user) {
-    return { message: 'No encontré una cuenta registrada. Escribe *alta* seguido del código de tu tienda.' };
+    return { message: 'No encontré una cuenta registrada. Escribe *Quiero registrar mi compra en CODIGO_TIENDA*.' };
   }
 
   const [card] = (await db

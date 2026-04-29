@@ -16,6 +16,7 @@ Configurar en Railway para `@qoa/core`:
 - `TWILIO_ACCOUNT=<Account SID>`
 - `TWILIO_AUTH=<Auth Token>`
 - `TWILIO_WHATSAPP_FROM=whatsapp:+12182204117`
+- `TWILIO_SMS_FROM=+12182204117`
 - `TWILIO_MEDIA_SIGNING_SECRET=<secret aleatorio largo>`
 
 Recomendaciones:

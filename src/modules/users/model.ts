@@ -69,6 +69,26 @@ export const userWalletResponse = t.Object({
         lifetime: t.Number(),
       }),
     ),
+    storeBreakdown: t.Optional(
+      t.Array(
+        t.Object({
+          storeId: t.String(),
+          storeName: t.String(),
+          purchases: t.Number(),
+          visits: t.Number(),
+          totalSpent: t.Number(),
+          pointsTotal: t.Number(),
+          lastPurchaseAt: t.Optional(t.String()),
+          campaignPoints: t.Array(
+            t.Object({
+              campaignId: t.String(),
+              campaignName: t.String(),
+              points: t.Number(),
+            }),
+          ),
+        }),
+      ),
+    ),
   }),
 });
 

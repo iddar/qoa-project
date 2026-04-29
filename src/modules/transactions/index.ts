@@ -82,6 +82,7 @@ type AccumulationRow = {
   transactionItemId: string | null;
   cardId: string;
   campaignId: string;
+  campaignName?: string;
   amount: number;
   balanceAfter: number;
   sourceType: 'transaction_item' | 'code_capture';
@@ -250,18 +251,51 @@ const toListPayload = (tx: TransactionRow, items: TransactionItemRow[]) => ({
   })),
 });
 
-export const toDetailPayload = (tx: TransactionRow, items: TransactionItemRow[], txAccumulations: AccumulationRow[] = []) => ({
-  ...toListPayload(tx, items),
-  accumulations: txAccumulations.map((entry) => ({
+export const toDetailPayload = (
+  tx: TransactionRow,
+  items: TransactionItemRow[],
+  txAccumulations: AccumulationRow[] = [],
+  options?: { notificationStatus?: 'sent' | 'skipped' | 'failed' },
+) => {
+  const accumulationPayload = txAccumulations.map((entry) => ({
     cardId: entry.cardId,
     campaignId: entry.campaignId,
+    campaignName: entry.campaignName,
     accumulated: entry.amount,
     newBalance: entry.balanceAfter,
     sourceType: entry.sourceType,
     codeCaptureId: entry.codeCaptureId ?? undefined,
     codeValue: undefined,
-  })),
-});
+  }));
+
+  return {
+    ...toListPayload(tx, items),
+    accumulations: accumulationPayload,
+    pointsTotal: accumulationPayload.reduce((sum, entry) => sum + entry.accumulated, 0),
+    notificationStatus: options?.notificationStatus,
+  };
+};
+
+export const attachCampaignNamesToAccumulations = async (
+  txAccumulations: AccumulationRow[],
+  database: Database = db,
+): Promise<AccumulationRow[]> => {
+  const campaignIds = [...new Set(txAccumulations.map((entry) => entry.campaignId))];
+  if (campaignIds.length === 0) {
+    return txAccumulations;
+  }
+
+  const rows = (await database
+    .select({ id: campaigns.id, name: campaigns.name })
+    .from(campaigns)
+    .where(or(...campaignIds.map((id) => eq(campaigns.id, id))))) as Array<{ id: string; name: string }>;
+  const campaignNameById = new Map(rows.map((row) => [row.id, row.name]));
+
+  return txAccumulations.map((entry) => ({
+    ...entry,
+    campaignName: campaignNameById.get(entry.campaignId),
+  }));
+};
 
 const normalizeItems = (items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>) =>
   items.map((item) => {
@@ -344,15 +378,17 @@ const resolveCatalogItems = async (productRefs: string[], database: Database = d
     })
     .from(products)
     .leftJoin(brands, eq(products.brandId, brands.id))
-    .where(or(...productRefs.map(ref => eq(products.id, ref)), ...productRefs.map(ref => eq(products.sku, ref)))) as Array<{
-      id: string;
-      sku: string;
-      brandId: string;
-      brandCpgId: string | null;
-    }>);
+    .where(
+      or(...productRefs.map((ref) => eq(products.id, ref)), ...productRefs.map((ref) => eq(products.sku, ref))),
+    )) as Array<{
+    id: string;
+    sku: string;
+    brandId: string;
+    brandCpgId: string | null;
+  }>;
 
   for (const productRef of productRefs) {
-    const product = productsData.find(p => p.id === productRef || p.sku === productRef);
+    const product = productsData.find((p) => p.id === productRef || p.sku === productRef);
     if (!product) {
       return null;
     }
@@ -487,7 +523,10 @@ const resolveCardForTransaction = async (payload: { userId?: string; cardId?: st
   };
 };
 
-const resolveEligibleCampaignIds = async (payload: { userId: string; cardId: string; baseCampaignId: string }, database: Database = db) => {
+const resolveEligibleCampaignIds = async (
+  payload: { userId: string; cardId: string; baseCampaignId: string },
+  database: Database = db,
+) => {
   const [universal] = (await database
     .select({ id: campaigns.id })
     .from(campaigns)
@@ -521,15 +560,18 @@ const resolveEligibleCampaignIds = async (payload: { userId: string; cardId: str
   return [...ids];
 };
 
-export const createOrReplayTransaction = async (payload: {
-  userId?: string;
-  storeId: string;
-  cardId?: string;
-  metadata?: string;
-  idempotencyKey?: string;
-  items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>;
-  catalogItems: Map<string, ResolvedCatalogItem>;
-}, database: Database = db) => {
+export const createOrReplayTransaction = async (
+  payload: {
+    userId?: string;
+    storeId: string;
+    cardId?: string;
+    metadata?: string;
+    idempotencyKey?: string;
+    items: Array<{ productId: string; quantity?: number; amount?: number; metadata?: string }>;
+    catalogItems: Map<string, ResolvedCatalogItem>;
+  },
+  database: Database = db,
+) => {
   if (payload.idempotencyKey) {
     const [existing] = (await database
       .select()
@@ -569,10 +611,13 @@ export const createOrReplayTransaction = async (payload: {
     };
   });
   const totalAmount = normalizedItems.reduce((sum, item) => sum + item.amount * item.quantity, 0);
-  const resolvedCard = await resolveCardForTransaction({
-    userId: payload.userId,
-    cardId: payload.cardId,
-  }, database);
+  const resolvedCard = await resolveCardForTransaction(
+    {
+      userId: payload.userId,
+      cardId: payload.cardId,
+    },
+    database,
+  );
   const resolvedUserId = payload.userId ?? resolvedCard?.userId ?? null;
 
   const [created] = (await database
@@ -641,11 +686,14 @@ export const createOrReplayTransaction = async (payload: {
       lifetime: number;
     }>;
 
-    const campaignIds = await resolveEligibleCampaignIds({
-      userId: resolvedUserId,
-      cardId: resolvedCard.cardId,
-      baseCampaignId: resolvedCard.baseCampaignId,
-    }, database);
+    const campaignIds = await resolveEligibleCampaignIds(
+      {
+        userId: resolvedUserId,
+        cardId: resolvedCard.cardId,
+        baseCampaignId: resolvedCard.baseCampaignId,
+      },
+      database,
+    );
     const campaignRows = (await database
       .select({ id: campaigns.id, accumulationMode: campaigns.accumulationMode })
       .from(campaigns)
@@ -978,39 +1026,48 @@ export const createOrReplayTransaction = async (payload: {
   };
 };
 
-export const createStorePosTransaction = async (payload: {
-  storeId: string;
-  userId?: string;
-  cardId?: string;
-  idempotencyKey?: string;
-  items: Array<{
-    storeProductId: string;
-    productId?: string;
-    name: string;
-    quantity: number;
-    amount: number;
-  }>;
-}, database: Database = db) => {
-  const linkedProductRefs = [...new Set(payload.items.map((item) => item.productId).filter((item): item is string => Boolean(item)))];
-  const catalogItems = (linkedProductRefs.length > 0 ? await resolveCatalogItems(linkedProductRefs, database) : new Map()) ?? new Map();
+export const createStorePosTransaction = async (
+  payload: {
+    storeId: string;
+    userId?: string;
+    cardId?: string;
+    idempotencyKey?: string;
+    items: Array<{
+      storeProductId: string;
+      productId?: string;
+      name: string;
+      quantity: number;
+      amount: number;
+    }>;
+  },
+  database: Database = db,
+) => {
+  const linkedProductRefs = [
+    ...new Set(payload.items.map((item) => item.productId).filter((item): item is string => Boolean(item))),
+  ];
+  const catalogItems =
+    (linkedProductRefs.length > 0 ? await resolveCatalogItems(linkedProductRefs, database) : new Map()) ?? new Map();
 
-  return createOrReplayTransaction({
-    userId: payload.userId,
-    storeId: payload.storeId,
-    cardId: payload.cardId,
-    idempotencyKey: payload.idempotencyKey,
-    items: payload.items.map((item) => ({
-      productId: item.productId ?? item.name,
-      quantity: item.quantity,
-      amount: item.amount,
-      metadata: JSON.stringify({
-        source: 'store_pos',
-        storeProductId: item.storeProductId,
-        displayName: item.name,
-      }),
-    })),
-    catalogItems,
-  }, database);
+  return createOrReplayTransaction(
+    {
+      userId: payload.userId,
+      storeId: payload.storeId,
+      cardId: payload.cardId,
+      idempotencyKey: payload.idempotencyKey,
+      items: payload.items.map((item) => ({
+        productId: item.productId ?? item.name,
+        quantity: item.quantity,
+        amount: item.amount,
+        metadata: JSON.stringify({
+          source: 'store_pos',
+          storeProductId: item.storeProductId,
+          displayName: item.name,
+        }),
+      })),
+      catalogItems,
+    },
+    database,
+  );
 };
 
 const createWebhookHash = (payload: {
@@ -1184,8 +1241,9 @@ export const transactionsModule = new Elysia({
         });
       }
 
+      const namedAccumulations = await attachCampaignNamesToAccumulations(outcome.accumulations);
       return status(outcome.statusCode, {
-        data: toDetailPayload(outcome.transaction, outcome.items, outcome.accumulations),
+        data: toDetailPayload(outcome.transaction, outcome.items, namedAccumulations),
       });
     },
     {
@@ -1287,8 +1345,9 @@ export const transactionsModule = new Elysia({
                   )) as AccumulationRow[])
               : [];
 
+          const namedAccumulations = await attachCampaignNamesToAccumulations(existingAccumulations);
           return status(200, {
-            data: toDetailPayload(existingTx, existingItems, existingAccumulations),
+            data: toDetailPayload(existingTx, existingItems, namedAccumulations),
             meta: {
               replayed: true,
               hash: existingReceipt.hash,
@@ -1355,8 +1414,9 @@ export const transactionsModule = new Elysia({
         processedAt: new Date(),
       });
 
+      const namedAccumulations = await attachCampaignNamesToAccumulations(outcome.accumulations);
       return status(outcome.statusCode, {
-        data: toDetailPayload(outcome.transaction, outcome.items, outcome.accumulations),
+        data: toDetailPayload(outcome.transaction, outcome.items, namedAccumulations),
         meta: {
           replayed: false,
           hash,
@@ -1658,8 +1718,9 @@ export const transactionsModule = new Elysia({
               .where(or(...items.map((item) => eq(accumulations.transactionItemId, item.id))))) as AccumulationRow[])
           : [];
 
+      const namedAccumulations = await attachCampaignNamesToAccumulations(txAccumulations);
       return {
-        data: toDetailPayload(tx, items, txAccumulations),
+        data: toDetailPayload(tx, items, namedAccumulations),
       };
     },
     {

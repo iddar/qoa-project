@@ -37,6 +37,7 @@ export const transactionWithAccumulations = t.Object({
     t.Object({
       cardId: t.String(),
       campaignId: t.String(),
+      campaignName: t.Optional(t.String()),
       accumulated: t.Number(),
       newBalance: t.Number(),
       sourceType: t.String(),
@@ -44,6 +45,8 @@ export const transactionWithAccumulations = t.Object({
       codeValue: t.Optional(t.String()),
     }),
   ),
+  pointsTotal: t.Optional(t.Number()),
+  notificationStatus: t.Optional(t.Union([t.Literal('sent'), t.Literal('skipped'), t.Literal('failed')])),
 });
 
 export const transactionCreateRequest = t.Object({

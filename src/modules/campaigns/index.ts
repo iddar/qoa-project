@@ -1,10 +1,10 @@
-import { and, desc, eq, lt, sql } from "drizzle-orm";
-import { Elysia, t } from "elysia";
-import { authGuard, authPlugin, type AuthContext } from "../../app/plugins/auth";
-import { isUserAuth } from "../../app/plugins/permissions";
-import { authorizationHeader } from "../../app/plugins/schemas";
-import { parseCursor, parseLimit } from "../../app/utils/pagination";
-import { db } from "../../db/client";
+import { and, desc, eq, lt, sql } from 'drizzle-orm';
+import { Elysia, t } from 'elysia';
+import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { isUserAuth } from '../../app/plugins/permissions';
+import { authorizationHeader } from '../../app/plugins/schemas';
+import { parseCursor, parseLimit } from '../../app/utils/pagination';
+import { db } from '../../db/client';
 import {
   brands,
   campaignAccumulationRules,
@@ -18,8 +18,8 @@ import {
   products,
   stores,
   tierBenefits,
-} from "../../db/schema";
-import type { StatusHandler } from "../../types/handlers";
+} from '../../db/schema';
+import type { StatusHandler } from '../../types/handlers';
 import {
   campaignAuditListResponse,
   campaignAuditQuery,
@@ -47,21 +47,19 @@ import {
   campaignStoreTargetRequest,
   campaignStoreEnrollRequest,
   campaignStoreListResponse,
-} from "./model";
+} from './model';
 import {
   isStoreVisibleForCampaign,
   getStoreEnrollmentForCampaign,
   isStoreParticipatingInCampaign,
-} from "../../services/campaign-store-access";
-import {
-  getRelatedCpgIdsForStore,
-  touchStoreCpgRelations,
-} from "../../services/store-cpg-relations";
+} from '../../services/campaign-store-access';
+import { getRelatedCpgIdsForStore, touchStoreCpgRelations } from '../../services/store-cpg-relations';
+import { notifyStoreUsersCampaignEnrollment } from '../../services/customer-notifications';
 
-const allowedRoles = ["cpg_admin", "qoa_support", "qoa_admin"] as const;
+const allowedRoles = ['cpg_admin', 'qoa_support', 'qoa_admin'] as const;
 
 const getAuthRole = (auth: AuthContext): string | null => {
-  if (auth.type === "jwt" || auth.type === "dev") {
+  if (auth.type === 'jwt' || auth.type === 'dev') {
     return auth.role;
   }
   return null;
@@ -74,10 +72,10 @@ type CampaignRow = {
   description: string | null;
   cpgId: string | null;
   status: string;
-  enrollmentMode: "open" | "opt_in" | "system_universal";
-  storeAccessMode: "all_related_stores" | "selected_stores";
-  storeEnrollmentMode: "store_opt_in" | "cpg_managed" | "auto_enroll";
-  accumulationMode: "count" | "amount";
+  enrollmentMode: 'open' | 'opt_in' | 'system_universal';
+  storeAccessMode: 'all_related_stores' | 'selected_stores';
+  storeEnrollmentMode: 'store_opt_in' | 'cpg_managed' | 'auto_enroll';
+  accumulationMode: 'count' | 'amount';
   startsAt: Date | null;
   endsAt: Date | null;
   version: number;
@@ -100,12 +98,12 @@ type CampaignAuditRow = {
 type CampaignPolicyRow = {
   id: string;
   campaignId: string;
-  policyType: "max_accumulations" | "min_amount" | "min_quantity" | "cooldown";
-  scopeType: "campaign" | "brand" | "product";
+  policyType: 'max_accumulations' | 'min_amount' | 'min_quantity' | 'cooldown';
+  scopeType: 'campaign' | 'brand' | 'product';
   scopeId: string | null;
   scopeBrandId: string | null;
   scopeProductId: string | null;
-  period: "transaction" | "day" | "week" | "month" | "lifetime";
+  period: 'transaction' | 'day' | 'week' | 'month' | 'lifetime';
   value: number;
   config: string | null;
   active: boolean;
@@ -116,7 +114,7 @@ type CampaignPolicyRow = {
 type CampaignAccumulationRuleRow = {
   id: string;
   campaignId: string;
-  scopeType: "campaign" | "brand" | "product";
+  scopeType: 'campaign' | 'brand' | 'product';
   scopeId: string | null;
   scopeBrandId: string | null;
   scopeProductId: string | null;
@@ -134,11 +132,11 @@ type CampaignTierRow = {
   name: string;
   order: number;
   thresholdValue: number;
-  windowUnit: "day" | "month" | "year";
+  windowUnit: 'day' | 'month' | 'year';
   windowValue: number;
   minPurchaseCount: number | null;
   minPurchaseAmount: number | null;
-  qualificationMode: "any" | "all";
+  qualificationMode: 'any' | 'all';
   graceDays: number;
   createdAt: Date;
   updatedAt: Date | null;
@@ -147,14 +145,14 @@ type CampaignTierRow = {
 type TierBenefitRow = {
   id: string;
   tierId: string;
-  type: "discount" | "reward" | "multiplier" | "free_product";
+  type: 'discount' | 'reward' | 'multiplier' | 'free_product';
   config: string | null;
 };
 
 type PolicySummary = {
-  policyType: CampaignPolicyRow["policyType"];
-  scopeType: CampaignPolicyRow["scopeType"];
-  period: CampaignPolicyRow["period"];
+  policyType: CampaignPolicyRow['policyType'];
+  scopeType: CampaignPolicyRow['scopeType'];
+  period: CampaignPolicyRow['period'];
   value: number;
   label: string;
 };
@@ -164,7 +162,7 @@ type CampaignListContext = {
   query: {
     status?: string;
     cpgId?: string;
-    enrollmentMode?: "open" | "opt_in" | "system_universal";
+    enrollmentMode?: 'open' | 'opt_in' | 'system_universal';
     limit?: string;
     cursor?: string;
   };
@@ -178,8 +176,8 @@ type CampaignCreateContext = {
     key?: string;
     description?: string;
     cpgId?: string;
-    enrollmentMode?: "open" | "opt_in" | "system_universal";
-    accumulationMode?: "count" | "amount";
+    enrollmentMode?: 'open' | 'opt_in' | 'system_universal';
+    accumulationMode?: 'count' | 'amount';
     startsAt?: string;
     endsAt?: string;
   };
@@ -198,9 +196,9 @@ type CampaignUpdateContext = {
   body: {
     name?: string;
     description?: string;
-    enrollmentMode?: "open" | "opt_in" | "system_universal";
-    storeAccessMode?: "all_related_stores" | "selected_stores";
-    accumulationMode?: "count" | "amount";
+    enrollmentMode?: 'open' | 'opt_in' | 'system_universal';
+    storeAccessMode?: 'all_related_stores' | 'selected_stores';
+    accumulationMode?: 'count' | 'amount';
     startsAt?: string;
     endsAt?: string;
     status?: string;
@@ -259,10 +257,10 @@ type CampaignPolicyCreateContext = {
   auth: AuthContext | null;
   params: { campaignId: string };
   body: {
-    policyType: CampaignPolicyRow["policyType"];
-    scopeType: CampaignPolicyRow["scopeType"];
+    policyType: CampaignPolicyRow['policyType'];
+    scopeType: CampaignPolicyRow['scopeType'];
     scopeId?: string;
-    period: CampaignPolicyRow["period"];
+    period: CampaignPolicyRow['period'];
     value: number;
     config?: string;
     active?: boolean;
@@ -274,10 +272,10 @@ type CampaignPolicyUpdateContext = {
   auth: AuthContext | null;
   params: { campaignId: string; policyId: string };
   body: {
-    policyType?: CampaignPolicyRow["policyType"];
-    scopeType?: CampaignPolicyRow["scopeType"];
+    policyType?: CampaignPolicyRow['policyType'];
+    scopeType?: CampaignPolicyRow['scopeType'];
     scopeId?: string;
-    period?: CampaignPolicyRow["period"];
+    period?: CampaignPolicyRow['period'];
     value?: number;
     config?: string;
     active?: boolean;
@@ -295,7 +293,7 @@ type CampaignAccumulationRuleCreateContext = {
   auth: AuthContext | null;
   params: { campaignId: string };
   body: {
-    scopeType: CampaignAccumulationRuleRow["scopeType"];
+    scopeType: CampaignAccumulationRuleRow['scopeType'];
     scopeId?: string;
     multiplier?: number;
     flatBonus?: number;
@@ -309,7 +307,7 @@ type CampaignAccumulationRuleUpdateContext = {
   auth: AuthContext | null;
   params: { campaignId: string; ruleId: string };
   body: {
-    scopeType?: CampaignAccumulationRuleRow["scopeType"];
+    scopeType?: CampaignAccumulationRuleRow['scopeType'];
     scopeId?: string;
     multiplier?: number;
     flatBonus?: number;
@@ -338,14 +336,14 @@ type CampaignTierCreateContext = {
     name: string;
     order: number;
     thresholdValue: number;
-    windowUnit?: "day" | "month" | "year";
+    windowUnit?: 'day' | 'month' | 'year';
     windowValue?: number;
     minPurchaseCount?: number;
     minPurchaseAmount?: number;
-    qualificationMode?: "any" | "all";
+    qualificationMode?: 'any' | 'all';
     graceDays?: number;
     benefits?: Array<{
-      type: TierBenefitRow["type"];
+      type: TierBenefitRow['type'];
       config?: string;
     }>;
   };
@@ -359,14 +357,14 @@ type CampaignTierUpdateContext = {
     name?: string;
     order?: number;
     thresholdValue?: number;
-    windowUnit?: "day" | "month" | "year";
+    windowUnit?: 'day' | 'month' | 'year';
     windowValue?: number;
     minPurchaseCount?: number;
     minPurchaseAmount?: number;
-    qualificationMode?: "any" | "all";
+    qualificationMode?: 'any' | 'all';
     graceDays?: number;
     benefits?: Array<{
-      type: TierBenefitRow["type"];
+      type: TierBenefitRow['type'];
       config?: string;
     }>;
   };
@@ -382,18 +380,16 @@ type CampaignTierDeleteContext = {
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
-const buildPolicyLabel = (
-  entry: Pick<CampaignPolicyRow, "policyType" | "scopeType" | "period" | "value">,
-) => {
-  if (entry.policyType === "min_amount") {
-    return `Compra mínima de $${entry.value.toLocaleString("es-MX")} por ${entry.period}`;
+const buildPolicyLabel = (entry: Pick<CampaignPolicyRow, 'policyType' | 'scopeType' | 'period' | 'value'>) => {
+  if (entry.policyType === 'min_amount') {
+    return `Compra mínima de $${entry.value.toLocaleString('es-MX')} por ${entry.period}`;
   }
 
-  if (entry.policyType === "min_quantity") {
+  if (entry.policyType === 'min_quantity') {
     return `Compra mínima de ${entry.value} pieza(s) por ${entry.period}`;
   }
 
-  if (entry.policyType === "max_accumulations") {
+  if (entry.policyType === 'max_accumulations') {
     return `Máximo ${entry.value} acumulaciones por ${entry.period}`;
   }
 
@@ -538,67 +534,62 @@ const resolveActorUserId = (auth: AuthContext | null) => {
 };
 
 const canAccessCampaign = (auth: AuthContext, campaign: CampaignRow) => {
-  if (auth.type === "jwt" || auth.type === "dev") {
-    if (auth.role === "qoa_admin" || auth.role === "qoa_support") {
+  if (auth.type === 'jwt' || auth.type === 'dev') {
+    if (auth.role === 'qoa_admin' || auth.role === 'qoa_support') {
       return true;
     }
 
-    if (auth.role === "cpg_admin") {
-      return Boolean(
-        auth.tenantType === "cpg" && auth.tenantId && campaign.cpgId === auth.tenantId,
-      );
+    if (auth.role === 'cpg_admin') {
+      return Boolean(auth.tenantType === 'cpg' && auth.tenantId && campaign.cpgId === auth.tenantId);
     }
 
     return false;
   }
 
-  if (auth.type === "api_key" || auth.type === "dev_api_key") {
-    return auth.tenantType === "cpg" && campaign.cpgId === auth.tenantId;
+  if (auth.type === 'api_key' || auth.type === 'dev_api_key') {
+    return auth.tenantType === 'cpg' && campaign.cpgId === auth.tenantId;
   }
 
   return false;
 };
 
 const canCreateForCpg = (auth: AuthContext, cpgId: string | null) => {
-  if (auth.type === "jwt" || auth.type === "dev") {
-    if (auth.role === "qoa_admin" || auth.role === "qoa_support") {
+  if (auth.type === 'jwt' || auth.type === 'dev') {
+    if (auth.role === 'qoa_admin' || auth.role === 'qoa_support') {
       return true;
     }
 
-    if (auth.role === "cpg_admin") {
-      return Boolean(auth.tenantType === "cpg" && auth.tenantId && cpgId === auth.tenantId);
+    if (auth.role === 'cpg_admin') {
+      return Boolean(auth.tenantType === 'cpg' && auth.tenantId && cpgId === auth.tenantId);
     }
 
     return false;
   }
 
-  if (auth.type === "api_key" || auth.type === "dev_api_key") {
-    return auth.tenantType === "cpg" && cpgId === auth.tenantId;
+  if (auth.type === 'api_key' || auth.type === 'dev_api_key') {
+    return auth.tenantType === 'cpg' && cpgId === auth.tenantId;
   }
 
   return false;
 };
 
 const ensureCampaign = async (campaignId: string) => {
-  const [campaign] = (await db
-    .select()
-    .from(campaigns)
-    .where(eq(campaigns.id, campaignId))) as CampaignRow[];
+  const [campaign] = (await db.select().from(campaigns).where(eq(campaigns.id, campaignId))) as CampaignRow[];
   return campaign ?? null;
 };
 
 const ensureScope = async (
   campaign: CampaignRow,
-  scopeType: CampaignPolicyRow["scopeType"],
+  scopeType: CampaignPolicyRow['scopeType'],
   scopeId: string | null,
   status: StatusHandler,
 ) => {
-  if (scopeType === "campaign") {
+  if (scopeType === 'campaign') {
     if (scopeId) {
       return status(400, {
         error: {
-          code: "INVALID_ARGUMENT",
-          message: "scopeId debe omitirse cuando scopeType es campaign",
+          code: 'INVALID_ARGUMENT',
+          message: 'scopeId debe omitirse cuando scopeType es campaign',
         },
       });
     }
@@ -608,8 +599,8 @@ const ensureScope = async (
   if (!scopeId) {
     return status(400, {
       error: {
-        code: "INVALID_ARGUMENT",
-        message: "scopeId es obligatorio para scopeType brand/product",
+        code: 'INVALID_ARGUMENT',
+        message: 'scopeId es obligatorio para scopeType brand/product',
       },
     });
   }
@@ -617,13 +608,13 @@ const ensureScope = async (
   if (!isUuid(scopeId)) {
     return status(400, {
       error: {
-        code: "INVALID_ARGUMENT",
-        message: "scopeId debe ser UUID válido",
+        code: 'INVALID_ARGUMENT',
+        message: 'scopeId debe ser UUID válido',
       },
     });
   }
 
-  if (scopeType === "brand") {
+  if (scopeType === 'brand') {
     const [brand] = (await db
       .select({ id: brands.id, cpgId: brands.cpgId })
       .from(brands)
@@ -632,8 +623,8 @@ const ensureScope = async (
     if (!brand) {
       return status(404, {
         error: {
-          code: "BRAND_NOT_FOUND",
-          message: "Brand no encontrada",
+          code: 'BRAND_NOT_FOUND',
+          message: 'Brand no encontrada',
         },
       });
     }
@@ -641,8 +632,8 @@ const ensureScope = async (
     if (campaign.cpgId && campaign.cpgId !== brand.cpgId) {
       return status(400, {
         error: {
-          code: "INVALID_ARGUMENT",
-          message: "La brand no pertenece al CPG de la campaña",
+          code: 'INVALID_ARGUMENT',
+          message: 'La brand no pertenece al CPG de la campaña',
         },
       });
     }
@@ -658,8 +649,8 @@ const ensureScope = async (
   if (!product) {
     return status(404, {
       error: {
-        code: "PRODUCT_NOT_FOUND",
-        message: "Producto no encontrado",
+        code: 'PRODUCT_NOT_FOUND',
+        message: 'Producto no encontrado',
       },
     });
   }
@@ -673,8 +664,8 @@ const ensureScope = async (
     if (!brand || brand.cpgId !== campaign.cpgId) {
       return status(400, {
         error: {
-          code: "INVALID_ARGUMENT",
-          message: "El producto no pertenece al CPG de la campaña",
+          code: 'INVALID_ARGUMENT',
+          message: 'El producto no pertenece al CPG de la campaña',
         },
       });
     }
@@ -683,8 +674,7 @@ const ensureScope = async (
   return null;
 };
 
-const parsePolicyConfig = (config: string | undefined) =>
-  config === undefined || config === "" ? null : config;
+const parsePolicyConfig = (config: string | undefined) => (config === undefined || config === '' ? null : config);
 
 const appendAudit = async (
   campaignId: string,
@@ -705,26 +695,26 @@ const appendAudit = async (
 const invalidTransition = (status: StatusHandler, fromStatus: string, toStatus: string) =>
   status(409, {
     error: {
-      code: "INVALID_STATUS_TRANSITION",
+      code: 'INVALID_STATUS_TRANSITION',
       message: `No se puede mover de ${fromStatus} a ${toStatus}`,
     },
   });
 
 export const campaignsModule = new Elysia({
-  prefix: "/campaigns",
+  prefix: '/campaigns',
   detail: {
-    tags: ["Campaigns"],
+    tags: ['Campaigns'],
   },
 })
   .use(authPlugin)
   .get(
-    "/discover",
+    '/discover',
     async ({ auth, status }: CampaignSubscriptionsMeContext) => {
       if (!auth || !isUserAuth(auth)) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -750,19 +740,17 @@ export const campaignsModule = new Elysia({
           updatedAt: campaigns.updatedAt,
         })
         .from(campaigns)
-        .where(and(eq(campaigns.status, "active")))
+        .where(and(eq(campaigns.status, 'active')))
         .orderBy(desc(campaigns.createdAt))) as CampaignRow[];
 
-      const filtered = rows.filter((row) => row.enrollmentMode !== "system_universal");
+      const filtered = rows.filter((row) => row.enrollmentMode !== 'system_universal');
 
       const policyEntries = await Promise.all(
         filtered.map(async (campaign) => {
           const rows = (await db
             .select()
             .from(campaignPolicies)
-            .where(
-              and(eq(campaignPolicies.campaignId, campaign.id), eq(campaignPolicies.active, true)),
-            )
+            .where(and(eq(campaignPolicies.campaignId, campaign.id), eq(campaignPolicies.active, true)))
             .orderBy(desc(campaignPolicies.createdAt))) as CampaignPolicyRow[];
 
           return [
@@ -780,33 +768,31 @@ export const campaignsModule = new Elysia({
       const policyMap = new Map<string, PolicySummary[]>(policyEntries);
 
       return {
-        data: filtered.map((campaign) =>
-          serializeCampaign(campaign, policyMap.get(campaign.id) ?? []),
-        ),
+        data: filtered.map((campaign) => serializeCampaign(campaign, policyMap.get(campaign.id) ?? [])),
         pagination: {
           hasMore: false,
         },
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["consumer", "customer"] }),
+      beforeHandle: authGuard({ roles: ['consumer', 'customer'] }),
       headers: authorizationHeader,
       response: {
         200: campaignListResponse,
       },
       detail: {
-        summary: "Descubrir campañas para wallet",
+        summary: 'Descubrir campañas para wallet',
       },
     },
   )
   .get(
-    "/subscriptions/me",
+    '/subscriptions/me',
     async ({ auth, status }: CampaignSubscriptionsMeContext) => {
       if (!auth || !isUserAuth(auth)) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -827,7 +813,7 @@ export const campaignsModule = new Elysia({
       `)) as Array<{
         campaignId: string;
         campaignName: string;
-        enrollmentMode: "open" | "opt_in" | "system_universal";
+        enrollmentMode: 'open' | 'opt_in' | 'system_universal';
         startsAt: Date | null;
         endsAt: Date | null;
         status: string;
@@ -839,12 +825,7 @@ export const campaignsModule = new Elysia({
           const items = (await db
             .select()
             .from(campaignPolicies)
-            .where(
-              and(
-                eq(campaignPolicies.campaignId, entry.campaignId),
-                eq(campaignPolicies.active, true),
-              ),
-            )
+            .where(and(eq(campaignPolicies.campaignId, entry.campaignId), eq(campaignPolicies.active, true)))
             .orderBy(desc(campaignPolicies.createdAt))) as CampaignPolicyRow[];
 
           return [
@@ -869,26 +850,26 @@ export const campaignsModule = new Elysia({
           startsAt:
             row.startsAt instanceof Date
               ? row.startsAt.toISOString()
-              : typeof row.startsAt === "string"
+              : typeof row.startsAt === 'string'
                 ? new Date(row.startsAt).toISOString()
                 : undefined,
           endsAt:
             row.endsAt instanceof Date
               ? row.endsAt.toISOString()
-              : typeof row.endsAt === "string"
+              : typeof row.endsAt === 'string'
                 ? new Date(row.endsAt).toISOString()
                 : undefined,
           daysRemaining:
             row.endsAt instanceof Date
               ? Math.ceil((row.endsAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-              : typeof row.endsAt === "string"
+              : typeof row.endsAt === 'string'
                 ? Math.ceil((new Date(row.endsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000))
                 : undefined,
           status: row.status,
           subscribedAt:
             row.subscribedAt instanceof Date
               ? row.subscribedAt.toISOString()
-              : typeof row.subscribedAt === "string"
+              : typeof row.subscribedAt === 'string'
                 ? new Date(row.subscribedAt).toISOString()
                 : undefined,
           policySummaries: policyMap.get(row.campaignId) ?? [],
@@ -896,24 +877,24 @@ export const campaignsModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["consumer", "customer"] }),
+      beforeHandle: authGuard({ roles: ['consumer', 'customer'] }),
       headers: authorizationHeader,
       response: {
         200: campaignSubscriptionListResponse,
       },
       detail: {
-        summary: "Listar suscripciones de campañas del usuario",
+        summary: 'Listar suscripciones de campañas del usuario',
       },
     },
   )
   .post(
-    "/:campaignId/subscribe",
+    '/:campaignId/subscribe',
     async ({ auth, params, status }: CampaignSubscribeContext) => {
       if (!auth || !isUserAuth(auth)) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -928,23 +909,23 @@ export const campaignsModule = new Elysia({
         .where(eq(campaigns.id, params.campaignId))) as Array<{
         id: string;
         status: string;
-        enrollmentMode: "open" | "opt_in" | "system_universal";
+        enrollmentMode: 'open' | 'opt_in' | 'system_universal';
       }>;
 
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
 
-      if (campaign.status !== "active") {
+      if (campaign.status !== 'active') {
         return status(422, {
           error: {
-            code: "CAMPAIGN_NOT_ACTIVE",
-            message: "Solo se permiten suscripciones a campañas activas",
+            code: 'CAMPAIGN_NOT_ACTIVE',
+            message: 'Solo se permiten suscripciones a campañas activas',
           },
         });
       }
@@ -954,10 +935,7 @@ export const campaignsModule = new Elysia({
         .select({ id: campaignSubscriptions.id })
         .from(campaignSubscriptions)
         .where(
-          and(
-            eq(campaignSubscriptions.userId, auth.userId),
-            eq(campaignSubscriptions.campaignId, campaign.id),
-          ),
+          and(eq(campaignSubscriptions.userId, auth.userId), eq(campaignSubscriptions.campaignId, campaign.id)),
         )) as Array<{
         id: string;
       }>;
@@ -966,7 +944,7 @@ export const campaignsModule = new Elysia({
         await db
           .update(campaignSubscriptions)
           .set({
-            status: "subscribed",
+            status: 'subscribed',
             subscribedAt: now,
             leftAt: null,
             updatedAt: now,
@@ -976,8 +954,8 @@ export const campaignsModule = new Elysia({
         await db.insert(campaignSubscriptions).values({
           userId: auth.userId,
           campaignId: campaign.id,
-          status: "subscribed",
-          invitedAt: campaign.enrollmentMode === "opt_in" ? now : null,
+          status: 'subscribed',
+          invitedAt: campaign.enrollmentMode === 'opt_in' ? now : null,
           subscribedAt: now,
           createdAt: now,
           updatedAt: now,
@@ -987,30 +965,30 @@ export const campaignsModule = new Elysia({
       return {
         data: {
           campaignId: campaign.id,
-          status: "subscribed",
+          status: 'subscribed',
           subscribedAt: now.toISOString(),
         },
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["consumer", "customer"] }),
+      beforeHandle: authGuard({ roles: ['consumer', 'customer'] }),
       headers: authorizationHeader,
       response: {
         200: campaignSubscribeResponse,
       },
       detail: {
-        summary: "Suscribirse a campaña",
+        summary: 'Suscribirse a campaña',
       },
     },
   )
   .get(
-    "/",
+    '/',
     async ({ auth, query, status }: CampaignListContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1019,8 +997,8 @@ export const campaignsModule = new Elysia({
       if (query.cursor && !cursorDate) {
         return status(400, {
           error: {
-            code: "INVALID_CURSOR",
-            message: "Cursor inválido",
+            code: 'INVALID_CURSOR',
+            message: 'Cursor inválido',
           },
         });
       }
@@ -1042,24 +1020,24 @@ export const campaignsModule = new Elysia({
         conditions.push(lt(campaigns.createdAt, cursorDate));
       }
 
-      if (auth.type === "jwt" || auth.type === "dev") {
-        if (auth.role === "cpg_admin") {
-          if (!auth.tenantId || auth.tenantType !== "cpg") {
+      if (auth.type === 'jwt' || auth.type === 'dev') {
+        if (auth.role === 'cpg_admin') {
+          if (!auth.tenantId || auth.tenantType !== 'cpg') {
             return status(403, {
               error: {
-                code: "FORBIDDEN",
-                message: "Tenant inválido para cpg_admin",
+                code: 'FORBIDDEN',
+                message: 'Tenant inválido para cpg_admin',
               },
             });
           }
           conditions.push(eq(campaigns.cpgId, auth.tenantId));
         }
-      } else if (auth.type === "api_key" || auth.type === "dev_api_key") {
-        if (auth.tenantType !== "cpg") {
+      } else if (auth.type === 'api_key' || auth.type === 'dev_api_key') {
+        if (auth.tenantType !== 'cpg') {
           return status(403, {
             error: {
-              code: "FORBIDDEN",
-              message: "Solo API keys de CPG pueden listar campañas",
+              code: 'FORBIDDEN',
+              message: 'Solo API keys de CPG pueden listar campañas',
             },
           });
         }
@@ -1095,18 +1073,18 @@ export const campaignsModule = new Elysia({
         200: campaignListResponse,
       },
       detail: {
-        summary: "Listar campañas",
+        summary: 'Listar campañas',
       },
     },
   )
   .post(
-    "/",
+    '/',
     async ({ auth, body, status }: CampaignCreateContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1114,14 +1092,11 @@ export const campaignsModule = new Elysia({
       const startsAt = body.startsAt ? new Date(body.startsAt) : null;
       const endsAt = body.endsAt ? new Date(body.endsAt) : null;
 
-      if (
-        (startsAt && Number.isNaN(startsAt.getTime())) ||
-        (endsAt && Number.isNaN(endsAt.getTime()))
-      ) {
+      if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime()))) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "Fechas inválidas",
+            code: 'INVALID_ARGUMENT',
+            message: 'Fechas inválidas',
           },
         });
       }
@@ -1129,8 +1104,8 @@ export const campaignsModule = new Elysia({
       if (startsAt && endsAt && startsAt.getTime() >= endsAt.getTime()) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "startsAt debe ser menor que endsAt",
+            code: 'INVALID_ARGUMENT',
+            message: 'startsAt debe ser menor que endsAt',
           },
         });
       }
@@ -1139,8 +1114,8 @@ export const campaignsModule = new Elysia({
       if (!canCreateForCpg(auth, cpgId)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No puedes crear campañas para este CPG",
+            code: 'FORBIDDEN',
+            message: 'No puedes crear campañas para este CPG',
           },
         });
       }
@@ -1152,8 +1127,8 @@ export const campaignsModule = new Elysia({
           name: body.name,
           description: body.description ?? null,
           cpgId,
-          enrollmentMode: body.enrollmentMode ?? "opt_in",
-          accumulationMode: body.accumulationMode ?? "count",
+          enrollmentMode: body.enrollmentMode ?? 'opt_in',
+          accumulationMode: body.accumulationMode ?? 'count',
           startsAt,
           endsAt,
           createdBy: resolveActorUserId(auth),
@@ -1164,13 +1139,13 @@ export const campaignsModule = new Elysia({
       if (!created) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_CREATE_FAILED",
-            message: "No se pudo crear la campaña",
+            code: 'CAMPAIGN_CREATE_FAILED',
+            message: 'No se pudo crear la campaña',
           },
         });
       }
 
-      await appendAudit(created.id, "campaign.created", null, auth, {
+      await appendAudit(created.id, 'campaign.created', null, auth, {
         status: created.status,
       });
 
@@ -1186,18 +1161,18 @@ export const campaignsModule = new Elysia({
         201: campaignResponse,
       },
       detail: {
-        summary: "Crear campaña",
+        summary: 'Crear campaña',
       },
     },
   )
   .get(
-    "/:campaignId",
+    '/:campaignId',
     async ({ auth, params, status }: CampaignParamsContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1206,8 +1181,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1215,8 +1190,8 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
@@ -1243,18 +1218,18 @@ export const campaignsModule = new Elysia({
         200: campaignResponse,
       },
       detail: {
-        summary: "Obtener campaña",
+        summary: 'Obtener campaña',
       },
     },
   )
   .patch(
-    "/:campaignId",
+    '/:campaignId',
     async ({ auth, params, body, status }: CampaignUpdateContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1263,8 +1238,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1272,31 +1247,28 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected pueden editarse",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected pueden editarse',
           },
         });
       }
 
       const startsAt = body.startsAt ? new Date(body.startsAt) : campaign.startsAt;
       const endsAt = body.endsAt ? new Date(body.endsAt) : campaign.endsAt;
-      if (
-        (startsAt && Number.isNaN(startsAt.getTime())) ||
-        (endsAt && Number.isNaN(endsAt.getTime()))
-      ) {
+      if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime()))) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "Fechas inválidas",
+            code: 'INVALID_ARGUMENT',
+            message: 'Fechas inválidas',
           },
         });
       }
@@ -1304,8 +1276,8 @@ export const campaignsModule = new Elysia({
       if (startsAt && endsAt && startsAt.getTime() >= endsAt.getTime()) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "startsAt debe ser menor que endsAt",
+            code: 'INVALID_ARGUMENT',
+            message: 'startsAt debe ser menor que endsAt',
           },
         });
       }
@@ -1331,13 +1303,13 @@ export const campaignsModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_UPDATE_FAILED",
-            message: "No se pudo actualizar la campaña",
+            code: 'CAMPAIGN_UPDATE_FAILED',
+            message: 'No se pudo actualizar la campaña',
           },
         });
       }
 
-      await appendAudit(updated.id, "campaign.updated", null, auth, {
+      await appendAudit(updated.id, 'campaign.updated', null, auth, {
         status: updated.status,
       });
 
@@ -1353,18 +1325,18 @@ export const campaignsModule = new Elysia({
         200: campaignResponse,
       },
       detail: {
-        summary: "Actualizar campaña",
+        summary: 'Actualizar campaña',
       },
     },
   )
   .get(
-    "/:campaignId/policies",
+    '/:campaignId/policies',
     async ({ auth, params, status }: CampaignPolicyListContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1373,8 +1345,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1382,8 +1354,8 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
@@ -1405,18 +1377,18 @@ export const campaignsModule = new Elysia({
         200: campaignPolicyListResponse,
       },
       detail: {
-        summary: "Listar políticas de campaña",
+        summary: 'Listar políticas de campaña',
       },
     },
   )
   .post(
-    "/:campaignId/policies",
+    '/:campaignId/policies',
     async ({ auth, params, body, status }: CampaignPolicyCreateContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1425,8 +1397,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1434,17 +1406,17 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected permiten editar políticas",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar políticas',
           },
         });
       }
@@ -1464,8 +1436,8 @@ export const campaignsModule = new Elysia({
           policyType: body.policyType,
           scopeType: body.scopeType,
           scopeId,
-          scopeBrandId: body.scopeType === "brand" ? scopeId : null,
-          scopeProductId: body.scopeType === "product" ? scopeId : null,
+          scopeBrandId: body.scopeType === 'brand' ? scopeId : null,
+          scopeProductId: body.scopeType === 'product' ? scopeId : null,
           period: body.period,
           value: body.value,
           config: parsedConfig,
@@ -1477,13 +1449,13 @@ export const campaignsModule = new Elysia({
       if (!created) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_POLICY_CREATE_FAILED",
-            message: "No se pudo crear la política de campaña",
+            code: 'CAMPAIGN_POLICY_CREATE_FAILED',
+            message: 'No se pudo crear la política de campaña',
           },
         });
       }
 
-      await appendAudit(created.campaignId, "campaign.policy_created", null, auth, {
+      await appendAudit(created.campaignId, 'campaign.policy_created', null, auth, {
         policyId: created.id,
         policyType: created.policyType,
         scopeType: created.scopeType,
@@ -1501,18 +1473,18 @@ export const campaignsModule = new Elysia({
         201: campaignPolicyResponse,
       },
       detail: {
-        summary: "Crear política de campaña",
+        summary: 'Crear política de campaña',
       },
     },
   )
   .patch(
-    "/:campaignId/policies/:policyId",
+    '/:campaignId/policies/:policyId',
     async ({ auth, params, body, status }: CampaignPolicyUpdateContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1521,8 +1493,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1530,17 +1502,17 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected permiten editar políticas",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar políticas',
           },
         });
       }
@@ -1548,29 +1520,26 @@ export const campaignsModule = new Elysia({
       const [existing] = (await db
         .select()
         .from(campaignPolicies)
-        .where(
-          and(
-            eq(campaignPolicies.id, params.policyId),
-            eq(campaignPolicies.campaignId, campaign.id),
-          ),
-        )) as CampaignPolicyRow[] | [];
+        .where(and(eq(campaignPolicies.id, params.policyId), eq(campaignPolicies.campaignId, campaign.id)))) as
+        | CampaignPolicyRow[]
+        | [];
 
       if (!existing) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_POLICY_NOT_FOUND",
-            message: "Política no encontrada",
+            code: 'CAMPAIGN_POLICY_NOT_FOUND',
+            message: 'Política no encontrada',
           },
         });
       }
 
       const nextScopeType = body.scopeType ?? existing.scopeType;
       const nextScopeId =
-        body.scopeType === "campaign"
+        body.scopeType === 'campaign'
           ? null
           : body.scopeId !== undefined
             ? body.scopeId
-            : existing.scopeType === "campaign"
+            : existing.scopeType === 'campaign'
               ? null
               : existing.scopeId;
 
@@ -1587,8 +1556,8 @@ export const campaignsModule = new Elysia({
           policyType: body.policyType ?? existing.policyType,
           scopeType: nextScopeType,
           scopeId: nextScopeId ?? null,
-          scopeBrandId: nextScopeType === "brand" ? (nextScopeId ?? null) : null,
-          scopeProductId: nextScopeType === "product" ? (nextScopeId ?? null) : null,
+          scopeBrandId: nextScopeType === 'brand' ? (nextScopeId ?? null) : null,
+          scopeProductId: nextScopeType === 'product' ? (nextScopeId ?? null) : null,
           period: body.period ?? existing.period,
           value: body.value ?? existing.value,
           config: body.config !== undefined ? parsedConfig : existing.config,
@@ -1601,13 +1570,13 @@ export const campaignsModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_POLICY_UPDATE_FAILED",
-            message: "No se pudo actualizar la política de campaña",
+            code: 'CAMPAIGN_POLICY_UPDATE_FAILED',
+            message: 'No se pudo actualizar la política de campaña',
           },
         });
       }
 
-      await appendAudit(updated.campaignId, "campaign.policy_updated", null, auth, {
+      await appendAudit(updated.campaignId, 'campaign.policy_updated', null, auth, {
         policyId: updated.id,
         policyType: updated.policyType,
         scopeType: updated.scopeType,
@@ -1625,18 +1594,18 @@ export const campaignsModule = new Elysia({
         200: campaignPolicyResponse,
       },
       detail: {
-        summary: "Actualizar política de campaña",
+        summary: 'Actualizar política de campaña',
       },
     },
   )
   .get(
-    "/:campaignId/accumulation-rules",
+    '/:campaignId/accumulation-rules',
     async ({ auth, params, status }: CampaignAccumulationRuleListContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1645,8 +1614,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1654,8 +1623,8 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
@@ -1680,18 +1649,18 @@ export const campaignsModule = new Elysia({
         200: campaignAccumulationRuleListResponse,
       },
       detail: {
-        summary: "Listar reglas de acumulación",
+        summary: 'Listar reglas de acumulación',
       },
     },
   )
   .post(
-    "/:campaignId/accumulation-rules",
+    '/:campaignId/accumulation-rules',
     async ({ auth, params, body, status }: CampaignAccumulationRuleCreateContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1700,8 +1669,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1709,17 +1678,17 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected permiten editar reglas de acumulación",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar reglas de acumulación',
           },
         });
       }
@@ -1736,8 +1705,8 @@ export const campaignsModule = new Elysia({
           campaignId: campaign.id,
           scopeType: body.scopeType,
           scopeId,
-          scopeBrandId: body.scopeType === "brand" ? scopeId : null,
-          scopeProductId: body.scopeType === "product" ? scopeId : null,
+          scopeBrandId: body.scopeType === 'brand' ? scopeId : null,
+          scopeProductId: body.scopeType === 'product' ? scopeId : null,
           multiplier: body.multiplier ?? 1,
           flatBonus: body.flatBonus ?? 0,
           priority: body.priority ?? 100,
@@ -1749,13 +1718,13 @@ export const campaignsModule = new Elysia({
       if (!created) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_ACCUMULATION_RULE_CREATE_FAILED",
-            message: "No se pudo crear la regla de acumulación",
+            code: 'CAMPAIGN_ACCUMULATION_RULE_CREATE_FAILED',
+            message: 'No se pudo crear la regla de acumulación',
           },
         });
       }
 
-      await appendAudit(created.campaignId, "campaign.accumulation_rule_created", null, auth, {
+      await appendAudit(created.campaignId, 'campaign.accumulation_rule_created', null, auth, {
         ruleId: created.id,
         scopeType: created.scopeType,
       });
@@ -1772,18 +1741,18 @@ export const campaignsModule = new Elysia({
         201: campaignAccumulationRuleResponse,
       },
       detail: {
-        summary: "Crear regla de acumulación",
+        summary: 'Crear regla de acumulación',
       },
     },
   )
   .patch(
-    "/:campaignId/accumulation-rules/:ruleId",
+    '/:campaignId/accumulation-rules/:ruleId',
     async ({ auth, params, body, status }: CampaignAccumulationRuleUpdateContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1792,8 +1761,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1801,17 +1770,17 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected permiten editar reglas de acumulación",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar reglas de acumulación',
           },
         });
       }
@@ -1820,28 +1789,25 @@ export const campaignsModule = new Elysia({
         .select()
         .from(campaignAccumulationRules)
         .where(
-          and(
-            eq(campaignAccumulationRules.id, params.ruleId),
-            eq(campaignAccumulationRules.campaignId, campaign.id),
-          ),
+          and(eq(campaignAccumulationRules.id, params.ruleId), eq(campaignAccumulationRules.campaignId, campaign.id)),
         )) as CampaignAccumulationRuleRow[];
 
       if (!existing) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_ACCUMULATION_RULE_NOT_FOUND",
-            message: "Regla de acumulación no encontrada",
+            code: 'CAMPAIGN_ACCUMULATION_RULE_NOT_FOUND',
+            message: 'Regla de acumulación no encontrada',
           },
         });
       }
 
       const nextScopeType = body.scopeType ?? existing.scopeType;
       const nextScopeId =
-        body.scopeType === "campaign"
+        body.scopeType === 'campaign'
           ? null
           : body.scopeId !== undefined
             ? body.scopeId
-            : existing.scopeType === "campaign"
+            : existing.scopeType === 'campaign'
               ? null
               : existing.scopeId;
       const scopeError = await ensureScope(campaign, nextScopeType, nextScopeId ?? null, status);
@@ -1854,8 +1820,8 @@ export const campaignsModule = new Elysia({
         .set({
           scopeType: nextScopeType,
           scopeId: nextScopeId ?? null,
-          scopeBrandId: nextScopeType === "brand" ? (nextScopeId ?? null) : null,
-          scopeProductId: nextScopeType === "product" ? (nextScopeId ?? null) : null,
+          scopeBrandId: nextScopeType === 'brand' ? (nextScopeId ?? null) : null,
+          scopeProductId: nextScopeType === 'product' ? (nextScopeId ?? null) : null,
           multiplier: body.multiplier ?? existing.multiplier,
           flatBonus: body.flatBonus ?? existing.flatBonus,
           priority: body.priority ?? existing.priority,
@@ -1868,13 +1834,13 @@ export const campaignsModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_ACCUMULATION_RULE_UPDATE_FAILED",
-            message: "No se pudo actualizar la regla de acumulación",
+            code: 'CAMPAIGN_ACCUMULATION_RULE_UPDATE_FAILED',
+            message: 'No se pudo actualizar la regla de acumulación',
           },
         });
       }
 
-      await appendAudit(updated.campaignId, "campaign.accumulation_rule_updated", null, auth, {
+      await appendAudit(updated.campaignId, 'campaign.accumulation_rule_updated', null, auth, {
         ruleId: updated.id,
         scopeType: updated.scopeType,
       });
@@ -1891,19 +1857,19 @@ export const campaignsModule = new Elysia({
         200: campaignAccumulationRuleResponse,
       },
       detail: {
-        summary: "Actualizar regla de acumulación",
+        summary: 'Actualizar regla de acumulación',
       },
     },
   )
   // @ts-ignore: TypeScript loses inference after long chain
   .delete(
-    "/:campaignId/accumulation-rules/:ruleId",
+    '/:campaignId/accumulation-rules/:ruleId',
     async ({ auth, params, status }: CampaignAccumulationRuleDeleteContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1912,8 +1878,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -1921,17 +1887,17 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected permiten editar reglas de acumulación",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar reglas de acumulación',
           },
         });
       }
@@ -1943,25 +1909,20 @@ export const campaignsModule = new Elysia({
         })
         .from(campaignAccumulationRules)
         .where(
-          and(
-            eq(campaignAccumulationRules.id, params.ruleId),
-            eq(campaignAccumulationRules.campaignId, campaign.id),
-          ),
+          and(eq(campaignAccumulationRules.id, params.ruleId), eq(campaignAccumulationRules.campaignId, campaign.id)),
         )) as Array<{ id: string; campaignId: string }>;
 
       if (!existing) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_ACCUMULATION_RULE_NOT_FOUND",
-            message: "Regla de acumulación no encontrada",
+            code: 'CAMPAIGN_ACCUMULATION_RULE_NOT_FOUND',
+            message: 'Regla de acumulación no encontrada',
           },
         });
       }
 
-      await db
-        .delete(campaignAccumulationRules)
-        .where(eq(campaignAccumulationRules.id, existing.id));
-      await appendAudit(existing.campaignId, "campaign.accumulation_rule_deleted", null, auth, {
+      await db.delete(campaignAccumulationRules).where(eq(campaignAccumulationRules.id, existing.id));
+      await appendAudit(existing.campaignId, 'campaign.accumulation_rule_deleted', null, auth, {
         ruleId: existing.id,
       });
 
@@ -1971,18 +1932,18 @@ export const campaignsModule = new Elysia({
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
       headers: authorizationHeader,
       detail: {
-        summary: "Eliminar regla de acumulación",
+        summary: 'Eliminar regla de acumulación',
       },
     },
   )
   .get(
-    "/:campaignId/tiers",
+    '/:campaignId/tiers',
     async ({ auth, params, status }: CampaignTierListContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -1991,8 +1952,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2000,8 +1961,8 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
@@ -2024,18 +1985,18 @@ export const campaignsModule = new Elysia({
         200: campaignTierListResponse,
       },
       detail: {
-        summary: "Listar tiers de campaña",
+        summary: 'Listar tiers de campaña',
       },
     },
   )
   .post(
-    "/:campaignId/tiers",
+    '/:campaignId/tiers',
     async ({ auth, params, body, status }: CampaignTierCreateContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -2044,8 +2005,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2053,17 +2014,17 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected permiten editar tiers",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar tiers',
           },
         });
       }
@@ -2071,8 +2032,8 @@ export const campaignsModule = new Elysia({
       if (!body.minPurchaseAmount && !body.minPurchaseCount) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "Debes enviar minPurchaseCount o minPurchaseAmount",
+            code: 'INVALID_ARGUMENT',
+            message: 'Debes enviar minPurchaseCount o minPurchaseAmount',
           },
         });
       }
@@ -2084,11 +2045,11 @@ export const campaignsModule = new Elysia({
           name: body.name,
           order: body.order,
           thresholdValue: body.thresholdValue,
-          windowUnit: body.windowUnit ?? "day",
+          windowUnit: body.windowUnit ?? 'day',
           windowValue: body.windowValue ?? 90,
           minPurchaseCount: body.minPurchaseCount ?? null,
           minPurchaseAmount: body.minPurchaseAmount ?? null,
-          qualificationMode: body.qualificationMode ?? "any",
+          qualificationMode: body.qualificationMode ?? 'any',
           graceDays: body.graceDays ?? 7,
           updatedAt: new Date(),
         })
@@ -2097,8 +2058,8 @@ export const campaignsModule = new Elysia({
       if (!created) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_TIER_CREATE_FAILED",
-            message: "No se pudo crear el tier",
+            code: 'CAMPAIGN_TIER_CREATE_FAILED',
+            message: 'No se pudo crear el tier',
           },
         });
       }
@@ -2118,7 +2079,7 @@ export const campaignsModule = new Elysia({
         .select()
         .from(tierBenefits)
         .where(eq(tierBenefits.tierId, created.id))) as TierBenefitRow[];
-      await appendAudit(created.campaignId, "campaign.tier_created", null, auth, {
+      await appendAudit(created.campaignId, 'campaign.tier_created', null, auth, {
         tierId: created.id,
         order: created.order,
       });
@@ -2135,18 +2096,18 @@ export const campaignsModule = new Elysia({
         201: campaignTierResponse,
       },
       detail: {
-        summary: "Crear tier de campaña",
+        summary: 'Crear tier de campaña',
       },
     },
   )
   .patch(
-    "/:campaignId/tiers/:tierId",
+    '/:campaignId/tiers/:tierId',
     async ({ auth, params, body, status }: CampaignTierUpdateContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -2155,8 +2116,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2164,17 +2125,17 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected permiten editar tiers",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar tiers',
           },
         });
       }
@@ -2189,8 +2150,8 @@ export const campaignsModule = new Elysia({
       if (!existing) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_TIER_NOT_FOUND",
-            message: "Tier no encontrado",
+            code: 'CAMPAIGN_TIER_NOT_FOUND',
+            message: 'Tier no encontrado',
           },
         });
       }
@@ -2200,8 +2161,8 @@ export const campaignsModule = new Elysia({
       if (!nextCount && !nextAmount) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "Debes conservar minPurchaseCount o minPurchaseAmount",
+            code: 'INVALID_ARGUMENT',
+            message: 'Debes conservar minPurchaseCount o minPurchaseAmount',
           },
         });
       }
@@ -2226,8 +2187,8 @@ export const campaignsModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_TIER_UPDATE_FAILED",
-            message: "No se pudo actualizar el tier",
+            code: 'CAMPAIGN_TIER_UPDATE_FAILED',
+            message: 'No se pudo actualizar el tier',
           },
         });
       }
@@ -2250,7 +2211,7 @@ export const campaignsModule = new Elysia({
         .select()
         .from(tierBenefits)
         .where(eq(tierBenefits.tierId, updated.id))) as TierBenefitRow[];
-      await appendAudit(updated.campaignId, "campaign.tier_updated", null, auth, {
+      await appendAudit(updated.campaignId, 'campaign.tier_updated', null, auth, {
         tierId: updated.id,
         order: updated.order,
       });
@@ -2267,18 +2228,18 @@ export const campaignsModule = new Elysia({
         200: campaignTierResponse,
       },
       detail: {
-        summary: "Actualizar tier de campaña",
+        summary: 'Actualizar tier de campaña',
       },
     },
   )
   .delete(
-    "/:campaignId/tiers/:tierId",
+    '/:campaignId/tiers/:tierId',
     async ({ auth, params, status }: CampaignTierDeleteContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -2287,8 +2248,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2296,17 +2257,17 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
         return status(409, {
           error: {
-            code: "CAMPAIGN_LOCKED",
-            message: "Solo campañas en draft o rejected permiten editar tiers",
+            code: 'CAMPAIGN_LOCKED',
+            message: 'Solo campañas en draft o rejected permiten editar tiers',
           },
         });
       }
@@ -2314,9 +2275,7 @@ export const campaignsModule = new Elysia({
       const [existing] = (await db
         .select({ id: campaignTiers.id, campaignId: campaignTiers.campaignId })
         .from(campaignTiers)
-        .where(
-          and(eq(campaignTiers.id, params.tierId), eq(campaignTiers.campaignId, campaign.id)),
-        )) as Array<{
+        .where(and(eq(campaignTiers.id, params.tierId), eq(campaignTiers.campaignId, campaign.id)))) as Array<{
         id: string;
         campaignId: string;
       }>;
@@ -2324,14 +2283,14 @@ export const campaignsModule = new Elysia({
       if (!existing) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_TIER_NOT_FOUND",
-            message: "Tier no encontrado",
+            code: 'CAMPAIGN_TIER_NOT_FOUND',
+            message: 'Tier no encontrado',
           },
         });
       }
 
       await db.delete(campaignTiers).where(eq(campaignTiers.id, existing.id));
-      await appendAudit(existing.campaignId, "campaign.tier_deleted", null, auth, {
+      await appendAudit(existing.campaignId, 'campaign.tier_deleted', null, auth, {
         tierId: existing.id,
       });
 
@@ -2341,18 +2300,18 @@ export const campaignsModule = new Elysia({
       beforeHandle: authGuard({ roles: [...allowedRoles], allowApiKey: true }),
       headers: authorizationHeader,
       detail: {
-        summary: "Eliminar tier de campaña",
+        summary: 'Eliminar tier de campaña',
       },
     },
   )
   .post(
-    "/:campaignId/ready-for-review",
+    '/:campaignId/ready-for-review',
     async ({ auth, params, body, status }: CampaignNoteContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -2361,8 +2320,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2370,20 +2329,20 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "draft" && campaign.status !== "rejected") {
-        return invalidTransition(status, campaign.status, "ready_for_review");
+      if (campaign.status !== 'draft' && campaign.status !== 'rejected') {
+        return invalidTransition(status, campaign.status, 'ready_for_review');
       }
 
       const [updated] = (await db
         .update(campaigns)
         .set({
-          status: "ready_for_review",
+          status: 'ready_for_review',
           version: campaign.version + 1,
           updatedBy: resolveActorUserId(auth),
           updatedAt: new Date(),
@@ -2394,18 +2353,13 @@ export const campaignsModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_UPDATE_FAILED",
-            message: "No se pudo actualizar la campaña",
+            code: 'CAMPAIGN_UPDATE_FAILED',
+            message: 'No se pudo actualizar la campaña',
           },
         });
       }
 
-      await appendAudit(
-        updated.id,
-        "campaign.ready_for_review",
-        body.reason ?? body.notes ?? null,
-        auth,
-      );
+      await appendAudit(updated.id, 'campaign.ready_for_review', body.reason ?? body.notes ?? null, auth);
 
       return {
         data: serializeCampaign(updated),
@@ -2419,18 +2373,18 @@ export const campaignsModule = new Elysia({
         200: campaignResponse,
       },
       detail: {
-        summary: "Enviar campaña a revisión",
+        summary: 'Enviar campaña a revisión',
       },
     },
   )
   .post(
-    "/:campaignId/review",
+    '/:campaignId/review',
     async ({ auth, params, body, status }: CampaignReviewContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -2439,8 +2393,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2448,18 +2402,18 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "ready_for_review") {
-        return invalidTransition(status, campaign.status, "in_review/rejected");
+      if (campaign.status !== 'ready_for_review') {
+        return invalidTransition(status, campaign.status, 'in_review/rejected');
       }
 
       const approved = body.approved ?? true;
-      const nextStatus = approved ? "in_review" : "rejected";
+      const nextStatus = approved ? 'in_review' : 'rejected';
       const [updated] = (await db
         .update(campaigns)
         .set({
@@ -2474,13 +2428,13 @@ export const campaignsModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_UPDATE_FAILED",
-            message: "No se pudo actualizar la campaña",
+            code: 'CAMPAIGN_UPDATE_FAILED',
+            message: 'No se pudo actualizar la campaña',
           },
         });
       }
 
-      await appendAudit(updated.id, "campaign.reviewed", body.notes ?? null, auth, {
+      await appendAudit(updated.id, 'campaign.reviewed', body.notes ?? null, auth, {
         approved,
       });
 
@@ -2496,18 +2450,18 @@ export const campaignsModule = new Elysia({
         200: campaignResponse,
       },
       detail: {
-        summary: "Revisar campaña",
+        summary: 'Revisar campaña',
       },
     },
   )
   .post(
-    "/:campaignId/confirm",
+    '/:campaignId/confirm',
     async ({ auth, params, body, status }: CampaignNoteContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -2516,8 +2470,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2525,20 +2479,20 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "in_review") {
-        return invalidTransition(status, campaign.status, "confirmed");
+      if (campaign.status !== 'in_review') {
+        return invalidTransition(status, campaign.status, 'confirmed');
       }
 
       const [updated] = (await db
         .update(campaigns)
         .set({
-          status: "confirmed",
+          status: 'confirmed',
           version: campaign.version + 1,
           updatedBy: resolveActorUserId(auth),
           updatedAt: new Date(),
@@ -2549,13 +2503,13 @@ export const campaignsModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_UPDATE_FAILED",
-            message: "No se pudo actualizar la campaña",
+            code: 'CAMPAIGN_UPDATE_FAILED',
+            message: 'No se pudo actualizar la campaña',
           },
         });
       }
 
-      await appendAudit(updated.id, "campaign.confirmed", body.notes ?? null, auth);
+      await appendAudit(updated.id, 'campaign.confirmed', body.notes ?? null, auth);
 
       return {
         data: serializeCampaign(updated),
@@ -2569,18 +2523,18 @@ export const campaignsModule = new Elysia({
         200: campaignResponse,
       },
       detail: {
-        summary: "Confirmar campaña",
+        summary: 'Confirmar campaña',
       },
     },
   )
   .post(
-    "/:campaignId/activate",
+    '/:campaignId/activate',
     async ({ auth, params, status }: CampaignParamsContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -2589,8 +2543,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2598,20 +2552,20 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
 
-      if (campaign.status !== "confirmed") {
-        return invalidTransition(status, campaign.status, "active");
+      if (campaign.status !== 'confirmed') {
+        return invalidTransition(status, campaign.status, 'active');
       }
 
       const [updated] = (await db
         .update(campaigns)
         .set({
-          status: "active",
+          status: 'active',
           version: campaign.version + 1,
           updatedBy: resolveActorUserId(auth),
           updatedAt: new Date(),
@@ -2622,13 +2576,13 @@ export const campaignsModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "CAMPAIGN_UPDATE_FAILED",
-            message: "No se pudo actualizar la campaña",
+            code: 'CAMPAIGN_UPDATE_FAILED',
+            message: 'No se pudo actualizar la campaña',
           },
         });
       }
 
-      await appendAudit(updated.id, "campaign.activated", null, auth);
+      await appendAudit(updated.id, 'campaign.activated', null, auth);
 
       return {
         data: serializeCampaign(updated),
@@ -2641,18 +2595,18 @@ export const campaignsModule = new Elysia({
         200: campaignResponse,
       },
       detail: {
-        summary: "Activar campaña",
+        summary: 'Activar campaña',
       },
     },
   )
   .get(
-    "/:campaignId/audit-logs",
+    '/:campaignId/audit-logs',
     async ({ auth, params, query, status }: CampaignAuditContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -2661,8 +2615,8 @@ export const campaignsModule = new Elysia({
       if (!campaign) {
         return status(404, {
           error: {
-            code: "CAMPAIGN_NOT_FOUND",
-            message: "Campaña no encontrada",
+            code: 'CAMPAIGN_NOT_FOUND',
+            message: 'Campaña no encontrada',
           },
         });
       }
@@ -2670,8 +2624,8 @@ export const campaignsModule = new Elysia({
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para esta campaña",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para esta campaña',
           },
         });
       }
@@ -2680,8 +2634,8 @@ export const campaignsModule = new Elysia({
       if (query.cursor && !cursorDate) {
         return status(400, {
           error: {
-            code: "INVALID_CURSOR",
-            message: "Cursor inválido",
+            code: 'INVALID_CURSOR',
+            message: 'Cursor inválido',
           },
         });
       }
@@ -2719,13 +2673,13 @@ export const campaignsModule = new Elysia({
         200: campaignAuditListResponse,
       },
       detail: {
-        summary: "Listar auditoría de campaña",
+        summary: 'Listar auditoría de campaña',
       },
     },
   )
   // ========== STORE TARGETING / ENROLLMENT ==========
   .get(
-    "/:campaignId/stores",
+    '/:campaignId/stores',
     async ({
       auth,
       params,
@@ -2733,23 +2687,23 @@ export const campaignsModule = new Elysia({
       status,
     }: CampaignParamsContext & { query: { limit?: string; cursor?: string; status?: string } }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const campaign = await ensureCampaign(params.campaignId);
       if (!campaign) {
         return status(404, {
-          error: { code: "CAMPAIGN_NOT_FOUND", message: "Campaña no encontrada" },
+          error: { code: 'CAMPAIGN_NOT_FOUND', message: 'Campaña no encontrada' },
         });
       }
 
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
-          error: { code: "FORBIDDEN", message: "No tienes permisos para esta campaña" },
+          error: { code: 'FORBIDDEN', message: 'No tienes permisos para esta campaña' },
         });
       }
 
-      const limit = parseLimit(query.limit ?? "50");
+      const limit = parseLimit(query.limit ?? '50');
       const cursorDate = parseCursor(query.cursor);
       const conditions = [eq(campaignStoreEnrollments.campaignId, params.campaignId)];
 
@@ -2757,13 +2711,7 @@ export const campaignsModule = new Elysia({
         conditions.push(
           eq(
             campaignStoreEnrollments.status,
-            query.status as
-              | "visible"
-              | "invited"
-              | "enrolled"
-              | "declined"
-              | "removed"
-              | "suspended",
+            query.status as 'visible' | 'invited' | 'enrolled' | 'declined' | 'removed' | 'suspended',
           ),
         );
       }
@@ -2831,11 +2779,11 @@ export const campaignsModule = new Elysia({
     {
       beforeHandle: authGuard({ roles: [...allowedRoles] }),
       response: { 200: campaignStoreListResponse },
-      detail: { summary: "Listar tiendas de campaña" },
+      detail: { summary: 'Listar tiendas de campaña' },
     },
   )
   .post(
-    "/:campaignId/stores/target",
+    '/:campaignId/stores/target',
     async ({
       auth,
       params,
@@ -2845,38 +2793,38 @@ export const campaignsModule = new Elysia({
       body: { storeIds: string[]; status?: string; source?: string };
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const campaign = await ensureCampaign(params.campaignId);
       if (!campaign) {
         return status(404, {
-          error: { code: "CAMPAIGN_NOT_FOUND", message: "Campaña no encontrada" },
+          error: { code: 'CAMPAIGN_NOT_FOUND', message: 'Campaña no encontrada' },
         });
       }
 
       if (!canAccessCampaign(auth, campaign)) {
         return status(403, {
-          error: { code: "FORBIDDEN", message: "No tienes permisos para esta campaña" },
+          error: { code: 'FORBIDDEN', message: 'No tienes permisos para esta campaña' },
         });
       }
 
       if (!campaign.cpgId) {
         return status(400, {
-          error: { code: "INVALID_CAMPAIGN", message: "La campaña no tiene CPG asociado" },
+          error: { code: 'INVALID_CAMPAIGN', message: 'La campaña no tiene CPG asociado' },
         });
       }
 
       if (!body.storeIds || body.storeIds.length === 0) {
         return status(400, {
-          error: { code: "INVALID_ARGUMENT", message: "Debes proporcionar al menos un storeId" },
+          error: { code: 'INVALID_ARGUMENT', message: 'Debes proporcionar al menos un storeId' },
         });
       }
 
       const actorUserId = resolveActorUserId(auth);
       const now = new Date();
-      const targetStatus = body.status ?? "visible";
-      const source = body.source ?? "manual";
+      const targetStatus = body.status ?? 'visible';
+      const source = body.source ?? 'manual';
 
       for (const storeId of body.storeIds) {
         const [existing] = (await db
@@ -2894,9 +2842,9 @@ export const campaignsModule = new Elysia({
           await db
             .update(campaignStoreEnrollments)
             .set({
-              status: targetStatus as "visible" | "invited" | "enrolled",
-              visibilitySource: source as "manual" | "zone" | "import",
-              invitedAt: targetStatus === "invited" ? now : existing ? undefined : null,
+              status: targetStatus as 'visible' | 'invited' | 'enrolled',
+              visibilitySource: source as 'manual' | 'zone' | 'import',
+              invitedAt: targetStatus === 'invited' ? now : existing ? undefined : null,
               updatedAt: now,
             })
             .where(eq(campaignStoreEnrollments.id, existing.id));
@@ -2904,9 +2852,9 @@ export const campaignsModule = new Elysia({
           await db.insert(campaignStoreEnrollments).values({
             campaignId: params.campaignId,
             storeId,
-            status: targetStatus as "visible" | "invited" | "enrolled",
-            visibilitySource: source as "manual" | "zone" | "import",
-            invitedAt: targetStatus === "invited" ? now : null,
+            status: targetStatus as 'visible' | 'invited' | 'enrolled',
+            visibilitySource: source as 'manual' | 'zone' | 'import',
+            invitedAt: targetStatus === 'invited' ? now : null,
             invitedByUserId: actorUserId,
             createdAt: now,
             updatedAt: now,
@@ -2919,11 +2867,11 @@ export const campaignsModule = new Elysia({
     {
       beforeHandle: authGuard({ roles: [...allowedRoles] }),
       body: campaignStoreTargetRequest,
-      detail: { summary: "Agregar tiendas a campaña" },
+      detail: { summary: 'Agregar tiendas a campaña' },
     },
   )
   .post(
-    "/:campaignId/stores/:storeId/enroll",
+    '/:campaignId/stores/:storeId/enroll',
     async ({
       auth,
       params,
@@ -2931,40 +2879,34 @@ export const campaignsModule = new Elysia({
       status,
     }: CampaignParamsContext & { body: { status: string }; params: { campaignId: string; storeId: string } }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const campaign = await ensureCampaign(params.campaignId);
       if (!campaign) {
         return status(404, {
-          error: { code: "CAMPAIGN_NOT_FOUND", message: "Campaña no encontrada" },
+          error: { code: 'CAMPAIGN_NOT_FOUND', message: 'Campaña no encontrada' },
         });
       }
 
       const role = getAuthRole(auth);
       const isCpgAccess = canAccessCampaign(auth, campaign);
-      const isStoreOperator = auth.type === "jwt" || auth.type === "dev";
+      const isStoreOperator = auth.type === 'jwt' || auth.type === 'dev';
       const isStoreAccess =
         isStoreOperator &&
-        (role === "store_admin" || role === "store_staff") &&
-        auth.tenantType === "store" &&
+        (role === 'store_admin' || role === 'store_staff') &&
+        auth.tenantType === 'store' &&
         auth.tenantId === params.storeId;
 
       if (!isCpgAccess && !isStoreAccess) {
         return status(403, {
-          error: { code: "FORBIDDEN", message: "No tienes permisos para esta campaña/tienda" },
+          error: { code: 'FORBIDDEN', message: 'No tienes permisos para esta campaña/tienda' },
         });
       }
 
       const actorUserId = resolveActorUserId(auth);
       const now = new Date();
-      const targetStatus = body.status as
-        | "enrolled"
-        | "declined"
-        | "visible"
-        | "invited"
-        | "removed"
-        | "suspended";
+      const targetStatus = body.status as 'enrolled' | 'declined' | 'visible' | 'invited' | 'removed' | 'suspended';
 
       const [existing] = (await db
         .select()
@@ -2980,15 +2922,17 @@ export const campaignsModule = new Elysia({
         status: string;
       }>;
 
+      const shouldNotifyEnrollment = targetStatus === 'enrolled' && existing?.status !== 'enrolled';
+
       if (existing) {
         await db
           .update(campaignStoreEnrollments)
           .set({
             status: targetStatus,
-            enrolledAt: targetStatus === "enrolled" ? now : null,
-            declinedAt: targetStatus === "declined" ? now : null,
-            removedAt: targetStatus === "removed" ? now : null,
-            enrolledByUserId: targetStatus === "enrolled" ? actorUserId : null,
+            enrolledAt: targetStatus === 'enrolled' ? now : null,
+            declinedAt: targetStatus === 'declined' ? now : null,
+            removedAt: targetStatus === 'removed' ? now : null,
+            enrolledByUserId: targetStatus === 'enrolled' ? actorUserId : null,
             updatedAt: now,
           })
           .where(eq(campaignStoreEnrollments.id, existing.id));
@@ -2998,28 +2942,35 @@ export const campaignsModule = new Elysia({
           campaignId: params.campaignId,
           storeId: params.storeId,
           status: targetStatus,
-          visibilitySource: "manual",
-          enrolledAt: targetStatus === "enrolled" ? now : null,
-          declinedAt: targetStatus === "declined" ? now : null,
-          enrolledByUserId: targetStatus === "enrolled" ? actorUserId : null,
+          visibilitySource: 'manual',
+          enrolledAt: targetStatus === 'enrolled' ? now : null,
+          declinedAt: targetStatus === 'declined' ? now : null,
+          enrolledByUserId: targetStatus === 'enrolled' ? actorUserId : null,
           createdAt: now,
           updatedAt: now,
         });
       }
 
-      return { data: { success: true, status: targetStatus } };
+      const notificationSummary = shouldNotifyEnrollment
+        ? await notifyStoreUsersCampaignEnrollment({
+            campaignId: params.campaignId,
+            storeId: params.storeId,
+          })
+        : { sent: 0, skipped: 0, failed: 0 };
+
+      return { data: { success: true, status: targetStatus, notifications: notificationSummary } };
     },
     {
       beforeHandle: authGuard({
-        roles: [...allowedRoles, "store_admin", "store_staff"],
+        roles: [...allowedRoles, 'store_admin', 'store_staff'],
         allowApiKey: true,
       }),
       body: campaignStoreEnrollRequest,
-      detail: { summary: "Enrolar o actualizar tienda en campaña" },
+      detail: { summary: 'Enrolar o actualizar tienda en campaña' },
     },
   )
   .get(
-    "/:campaignId/stores/:storeId/campaigns",
+    '/:campaignId/stores/:storeId/campaigns',
     async ({
       auth,
       params,
@@ -3032,25 +2983,23 @@ export const campaignsModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const role = getAuthRole(auth);
       const isStoreOperator =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        (role === "store_admin" || role === "store_staff") &&
-        auth.tenantType === "store" &&
+        (auth.type === 'jwt' || auth.type === 'dev') &&
+        (role === 'store_admin' || role === 'store_staff') &&
+        auth.tenantType === 'store' &&
         auth.tenantId === params.storeId;
       const isCpgAccess =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        role === "cpg_admin" &&
-        auth.tenantType === "cpg";
+        (auth.type === 'jwt' || auth.type === 'dev') && role === 'cpg_admin' && auth.tenantType === 'cpg';
 
-      if (!isStoreOperator && !isCpgAccess && !(role === "qoa_admin" || role === "qoa_support")) {
+      if (!isStoreOperator && !isCpgAccess && !(role === 'qoa_admin' || role === 'qoa_support')) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para ver campañas de esta tienda",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para ver campañas de esta tienda',
           },
         });
       }
@@ -3058,7 +3007,7 @@ export const campaignsModule = new Elysia({
       const campaign = await ensureCampaign(params.campaignId);
       if (!campaign) {
         return status(404, {
-          error: { code: "CAMPAIGN_NOT_FOUND", message: "Campaña no encontrada" },
+          error: { code: 'CAMPAIGN_NOT_FOUND', message: 'Campaña no encontrada' },
         });
       }
 
@@ -3074,16 +3023,16 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({
-        roles: ["store_admin", "store_staff", "cpg_admin", "qoa_admin", "qoa_support"],
+        roles: ['store_admin', 'store_staff', 'cpg_admin', 'qoa_admin', 'qoa_support'],
         allowApiKey: true,
       }),
       response: { 200: campaignListResponse },
-      detail: { summary: "Listar campañas visibles de una tienda para una campaña específica" },
+      detail: { summary: 'Listar campañas visibles de una tienda para una campaña específica' },
     },
   )
   // ========== STORE-FACING: GET VISIBLE CAMPAIGNS FOR STORE ==========
   .get(
-    "/stores/:storeId/campaigns",
+    '/stores/:storeId/campaigns',
     async ({
       auth,
       params,
@@ -3096,34 +3045,28 @@ export const campaignsModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const role = getAuthRole(auth);
       const isStoreOperator =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        (role === "store_admin" || role === "store_staff") &&
-        auth.tenantType === "store" &&
+        (auth.type === 'jwt' || auth.type === 'dev') &&
+        (role === 'store_admin' || role === 'store_staff') &&
+        auth.tenantType === 'store' &&
         auth.tenantId === params.storeId;
       const isCpgAccess =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        role === "cpg_admin" &&
-        auth.tenantType === "cpg";
+        (auth.type === 'jwt' || auth.type === 'dev') && role === 'cpg_admin' && auth.tenantType === 'cpg';
 
-      if (
-        !isStoreOperator &&
-        !isCpgAccess &&
-        !(role === "qoa_admin" || role === "qoa_support")
-      ) {
+      if (!isStoreOperator && !isCpgAccess && !(role === 'qoa_admin' || role === 'qoa_support')) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para ver campañas de esta tienda",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para ver campañas de esta tienda',
           },
         });
       }
 
-      const limit = parseLimit(query.limit ?? "50");
+      const limit = parseLimit(query.limit ?? '50');
       const cursorDate = parseCursor(query.cursor);
 
       // Get related CPG IDs for this store
@@ -3133,7 +3076,7 @@ export const campaignsModule = new Elysia({
         return { data: [], pagination: { hasMore: false } };
       }
 
-      const conditions = [eq(campaigns.status, "active")];
+      const conditions = [eq(campaigns.status, 'active')];
       if (cursorDate) {
         conditions.push(lt(campaigns.createdAt, cursorDate));
       }
@@ -3165,17 +3108,14 @@ export const campaignsModule = new Elysia({
       const serialized = await Promise.all(
         items.map(async (item) => {
           let storeEnrollmentStatus: string | undefined;
-          if (
-            item.storeAccessMode === "all_related_stores" &&
-            item.storeEnrollmentMode === "auto_enroll"
-          ) {
-            storeEnrollmentStatus = "enrolled";
+          if (item.storeAccessMode === 'all_related_stores' && item.storeEnrollmentMode === 'auto_enroll') {
+            storeEnrollmentStatus = 'enrolled';
           } else {
             const enrollment = await getStoreEnrollmentForCampaign({
               campaignId: item.id,
               storeId: params.storeId,
             });
-            storeEnrollmentStatus = enrollment?.status ?? "visible";
+            storeEnrollmentStatus = enrollment?.status ?? 'visible';
           }
           return { ...serializeCampaign(item), storeEnrollmentStatus };
         }),
@@ -3188,10 +3128,10 @@ export const campaignsModule = new Elysia({
     },
     {
       beforeHandle: authGuard({
-        roles: ["store_admin", "store_staff", "cpg_admin", "qoa_admin", "qoa_support"],
+        roles: ['store_admin', 'store_staff', 'cpg_admin', 'qoa_admin', 'qoa_support'],
         allowApiKey: true,
       }),
       response: { 200: campaignListResponse },
-      detail: { summary: "Listar campañas visibles para una tienda" },
+      detail: { summary: 'Listar campañas visibles para una tienda' },
     },
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { ReactQRCode } from "@lglab/react-qr-code";
 import { api } from "@/lib/api";
@@ -12,6 +12,21 @@ type WalletCampaign = {
   campaignName: string;
   enrollmentMode: "open" | "opt_in" | "system_universal";
   current: number;
+};
+
+type WalletStoreBreakdown = {
+  storeId: string;
+  storeName: string;
+  purchases: number;
+  visits: number;
+  totalSpent: number;
+  pointsTotal: number;
+  lastPurchaseAt?: string;
+  campaignPoints: Array<{
+    campaignId: string;
+    campaignName: string;
+    points: number;
+  }>;
 };
 
 type RewardItem = {
@@ -29,6 +44,12 @@ type WalletCurrentTier = {
   windowValue: number;
   minPurchaseCount?: number;
   minPurchaseAmount?: number;
+};
+
+type NextGoal = {
+  name: string;
+  missing: number;
+  progress: number;
 };
 
 export default function WalletHomePage() {
@@ -64,6 +85,7 @@ export default function WalletHomePage() {
   const campaigns = ((walletQuery.data?.data.campaigns as WalletCampaign[] | undefined) ?? []).filter(
     (entry) => entry.enrollmentMode !== "system_universal",
   );
+  const storeBreakdown = (walletQuery.data?.data.storeBreakdown as WalletStoreBreakdown[] | undefined) ?? [];
 
   const rewardQueries = useQueries({
     queries: campaigns.map((campaign) => ({
@@ -83,26 +105,21 @@ export default function WalletHomePage() {
     })),
   });
 
-  const nextGoal = useMemo(() => {
-    let selected: { name: string; missing: number; progress: number } | null = null;
+  let nextGoal: NextGoal | null = null;
+  campaigns.forEach((campaign, index) => {
+    const rewards = ((rewardQueries[index]?.data?.data as RewardItem[] | undefined) ?? []).filter((entry) => entry.status === "active");
+    rewards.forEach((reward) => {
+      const missing = reward.cost - campaign.current;
+      if (missing <= 0) {
+        return;
+      }
 
-    campaigns.forEach((campaign, index) => {
-      const rewards = ((rewardQueries[index]?.data?.data as RewardItem[] | undefined) ?? []).filter((entry) => entry.status === "active");
-      rewards.forEach((reward) => {
-        const missing = reward.cost - campaign.current;
-        if (missing <= 0) {
-          return;
-        }
-
-        const progress = Math.min(100, Math.round((campaign.current / reward.cost) * 100));
-        if (!selected || missing < selected.missing) {
-          selected = { name: reward.name, missing, progress };
-        }
-      });
+      const progress = Math.min(100, Math.round((campaign.current / reward.cost) * 100));
+      if (!nextGoal || missing < nextGoal.missing) {
+        nextGoal = { name: reward.name, missing, progress };
+      }
     });
-
-    return selected;
-  }, [campaigns, rewardQueries]);
+  });
 
   const qrValue = qrQuery.data?.data.code ?? "";
   const currentTier = walletQuery.data?.data.card.currentTier as WalletCurrentTier | undefined;
@@ -168,7 +185,14 @@ export default function WalletHomePage() {
             </div>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Muéstrala en caja para registrar tus compras.</p>
             <div className="mt-4 flex justify-center rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-700">
-              <ReactQRCode value={qrValue} size={220} bgColor="#FFFFFF" fgColor="#111111" />
+              <ReactQRCode
+                value={qrValue}
+                size={220}
+                background="#FFFFFF"
+                dataModulesSettings={{ color: "#111111" }}
+                finderPatternOuterSettings={{ color: "#111111" }}
+                finderPatternInnerSettings={{ color: "#111111" }}
+              />
             </div>
           </div>
         </div>
@@ -182,6 +206,42 @@ export default function WalletHomePage() {
             <div className="h-3 rounded-full bg-amber-500" style={{ width: `${nextGoal.progress}%` }} />
           </div>
           <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Te faltan {nextGoal.missing} puntos para canjear.</p>
+        </section>
+      )}
+
+      {storeBreakdown.length > 0 && (
+        <section className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/70">
+          <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">Por tiendita</h2>
+          <ul className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {storeBreakdown.slice(0, 5).map((store) => (
+              <li key={store.storeId} className="py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{store.storeName}</p>
+                    <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      {store.purchases} compra(s) · {store.visits} check-in(s)
+                    </p>
+                  </div>
+                  <p className="shrink-0 text-sm font-bold text-amber-600 dark:text-amber-300">{store.pointsTotal} pts</p>
+                </div>
+                {store.campaignPoints.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {store.campaignPoints.map((campaign) => (
+                      <span
+                        key={`${store.storeId}-${campaign.campaignId}`}
+                        className="rounded-lg bg-zinc-100 px-2 py-1 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                      >
+                        {campaign.campaignName}: +{campaign.points}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          <Link href="/transactions" className="mt-3 inline-block text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            Ver historial completo
+          </Link>
         </section>
       )}
 

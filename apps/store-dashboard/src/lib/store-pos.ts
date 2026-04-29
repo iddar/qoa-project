@@ -20,6 +20,7 @@ export type DraftItem = {
 export type DraftAccumulation = {
   cardId: string;
   campaignId: string;
+  campaignName?: string;
   accumulated: number;
   newBalance: number;
   sourceType: string;
@@ -36,6 +37,8 @@ export type DraftTransaction = {
   guestFlag: boolean;
   customer?: DraftCustomer;
   accumulations: DraftAccumulation[];
+  pointsTotal?: number;
+  notificationStatus?: "sent" | "skipped" | "failed";
   createdAt: string;
   items: Array<{
     id?: string;

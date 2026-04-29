@@ -1,24 +1,38 @@
-import { Elysia, t } from "elysia";
-import { and, desc, eq, lt, or } from "drizzle-orm";
-import { sql } from "drizzle-orm/sql";
-import { authGuard, authPlugin } from "../../app/plugins/auth";
-import type { AuthContext } from "../../app/plugins/auth";
-import { parseLimit, parseCursor } from "../../app/utils/pagination";
-import { generateCode } from "../../app/utils/generateCode";
-import { db } from "../../db/client";
-import { stores, cpgs, cpgStoreRelations, storeProducts, products, brands, cards, users, transactions, transactionItems, inventoryMovements, storeCheckins } from "../../db/schema";
-import { findPendingCheckinsForStore, matchCheckinWithTransaction } from "../../services/store-checkin";
-import { generateStoreQrPayload } from "../../services/stores";
-import { resolveCustomerByPhone } from "../../services/phone-customer-resolve";
-import { createStorePosTransaction, toDetailPayload } from "../transactions";
-import { previewInventoryImport, summarizeConfirmedInventoryRows } from "../../services/store-inventory";
+import { Elysia, t } from 'elysia';
+import { and, desc, eq, lt, or } from 'drizzle-orm';
+import { sql } from 'drizzle-orm/sql';
+import { authGuard, authPlugin } from '../../app/plugins/auth';
+import type { AuthContext } from '../../app/plugins/auth';
+import { parseLimit, parseCursor } from '../../app/utils/pagination';
+import { generateCode } from '../../app/utils/generateCode';
+import { db } from '../../db/client';
+import {
+  stores,
+  cpgs,
+  cpgStoreRelations,
+  storeProducts,
+  products,
+  brands,
+  cards,
+  users,
+  transactions,
+  transactionItems,
+  inventoryMovements,
+  storeCheckins,
+} from '../../db/schema';
+import { findPendingCheckinsForStore, matchCheckinWithTransaction } from '../../services/store-checkin';
+import { generateStoreQrPayload } from '../../services/stores';
+import { resolveCustomerByPhone } from '../../services/phone-customer-resolve';
+import { attachCampaignNamesToAccumulations, createStorePosTransaction, toDetailPayload } from '../transactions';
+import { sendPostTransactionThankYou } from '../../services/customer-notifications';
+import { previewInventoryImport, summarizeConfirmedInventoryRows } from '../../services/store-inventory';
 import {
   getRelatedCpgIdsForStore,
   getRelatedStoreIdsForCpg,
   touchStoreCpgRelations,
   ensureOrganicRelation,
-} from "../../services/store-cpg-relations";
-import type { StatusHandler } from "../../types/handlers";
+} from '../../services/store-cpg-relations';
+import type { StatusHandler } from '../../types/handlers';
 import {
   qrResponse,
   storeCreateRequest,
@@ -46,16 +60,16 @@ import {
   inventoryIntakeConfirmResponse,
   inventoryMovementListQuery,
   inventoryMovementListResponse,
-} from "./model";
+} from './model';
 
 const getAuthRole = (auth: AuthContext): string | null => {
-  if (auth.type === "jwt" || auth.type === "dev") {
+  if (auth.type === 'jwt' || auth.type === 'dev') {
     return auth.role;
   }
   return null;
 };
 
-const generateStoreCode = () => generateCode("sto", 20);
+const generateStoreCode = () => generateCode('sto', 20);
 
 type StoreRow = {
   id: string;
@@ -174,19 +188,19 @@ type StoreParamsContext = {
 const isStoreOperator = (auth: AuthContext) => {
   const role = getAuthRole(auth);
   if (!role) return false;
-  return role === "store_admin" || role === "store_staff";
+  return role === 'store_admin' || role === 'store_staff';
 };
 
 const canAccessStore = (auth: AuthContext, storeId: string) => {
-  if (auth.type === "jwt" || auth.type === "dev") {
+  if (auth.type === 'jwt' || auth.type === 'dev') {
     if (!isStoreOperator(auth)) {
       return true;
     }
 
-    return auth.tenantType === "store" && auth.tenantId === storeId;
+    return auth.tenantType === 'store' && auth.tenantId === storeId;
   }
 
-  return auth.tenantType === "store" && auth.tenantId === storeId;
+  return auth.tenantType === 'store' && auth.tenantId === storeId;
 };
 
 const parseCardLookupInput = (value: string) => {
@@ -209,15 +223,15 @@ const parseCardLookupInput = (value: string) => {
         payload?: { entityType?: string; entityId?: string; code?: string };
       };
       const resolvedPayload = payload.payload ?? payload;
-      if (resolvedPayload.entityType === "card" && typeof resolvedPayload.entityId === "string") {
+      if (resolvedPayload.entityType === 'card' && typeof resolvedPayload.entityId === 'string') {
         return {
-          kind: "cardId" as const,
+          kind: 'cardId' as const,
           value: resolvedPayload.entityId,
         };
       }
-      if (resolvedPayload.entityType === "card" && typeof resolvedPayload.code === "string") {
+      if (resolvedPayload.entityType === 'card' && typeof resolvedPayload.code === 'string') {
         return {
-          kind: "cardCode" as const,
+          kind: 'cardCode' as const,
           value: resolvedPayload.code,
         };
       }
@@ -228,8 +242,8 @@ const parseCardLookupInput = (value: string) => {
     return null;
   };
 
-  if (trimmed.startsWith("{")) {
-    const parsed = tryParsePayload(trimmed) ?? (trimmed.endsWith("}") ? null : tryParsePayload(`${trimmed}"}`));
+  if (trimmed.startsWith('{')) {
+    const parsed = tryParsePayload(trimmed) ?? (trimmed.endsWith('}') ? null : tryParsePayload(`${trimmed}"}`));
     if (parsed) {
       return parsed;
     }
@@ -246,7 +260,7 @@ const parseCardLookupInput = (value: string) => {
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (uuidPattern.test(trimmed)) {
     return {
-      kind: "cardId" as const,
+      kind: 'cardId' as const,
       value: trimmed,
     };
   }
@@ -254,13 +268,13 @@ const parseCardLookupInput = (value: string) => {
   const cleanedForPhone = trimmed.replace(/[^\d+]/g, '');
   if (/^\+?\d{10,16}$/.test(cleanedForPhone)) {
     return {
-      kind: "phone" as const,
+      kind: 'phone' as const,
       value: cleanedForPhone,
     };
   }
 
   return {
-    kind: "cardCode" as const,
+    kind: 'cardCode' as const,
     value: trimmed,
   };
 };
@@ -277,7 +291,7 @@ const parseStoreTransactionItemMetadata = (metadata: string | null) => {
       displayName?: string;
     };
 
-    if (parsed.source !== "store_pos" || !parsed.storeProductId) {
+    if (parsed.source !== 'store_pos' || !parsed.storeProductId) {
       return null;
     }
 
@@ -338,20 +352,20 @@ const serializeInventoryMovement = (row: InventoryMovementListRow) => ({
 });
 
 export const storesModule = new Elysia({
-  prefix: "/stores",
+  prefix: '/stores',
   detail: {
-    tags: ["Stores"],
+    tags: ['Stores'],
   },
 })
   .use(authPlugin)
   .get(
-    "/",
+    '/',
     async ({ auth, query, status }: StoreListContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -360,8 +374,8 @@ export const storesModule = new Elysia({
       if (query.cursor && !cursorDate) {
         return status(400, {
           error: {
-            code: "INVALID_CURSOR",
-            message: "Cursor inválido",
+            code: 'INVALID_CURSOR',
+            message: 'Cursor inválido',
           },
         });
       }
@@ -375,11 +389,11 @@ export const storesModule = new Elysia({
       }
 
       if (isStoreOperator(auth)) {
-        if (auth.tenantType !== "store" || !auth.tenantId) {
+        if (auth.tenantType !== 'store' || !auth.tenantId) {
           return status(403, {
             error: {
-              code: "FORBIDDEN",
-              message: "Usuario de tienda sin tenant válido",
+              code: 'FORBIDDEN',
+              message: 'Usuario de tienda sin tenant válido',
             },
           });
         }
@@ -440,12 +454,12 @@ export const storesModule = new Elysia({
         200: storeListResponse,
       },
       detail: {
-        summary: "Listar tiendas",
+        summary: 'Listar tiendas',
       },
     },
   )
   .post(
-    "/",
+    '/',
     async ({ body, status }: StoreCreateContext) => {
       const code = generateStoreCode();
       const [created] = (await db
@@ -472,8 +486,8 @@ export const storesModule = new Elysia({
       if (!created) {
         return status(500, {
           error: {
-            code: "STORE_CREATE_FAILED",
-            message: "No se pudo crear la tienda",
+            code: 'STORE_CREATE_FAILED',
+            message: 'No se pudo crear la tienda',
           },
         });
       }
@@ -489,18 +503,18 @@ export const storesModule = new Elysia({
         201: storeResponse,
       },
       detail: {
-        summary: "Crear tienda",
+        summary: 'Crear tienda',
       },
     },
   )
   .get(
-    "/:storeId",
+    '/:storeId',
     async ({ auth, params, status }: StoreParamsContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -508,21 +522,18 @@ export const storesModule = new Elysia({
       if (!canAccessStore(auth, params.storeId)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No puedes acceder a esta tienda",
+            code: 'FORBIDDEN',
+            message: 'No puedes acceder a esta tienda',
           },
         });
       }
 
-      const [store] = (await db
-        .select()
-        .from(stores)
-        .where(eq(stores.id, params.storeId))) as StoreRow[];
+      const [store] = (await db.select().from(stores).where(eq(stores.id, params.storeId))) as StoreRow[];
       if (!store) {
         return status(404, {
           error: {
-            code: "STORE_NOT_FOUND",
-            message: "Tienda no encontrada",
+            code: 'STORE_NOT_FOUND',
+            message: 'Tienda no encontrada',
           },
         });
       }
@@ -537,18 +548,18 @@ export const storesModule = new Elysia({
         200: storeResponse,
       },
       detail: {
-        summary: "Obtener tienda",
+        summary: 'Obtener tienda',
       },
     },
   )
   .get(
-    "/:storeId/qr",
+    '/:storeId/qr',
     async ({ auth, params, status }: StoreParamsContext) => {
       if (!auth) {
         return status(401, {
           error: {
-            code: "UNAUTHORIZED",
-            message: "Autenticación requerida",
+            code: 'UNAUTHORIZED',
+            message: 'Autenticación requerida',
           },
         });
       }
@@ -556,21 +567,18 @@ export const storesModule = new Elysia({
       if (!canAccessStore(auth, params.storeId)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No puedes acceder a esta tienda",
+            code: 'FORBIDDEN',
+            message: 'No puedes acceder a esta tienda',
           },
         });
       }
 
-      const [store] = (await db
-        .select()
-        .from(stores)
-        .where(eq(stores.id, params.storeId))) as StoreRow[];
+      const [store] = (await db.select().from(stores).where(eq(stores.id, params.storeId))) as StoreRow[];
       if (!store) {
         return status(404, {
           error: {
-            code: "STORE_NOT_FOUND",
-            message: "Tienda no encontrada",
+            code: 'STORE_NOT_FOUND',
+            message: 'Tienda no encontrada',
           },
         });
       }
@@ -585,13 +593,13 @@ export const storesModule = new Elysia({
         200: qrResponse,
       },
       detail: {
-        summary: "Obtener payload de registro",
+        summary: 'Obtener payload de registro',
       },
     },
   )
   // ========== STORE-FACING: GET RELATED CPGs ==========
   .get(
-    "/:storeId/cpgs",
+    '/:storeId/cpgs',
     async ({
       auth,
       params,
@@ -602,27 +610,21 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const role = getAuthRole(auth);
       const isStoreOperator =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        (role === "store_admin" || role === "store_staff") &&
-        auth.tenantType === "store" &&
+        (auth.type === 'jwt' || auth.type === 'dev') &&
+        (role === 'store_admin' || role === 'store_staff') &&
+        auth.tenantType === 'store' &&
         auth.tenantId === params.storeId;
       const isCpgAccess =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        role === "cpg_admin" &&
-        auth.tenantType === "cpg";
+        (auth.type === 'jwt' || auth.type === 'dev') && role === 'cpg_admin' && auth.tenantType === 'cpg';
 
-      if (
-        !isStoreOperator &&
-        !isCpgAccess &&
-        !(role === "qoa_admin" || role === "qoa_support")
-      ) {
+      if (!isStoreOperator && !isCpgAccess && !(role === 'qoa_admin' || role === 'qoa_support')) {
         return status(403, {
-          error: { code: "FORBIDDEN", message: "No tienes permisos para ver CPGs de esta tienda" },
+          error: { code: 'FORBIDDEN', message: 'No tienes permisos para ver CPGs de esta tienda' },
         });
       }
 
@@ -663,7 +665,7 @@ export const storesModule = new Elysia({
     },
     {
       beforeHandle: authGuard({
-        roles: ["store_admin", "store_staff", "cpg_admin", "qoa_admin", "qoa_support"],
+        roles: ['store_admin', 'store_staff', 'cpg_admin', 'qoa_admin', 'qoa_support'],
         allowApiKey: true,
       }),
       response: {
@@ -679,12 +681,12 @@ export const storesModule = new Elysia({
           ),
         }),
       },
-      detail: { summary: "Listar CPGs relacionados con una tienda" },
+      detail: { summary: 'Listar CPGs relacionados con una tienda' },
     },
   )
   // ========== CPG-FACING: MANAGE CPG-STORE RELATIONS ==========
   .get(
-    "/cpgs/:cpgId/stores",
+    '/cpgs/:cpgId/stores',
     async ({
       auth,
       params,
@@ -697,28 +699,28 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const role = getAuthRole(auth);
       const isCpgAccess =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        role === "cpg_admin" &&
-        auth.tenantType === "cpg" &&
+        (auth.type === 'jwt' || auth.type === 'dev') &&
+        role === 'cpg_admin' &&
+        auth.tenantType === 'cpg' &&
         auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(role === "qoa_admin" || role === "qoa_support")) {
+      if (!isCpgAccess && !(role === 'qoa_admin' || role === 'qoa_support')) {
         return status(403, {
-          error: { code: "FORBIDDEN", message: "No tienes permisos para ver stores de este CPG" },
+          error: { code: 'FORBIDDEN', message: 'No tienes permisos para ver stores de este CPG' },
         });
       }
 
-      const limit = parseLimit(query.limit ?? "50");
+      const limit = parseLimit(query.limit ?? '50');
       const cursorDate = parseCursor(query.cursor);
       const conditions = [eq(cpgStoreRelations.cpgId, params.cpgId)];
 
       if (query.status) {
-        conditions.push(eq(cpgStoreRelations.status, query.status as "active" | "inactive"));
+        conditions.push(eq(cpgStoreRelations.status, query.status as 'active' | 'inactive'));
       }
       if (cursorDate) {
         conditions.push(lt(cpgStoreRelations.updatedAt, cursorDate));
@@ -771,9 +773,7 @@ export const storesModule = new Elysia({
       const hasMore = rows.length > limit;
       const items = hasMore ? rows.slice(0, limit) : rows;
       const nextCursor =
-        hasMore && items[items.length - 1]?.updatedAt
-          ? items[items.length - 1]!.updatedAt!.toISOString()
-          : null;
+        hasMore && items[items.length - 1]?.updatedAt ? items[items.length - 1]!.updatedAt!.toISOString() : null;
 
       return {
         data: items.map((row) => ({
@@ -797,7 +797,7 @@ export const storesModule = new Elysia({
     },
     {
       beforeHandle: authGuard({
-        roles: ["cpg_admin", "qoa_admin", "qoa_support"],
+        roles: ['cpg_admin', 'qoa_admin', 'qoa_support'],
         allowApiKey: true,
       }),
       response: {
@@ -826,11 +826,11 @@ export const storesModule = new Elysia({
           }),
         }),
       },
-      detail: { summary: "Listar tiendas relacionadas con un CPG" },
+      detail: { summary: 'Listar tiendas relacionadas con un CPG' },
     },
   )
   .post(
-    "/cpgs/:cpgId/stores",
+    '/cpgs/:cpgId/stores',
     async ({
       auth,
       params,
@@ -843,28 +843,28 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const role = getAuthRole(auth);
       const isCpgAccess =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        role === "cpg_admin" &&
-        auth.tenantType === "cpg" &&
+        (auth.type === 'jwt' || auth.type === 'dev') &&
+        role === 'cpg_admin' &&
+        auth.tenantType === 'cpg' &&
         auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(role === "qoa_admin" || role === "qoa_support")) {
+      if (!isCpgAccess && !(role === 'qoa_admin' || role === 'qoa_support')) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para agregar stores a este CPG",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para agregar stores a este CPG',
           },
         });
       }
 
       if (!body.storeIds || body.storeIds.length === 0) {
         return status(400, {
-          error: { code: "INVALID_ARGUMENT", message: "Debes proporcionar al menos un storeId" },
+          error: { code: 'INVALID_ARGUMENT', message: 'Debes proporcionar al menos un storeId' },
         });
       }
 
@@ -873,22 +873,17 @@ export const storesModule = new Elysia({
 
       for (const storeId of body.storeIds) {
         try {
-          const [existing] = (await db
+          const [existing] = ((await db
             .select({ id: cpgStoreRelations.id })
             .from(cpgStoreRelations)
-            .where(
-              and(
-                eq(cpgStoreRelations.cpgId, params.cpgId),
-                eq(cpgStoreRelations.storeId, storeId),
-              ),
-            )
-            .limit(1)) as Array<{ id: string }> || [null];
+            .where(and(eq(cpgStoreRelations.cpgId, params.cpgId), eq(cpgStoreRelations.storeId, storeId)))
+            .limit(1)) as Array<{ id: string }>) || [null];
 
           if (existing) {
             // Reactivate if inactive
             await db
               .update(cpgStoreRelations)
-              .set({ status: "active", source: "manual", updatedAt: now })
+              .set({ status: 'active', source: 'manual', updatedAt: now })
               .where(eq(cpgStoreRelations.id, existing.id));
             results.push({ storeId, success: true });
           } else {
@@ -896,8 +891,8 @@ export const storesModule = new Elysia({
             await db.insert(cpgStoreRelations).values({
               cpgId: params.cpgId,
               storeId,
-              status: "active",
-              source: "manual",
+              status: 'active',
+              source: 'manual',
               createdAt: now,
               updatedAt: now,
             });
@@ -919,18 +914,18 @@ export const storesModule = new Elysia({
     },
     {
       beforeHandle: authGuard({
-        roles: ["cpg_admin", "qoa_admin", "qoa_support"],
+        roles: ['cpg_admin', 'qoa_admin', 'qoa_support'],
         allowApiKey: true,
       }),
       body: t.Object({
-        storeIds: t.Array(t.String({ format: "uuid" })),
+        storeIds: t.Array(t.String({ format: 'uuid' })),
       }),
-      detail: { summary: "Agregar tiendas a un CPG (relación manual)" },
+      detail: { summary: 'Agregar tiendas a un CPG (relación manual)' },
     },
   )
   // @ts-ignore: TypeScript loses inference after long chain
   .delete(
-    "/cpgs/:cpgId/stores/:storeId",
+    '/cpgs/:cpgId/stores/:storeId',
     async ({
       auth,
       params,
@@ -941,59 +936,54 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const role = getAuthRole(auth);
       const isCpgAccess =
-        (auth.type === "jwt" || auth.type === "dev") &&
-        role === "cpg_admin" &&
-        auth.tenantType === "cpg" &&
+        (auth.type === 'jwt' || auth.type === 'dev') &&
+        role === 'cpg_admin' &&
+        auth.tenantType === 'cpg' &&
         auth.tenantId === params.cpgId;
 
-      if (!isCpgAccess && !(role === "qoa_admin" || role === "qoa_support")) {
+      if (!isCpgAccess && !(role === 'qoa_admin' || role === 'qoa_support')) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "No tienes permisos para eliminar stores de este CPG",
+            code: 'FORBIDDEN',
+            message: 'No tienes permisos para eliminar stores de este CPG',
           },
         });
       }
 
-      const [existing] = (await db
+      const [existing] = ((await db
         .select({ id: cpgStoreRelations.id })
         .from(cpgStoreRelations)
-        .where(
-          and(
-            eq(cpgStoreRelations.cpgId, params.cpgId),
-            eq(cpgStoreRelations.storeId, params.storeId),
-          ),
-        )
-        .limit(1)) as Array<{ id: string }> || [null];
+        .where(and(eq(cpgStoreRelations.cpgId, params.cpgId), eq(cpgStoreRelations.storeId, params.storeId)))
+        .limit(1)) as Array<{ id: string }>) || [null];
 
       if (!existing) {
-        return status(404, { error: { code: "NOT_FOUND", message: "Relación no encontrada" } });
+        return status(404, { error: { code: 'NOT_FOUND', message: 'Relación no encontrada' } });
       }
 
       // Soft delete - set status to inactive
       await db
         .update(cpgStoreRelations)
-        .set({ status: "inactive", updatedAt: new Date() })
+        .set({ status: 'inactive', updatedAt: new Date() })
         .where(eq(cpgStoreRelations.id, existing.id));
 
       return { data: { success: true } };
     },
     {
       beforeHandle: authGuard({
-        roles: ["cpg_admin", "qoa_admin", "qoa_support"],
+        roles: ['cpg_admin', 'qoa_admin', 'qoa_support'],
         allowApiKey: true,
       }),
-      detail: { summary: "Eliminar tienda de un CPG (relación)" },
+      detail: { summary: 'Eliminar tienda de un CPG (relación)' },
     },
   )
   // ========== STORE PRODUCTS ==========
   .get(
-    "/:storeId/products",
+    '/:storeId/products',
     async ({
       auth,
       params,
@@ -1006,11 +996,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const cursorDate = parseCursor(query.cursor);
@@ -1054,14 +1044,14 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       query: storeProductListQuery,
       response: { 200: storeProductListResponse },
-      detail: { summary: "Listar productos de una tienda" },
+      detail: { summary: 'Listar productos de una tienda' },
     },
   )
   .post(
-    "/:storeId/products",
+    '/:storeId/products',
     async ({
       auth,
       params,
@@ -1074,11 +1064,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       let inferredCpgId: string | null = body.cpgId ?? null;
@@ -1122,8 +1112,8 @@ export const storesModule = new Elysia({
       if (!created) {
         return status(500, {
           error: {
-            code: "STORE_PRODUCT_CREATE_FAILED",
-            message: "No se pudo crear el producto",
+            code: 'STORE_PRODUCT_CREATE_FAILED',
+            message: 'No se pudo crear el producto',
           },
         });
       }
@@ -1133,14 +1123,14 @@ export const storesModule = new Elysia({
       });
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       body: storeProductCreateRequest,
       response: { 201: storeProductResponse },
-      detail: { summary: "Crear producto en catálogo de tienda" },
+      detail: { summary: 'Crear producto en catálogo de tienda' },
     },
   )
   .get(
-    "/:storeId/products/:productId",
+    '/:storeId/products/:productId',
     async ({
       auth,
       params,
@@ -1151,11 +1141,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const [row] = (await db.execute(sql`
@@ -1165,19 +1155,19 @@ export const storesModule = new Elysia({
       `)) as StoreProductRow[];
 
       if (!row) {
-        return status(404, { error: { code: "NOT_FOUND", message: "Producto no encontrado" } });
+        return status(404, { error: { code: 'NOT_FOUND', message: 'Producto no encontrado' } });
       }
 
       return { data: serializeStoreProduct(row) };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       response: { 200: storeProductResponse },
-      detail: { summary: "Obtener producto de tienda" },
+      detail: { summary: 'Obtener producto de tienda' },
     },
   )
   .patch(
-    "/:storeId/products/:productId",
+    '/:storeId/products/:productId',
     async ({
       auth,
       params,
@@ -1190,11 +1180,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const [existing] = (await db
@@ -1204,7 +1194,7 @@ export const storesModule = new Elysia({
         .limit(1)) as Array<{ id: string }>;
 
       if (!existing) {
-        return status(404, { error: { code: "NOT_FOUND", message: "Producto no encontrado" } });
+        return status(404, { error: { code: 'NOT_FOUND', message: 'Producto no encontrado' } });
       }
 
       const updates: Record<string, unknown> = { updatedAt: new Date() };
@@ -1223,8 +1213,8 @@ export const storesModule = new Elysia({
       if (!updated) {
         return status(500, {
           error: {
-            code: "STORE_PRODUCT_UPDATE_FAILED",
-            message: "No se pudo actualizar el producto",
+            code: 'STORE_PRODUCT_UPDATE_FAILED',
+            message: 'No se pudo actualizar el producto',
           },
         });
       }
@@ -1232,14 +1222,14 @@ export const storesModule = new Elysia({
       return { data: serializeStoreProduct(updated) };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       body: storeProductUpdateRequest,
       response: { 200: storeProductResponse },
-      detail: { summary: "Actualizar producto de tienda" },
+      detail: { summary: 'Actualizar producto de tienda' },
     },
   )
   .delete(
-    "/:storeId/products/:productId",
+    '/:storeId/products/:productId',
     async ({
       auth,
       params,
@@ -1250,11 +1240,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const [existing] = (await db
@@ -1264,24 +1254,24 @@ export const storesModule = new Elysia({
         .limit(1)) as Array<{ id: string }>;
 
       if (!existing) {
-        return status(404, { error: { code: "NOT_FOUND", message: "Producto no encontrado" } });
+        return status(404, { error: { code: 'NOT_FOUND', message: 'Producto no encontrado' } });
       }
 
       await db
         .update(storeProducts)
-        .set({ status: "inactive", updatedAt: new Date() })
+        .set({ status: 'inactive', updatedAt: new Date() })
         .where(and(eq(storeProducts.id, params.productId), eq(storeProducts.storeId, params.storeId)));
 
       return { data: { success: true } };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
-      detail: { summary: "Desactivar producto de tienda" },
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
+      detail: { summary: 'Desactivar producto de tienda' },
     },
   )
   // ========== STORE PRODUCT SEARCH ==========
   .get(
-    "/:storeId/products-search",
+    '/:storeId/products-search',
     async ({
       auth,
       params,
@@ -1294,14 +1284,14 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
-      const limit = parseLimit(query.limit ?? "20");
+      const limit = parseLimit(query.limit ?? '20');
       const searchTerm = '%' + query.q + '%';
 
       const storeProductsRows = (await db.execute(sql`
@@ -1331,7 +1321,7 @@ export const storesModule = new Elysia({
 
       const storeProducts = storeProductsRows.map((row) => ({
         ...serializeStoreProduct(row),
-        source: "store" as const,
+        source: 'store' as const,
       }));
 
       const globalProducts = globalProductsRows.map((row) => ({
@@ -1341,7 +1331,7 @@ export const storesModule = new Elysia({
         brandId: row.brand_id,
         cpgId: row.cpg_id,
         cpgName: row.cpg_name,
-        source: "global" as const,
+        source: 'global' as const,
       }));
 
       return {
@@ -1352,13 +1342,13 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       query: storeProductSearchQuery,
-      detail: { summary: "Buscar productos en catálogo global y de tienda" },
+      detail: { summary: 'Buscar productos en catálogo global y de tienda' },
     },
   )
   .post(
-    "/:storeId/inventory/intake/preview",
+    '/:storeId/inventory/intake/preview',
     async ({
       auth,
       params,
@@ -1371,11 +1361,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const rows = (await db.execute(sql`
@@ -1390,14 +1380,14 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       body: inventoryIntakePreviewRequest,
       response: { 200: inventoryIntakePreviewResponse },
-      detail: { summary: "Previsualizar carga de inventario por texto" },
+      detail: { summary: 'Previsualizar carga de inventario por texto' },
     },
   )
   .post(
-    "/:storeId/inventory/intake/confirm",
+    '/:storeId/inventory/intake/confirm',
     async ({
       auth,
       params,
@@ -1406,15 +1396,28 @@ export const storesModule = new Elysia({
     }: {
       auth: AuthContext | null;
       params: { storeId: string };
-      body: { rows: Array<{ lineNumber: number; rawText: string; name: string; sku?: string; quantity: number; price?: number; action: 'match_existing' | 'create_new'; storeProductId?: string }>; idempotencyKey?: string; notes?: string };
+      body: {
+        rows: Array<{
+          lineNumber: number;
+          rawText: string;
+          name: string;
+          sku?: string;
+          quantity: number;
+          price?: number;
+          action: 'match_existing' | 'create_new';
+          storeProductId?: string;
+        }>;
+        idempotencyKey?: string;
+        notes?: string;
+      };
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       for (const row of body.rows) {
@@ -1480,7 +1483,15 @@ export const storesModule = new Elysia({
 
       try {
         const appliedRows = await db.transaction(async (tx) => {
-          const nextRows: Array<{ storeProductId: string; name: string; sku?: string; quantityDelta: number; previousStock: number; currentStock: number; created: boolean }> = [];
+          const nextRows: Array<{
+            storeProductId: string;
+            name: string;
+            sku?: string;
+            quantityDelta: number;
+            previousStock: number;
+            currentStock: number;
+            created: boolean;
+          }> = [];
 
           for (const row of body.rows) {
             if (row.action === 'match_existing') {
@@ -1515,7 +1526,12 @@ export const storesModule = new Elysia({
                 referenceType: 'inventory_intake',
                 referenceId: idempotencyKey,
                 notes: body.notes ?? null,
-                metadata: JSON.stringify({ lineNumber: row.lineNumber, rawText: row.rawText, action: row.action, created: false }),
+                metadata: JSON.stringify({
+                  lineNumber: row.lineNumber,
+                  rawText: row.rawText,
+                  action: row.action,
+                  created: false,
+                }),
               });
 
               nextRows.push({
@@ -1531,13 +1547,16 @@ export const storesModule = new Elysia({
               continue;
             }
 
-            const [createdProduct] = (await tx.insert(storeProducts).values({
-              storeId: params.storeId,
-              name: row.name,
-              sku: row.sku ?? null,
-              price: row.price!.toString(),
-              stock: row.quantity,
-            }).returning()) as StoreProductRow[];
+            const [createdProduct] = (await tx
+              .insert(storeProducts)
+              .values({
+                storeId: params.storeId,
+                name: row.name,
+                sku: row.sku ?? null,
+                price: row.price!.toString(),
+                stock: row.quantity,
+              })
+              .returning()) as StoreProductRow[];
 
             if (!createdProduct) {
               throw new Error('STORE_PRODUCT_CREATE_FAILED');
@@ -1552,7 +1571,12 @@ export const storesModule = new Elysia({
               referenceType: 'inventory_intake',
               referenceId: idempotencyKey,
               notes: body.notes ?? null,
-              metadata: JSON.stringify({ lineNumber: row.lineNumber, rawText: row.rawText, action: row.action, created: true }),
+              metadata: JSON.stringify({
+                lineNumber: row.lineNumber,
+                rawText: row.rawText,
+                action: row.action,
+                created: true,
+              }),
             });
 
             nextRows.push({
@@ -1614,14 +1638,14 @@ export const storesModule = new Elysia({
       }
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       body: inventoryIntakeConfirmRequest,
       response: { 200: inventoryIntakeConfirmResponse },
-      detail: { summary: "Confirmar carga de inventario" },
+      detail: { summary: 'Confirmar carga de inventario' },
     },
   )
   .get(
-    "/:storeId/inventory/movements",
+    '/:storeId/inventory/movements',
     async ({
       auth,
       params,
@@ -1634,11 +1658,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const cursorDate = parseCursor(query.cursor);
@@ -1679,15 +1703,15 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       query: inventoryMovementListQuery,
       response: { 200: inventoryMovementListResponse },
-      detail: { summary: "Listar movimientos de inventario" },
+      detail: { summary: 'Listar movimientos de inventario' },
     },
   )
   // ========== STORE BRANDS (all brands - not filtered by CPG relations) ==========
   .get(
-    "/:storeId/brands",
+    '/:storeId/brands',
     async ({
       auth,
       params,
@@ -1698,11 +1722,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const brandsRows = (await db.execute(sql`
@@ -1730,13 +1754,13 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       response: { 200: storeBrandListResponse },
-      detail: { summary: "Listar marcas disponibles para la tienda" },
+      detail: { summary: 'Listar marcas disponibles para la tienda' },
     },
   )
   .post(
-    "/:storeId/customer-resolve",
+    '/:storeId/customer-resolve',
     async ({
       auth,
       params,
@@ -1749,19 +1773,19 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const parsed = parseCardLookupInput(body.input);
       if (!parsed) {
-        return status(400, { error: { code: "INVALID_ARGUMENT", message: "Código de tarjeta o teléfono inválido" } });
+        return status(400, { error: { code: 'INVALID_ARGUMENT', message: 'Código de tarjeta o teléfono inválido' } });
       }
 
-      if (parsed.kind === "phone") {
+      if (parsed.kind === 'phone') {
         try {
           const resolved = await resolveCustomerByPhone(parsed.value, params.storeId);
           return {
@@ -1776,24 +1800,24 @@ export const storesModule = new Elysia({
           };
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          if (message === "INVALID_PHONE_FORMAT") {
+          if (message === 'INVALID_PHONE_FORMAT') {
             return status(400, {
               error: {
-                code: "INVALID_PHONE_FORMAT",
-                message: "El formato del teléfono no es válido. Usa 10 dígitos o formato internacional (+52...).",
+                code: 'INVALID_PHONE_FORMAT',
+                message: 'El formato del teléfono no es válido. Usa 10 dígitos o formato internacional (+52...).',
               },
             });
           }
-          if (message === "USER_ROLE_NOT_ALLOWED") {
+          if (message === 'USER_ROLE_NOT_ALLOWED') {
             return status(403, {
               error: {
-                code: "USER_ROLE_NOT_ALLOWED",
-                message: "Este teléfono pertenece a una cuenta que no puede usarse en el POS.",
+                code: 'USER_ROLE_NOT_ALLOWED',
+                message: 'Este teléfono pertenece a una cuenta que no puede usarse en el POS.',
               },
             });
           }
           return status(404, {
-            error: { code: "CUSTOMER_NOT_FOUND", message: "No pudimos registrar al cliente. Intenta de nuevo." },
+            error: { code: 'CUSTOMER_NOT_FOUND', message: 'No pudimos registrar al cliente. Intenta de nuevo.' },
           });
         }
       }
@@ -1809,7 +1833,7 @@ export const storesModule = new Elysia({
         })
         .from(cards)
         .innerJoin(users, eq(users.id, cards.userId))
-        .where(parsed.kind === "cardId" ? eq(cards.id, parsed.value) : eq(cards.code, parsed.value))
+        .where(parsed.kind === 'cardId' ? eq(cards.id, parsed.value) : eq(cards.code, parsed.value))
         .limit(1)) as Array<{
         cardId: string;
         cardCode: string;
@@ -1820,7 +1844,7 @@ export const storesModule = new Elysia({
       }>;
 
       if (!resolved) {
-        return status(404, { error: { code: "CARD_NOT_FOUND", message: "Tarjeta no encontrada" } });
+        return status(404, { error: { code: 'CARD_NOT_FOUND', message: 'Tarjeta no encontrada' } });
       }
 
       return {
@@ -1835,15 +1859,15 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       body: storeCustomerResolveRequest,
       response: { 200: storeCustomerResolveResponse },
-      detail: { summary: "Resolver cliente por QR o código de tarjeta" },
+      detail: { summary: 'Resolver cliente por QR o código de tarjeta' },
     },
   )
   // ========== STORE TRANSACTIONS ==========
   .post(
-    "/:storeId/transactions",
+    '/:storeId/transactions',
     async ({
       auth,
       params,
@@ -1852,31 +1876,34 @@ export const storesModule = new Elysia({
     }: {
       auth: AuthContext | null;
       params: { storeId: string };
-      body: { userId?: string; cardId?: string; items: Array<{ storeProductId: string; quantity: number; amount: number }>; idempotencyKey?: string };
+      body: {
+        userId?: string;
+        cardId?: string;
+        items: Array<{ storeProductId: string; quantity: number; amount: number }>;
+        idempotencyKey?: string;
+      };
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       if (!body.items || body.items.length === 0) {
-        return status(400, { error: { code: "INVALID_ARGUMENT", message: "Debes enviar al menos un item" } });
+        return status(400, { error: { code: 'INVALID_ARGUMENT', message: 'Debes enviar al menos un item' } });
       }
 
-      let resolvedCustomer:
-        | {
-            userId: string;
-            cardId?: string;
-            cardCode?: string;
-            name?: string;
-            phone: string;
-            email?: string;
-          }
-        | null = null;
+      let resolvedCustomer: {
+        userId: string;
+        cardId?: string;
+        cardCode?: string;
+        name?: string;
+        phone: string;
+        email?: string;
+      } | null = null;
 
       if (body.userId || body.cardId) {
         if (body.cardId) {
@@ -1902,11 +1929,13 @@ export const storesModule = new Elysia({
           }>;
 
           if (!customerByCard) {
-            return status(404, { error: { code: "CARD_NOT_FOUND", message: "Tarjeta no encontrada" } });
+            return status(404, { error: { code: 'CARD_NOT_FOUND', message: 'Tarjeta no encontrada' } });
           }
 
           if (body.userId && customerByCard.userId !== body.userId) {
-            return status(400, { error: { code: "CARD_USER_MISMATCH", message: "La tarjeta no pertenece al usuario indicado" } });
+            return status(400, {
+              error: { code: 'CARD_USER_MISMATCH', message: 'La tarjeta no pertenece al usuario indicado' },
+            });
           }
 
           resolvedCustomer = {
@@ -1935,7 +1964,7 @@ export const storesModule = new Elysia({
           }>;
 
           if (!customerByUser) {
-            return status(404, { error: { code: "USER_NOT_FOUND", message: "Usuario no encontrado" } });
+            return status(404, { error: { code: 'USER_NOT_FOUND', message: 'Usuario no encontrado' } });
           }
 
           resolvedCustomer = {
@@ -1951,7 +1980,9 @@ export const storesModule = new Elysia({
       const storeProductsRows = (await db
         .select()
         .from(storeProducts)
-        .where(and(or(...storeProductIds.map((id) => eq(storeProducts.id, id))), eq(storeProducts.storeId, params.storeId)))) as Array<{
+        .where(
+          and(or(...storeProductIds.map((id) => eq(storeProducts.id, id))), eq(storeProducts.storeId, params.storeId)),
+        )) as Array<{
         id: string;
         productId: string | null;
         cpgId: string | null;
@@ -1966,12 +1997,16 @@ export const storesModule = new Elysia({
 
       for (const item of body.items) {
         if (!storeProductMap.has(item.storeProductId)) {
-          return status(404, { error: { code: "PRODUCT_NOT_FOUND", message: `Producto ${item.storeProductId} no encontrado` } });
+          return status(404, {
+            error: { code: 'PRODUCT_NOT_FOUND', message: `Producto ${item.storeProductId} no encontrado` },
+          });
         }
 
         const storeProduct = storeProductMap.get(item.storeProductId)!;
         if (storeProduct.status !== 'active') {
-          console.warn(`[transactions] PRODUCT_INACTIVE storeId=${params.storeId} productId=${storeProduct.id} name="${storeProduct.name}"`);
+          console.warn(
+            `[transactions] PRODUCT_INACTIVE storeId=${params.storeId} productId=${storeProduct.id} name="${storeProduct.name}"`,
+          );
           return status(409, {
             error: {
               code: 'PRODUCT_INACTIVE',
@@ -1981,7 +2016,9 @@ export const storesModule = new Elysia({
         }
 
         if (storeProduct.stock < item.quantity) {
-          console.warn(`[transactions] OUT_OF_STOCK storeId=${params.storeId} productId=${storeProduct.id} name="${storeProduct.name}" requested=${item.quantity} available=${storeProduct.stock}`);
+          console.warn(
+            `[transactions] OUT_OF_STOCK storeId=${params.storeId} productId=${storeProduct.id} name="${storeProduct.name}" requested=${item.quantity} available=${storeProduct.stock}`,
+          );
           return status(409, {
             error: {
               code: 'OUT_OF_STOCK',
@@ -1995,22 +2032,25 @@ export const storesModule = new Elysia({
 
       try {
         outcome = await db.transaction(async (tx) => {
-          const nextOutcome = await createStorePosTransaction({
-            storeId: params.storeId,
-            userId: resolvedCustomer?.userId,
-            cardId: resolvedCustomer?.cardId,
-            idempotencyKey: body.idempotencyKey,
-            items: body.items.map((item) => {
-              const storeProduct = storeProductMap.get(item.storeProductId)!;
-              return {
-                storeProductId: item.storeProductId,
-                productId: storeProduct.productId ?? undefined,
-                name: storeProduct.name,
-                quantity: item.quantity,
-                amount: item.amount,
-              };
-            }),
-          }, tx);
+          const nextOutcome = await createStorePosTransaction(
+            {
+              storeId: params.storeId,
+              userId: resolvedCustomer?.userId,
+              cardId: resolvedCustomer?.cardId,
+              idempotencyKey: body.idempotencyKey,
+              items: body.items.map((item) => {
+                const storeProduct = storeProductMap.get(item.storeProductId)!;
+                return {
+                  storeProductId: item.storeProductId,
+                  productId: storeProduct.productId ?? undefined,
+                  name: storeProduct.name,
+                  quantity: item.quantity,
+                  amount: item.amount,
+                };
+              }),
+            },
+            tx,
+          );
 
           if (!nextOutcome || nextOutcome.statusCode === 200) {
             return nextOutcome;
@@ -2069,8 +2109,8 @@ export const storesModule = new Elysia({
       if (!outcome) {
         return status(500, {
           error: {
-            code: "TRANSACTION_CREATE_FAILED",
-            message: "No se pudo crear la transacción",
+            code: 'TRANSACTION_CREATE_FAILED',
+            message: 'No se pudo crear la transacción',
           },
         });
       }
@@ -2088,9 +2128,27 @@ export const storesModule = new Elysia({
         };
       });
 
+      const namedAccumulations = await attachCampaignNamesToAccumulations(outcome.accumulations);
+      const [storeRow] = (await db
+        .select({ name: stores.name })
+        .from(stores)
+        .where(eq(stores.id, params.storeId))
+        .limit(1)) as Array<{ name: string }>;
+      const notificationStatus = await sendPostTransactionThankYou({
+        transactionId: outcome.transaction.id,
+        phone: resolvedCustomer?.phone,
+        storeName: storeRow?.name ?? 'tu tienda',
+        totalAmount: outcome.transaction.totalAmount,
+        accumulations: namedAccumulations.map((entry) => ({
+          campaignId: entry.campaignId,
+          campaignName: entry.campaignName,
+          accumulated: entry.amount,
+        })),
+      });
+
       return status(outcome.statusCode, {
         data: {
-          ...toDetailPayload(outcome.transaction, outcome.items, outcome.accumulations),
+          ...toDetailPayload(outcome.transaction, outcome.items, namedAccumulations, { notificationStatus }),
           items: itemResponses,
           guestFlag: !outcome.transaction.userId,
           ...(resolvedCustomer ? { customer: resolvedCustomer } : {}),
@@ -2098,14 +2156,14 @@ export const storesModule = new Elysia({
       });
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       body: storeTransactionCreateRequest,
       response: { 200: storeTransactionResponse, 201: storeTransactionResponse },
-      detail: { summary: "Registrar transacción desde POS" },
+      detail: { summary: 'Registrar transacción desde POS' },
     },
   )
   .get(
-    "/:storeId/transactions",
+    '/:storeId/transactions',
     async ({
       auth,
       params,
@@ -2118,11 +2176,11 @@ export const storesModule = new Elysia({
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       if (!canAccessStore(auth, params.storeId)) {
-        return status(403, { error: { code: "FORBIDDEN", message: "No puedes acceder a esta tienda" } });
+        return status(403, { error: { code: 'FORBIDDEN', message: 'No puedes acceder a esta tienda' } });
       }
 
       const cursorDate = parseCursor(query.cursor);
@@ -2163,20 +2221,21 @@ export const storesModule = new Elysia({
       const nextCursor = hasMore ? txs[txs.length - 1]?.created_at.toISOString() : null;
 
       const txIds = txs.map((tx) => tx.id);
-      const itemsRows = txIds.length > 0
-        ? (await db.execute(sql`
+      const itemsRows =
+        txIds.length > 0
+          ? ((await db.execute(sql`
             select "id", "transaction_id", "product_id", "quantity", "amount", "metadata"
             from "transaction_items"
             where "transaction_id" = any(${txIds})
           `)) as Array<{
-            id: string;
-            transaction_id: string;
-            product_id: string;
-            quantity: number;
-            amount: number;
-            metadata: string | null;
-          }>
-        : [];
+              id: string;
+              transaction_id: string;
+              product_id: string;
+              quantity: number;
+              amount: number;
+              metadata: string | null;
+            }>)
+          : [];
 
       const itemsByTx = new Map<string, typeof itemsRows>();
       for (const item of itemsRows) {
@@ -2192,7 +2251,11 @@ export const storesModule = new Elysia({
         const storeProductsData = (await db
           .select({ id: storeProducts.id, name: storeProducts.name, productId: storeProducts.productId })
           .from(storeProducts)
-          .where(or(...productIds.map((id) => eq(storeProducts.id, id)))) as any) as Array<{ id: string; name: string; productId: string | null }>;
+          .where(or(...productIds.map((id) => eq(storeProducts.id, id))))) as any as Array<{
+          id: string;
+          name: string;
+          productId: string | null;
+        }>;
         for (const sp of storeProductsData) {
           storeProductsMap.set(sp.id, { name: sp.name, storeProductId: sp.id, productId: sp.productId ?? undefined });
         }
@@ -2208,7 +2271,9 @@ export const storesModule = new Elysia({
             cardId: tx.card_id ?? undefined,
             items: txItems.map((item) => {
               const metadata = parseStoreTransactionItemMetadata(item.metadata);
-              const spInfo = metadata?.storeProductId ? storeProductsMap.get(metadata.storeProductId) : storeProductsMap.get(item.product_id);
+              const spInfo = metadata?.storeProductId
+                ? storeProductsMap.get(metadata.storeProductId)
+                : storeProductsMap.get(item.product_id);
               return {
                 id: item.id,
                 storeProductId: metadata?.storeProductId ?? spInfo?.storeProductId ?? item.product_id,
@@ -2231,32 +2296,45 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       query: storeTransactionListQuery,
       response: { 200: storeTransactionListResponse },
-      detail: { summary: "Listar transacciones de tienda" },
+      detail: { summary: 'Listar transacciones de tienda' },
     },
   )
   .get(
-    "/:storeId/checkins",
-    async ({ auth, params, query, status }: {
+    '/:storeId/checkins',
+    async ({
+      auth,
+      params,
+      query,
+      status,
+    }: {
       auth: AuthContext | null;
       params: { storeId: string };
       query: { status?: string; limit?: string };
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       const limit = parseLimit(query.limit);
       const statusFilter = query.status;
-      const rows = await findPendingCheckinsForStore(params.storeId, { status: statusFilter as 'pending' | undefined, limit });
+      const rows = await findPendingCheckinsForStore(params.storeId, {
+        status: statusFilter as 'pending' | undefined,
+        limit,
+      });
 
       const userIds = [...new Set(rows.map((r) => r.userId))];
-      const userRows = (userIds.length > 0
-        ? await db.select({ id: users.id, name: users.name, phone: users.phone }).from(users).where(or(...userIds.map((id) => eq(users.id, id))))
-        : []) as Array<{ id: string; name: string | null; phone: string | null }>;
+      const userRows = (
+        userIds.length > 0
+          ? await db
+              .select({ id: users.id, name: users.name, phone: users.phone })
+              .from(users)
+              .where(or(...userIds.map((id) => eq(users.id, id))))
+          : []
+      ) as Array<{ id: string; name: string | null; phone: string | null }>;
       const userById = new Map(userRows.map((u) => [u.id, u]));
 
       return {
@@ -2273,46 +2351,57 @@ export const storesModule = new Elysia({
       };
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       params: t.Object({ storeId: t.String() }),
       query: t.Object({ status: t.Optional(t.String()), limit: t.Optional(t.String()) }),
-      response: { 200: t.Object({ data: t.Array(t.Object({
-        id: t.String(),
-        userId: t.String(),
-        userName: t.Optional(t.String()),
-        userPhone: t.Optional(t.String()),
-        status: t.String(),
-        checkedInAt: t.String(),
-        expiresAt: t.String(),
-        matchedTransactionId: t.Optional(t.String()),
-      })) }) },
-      detail: { summary: "Listar check-ins de tienda" },
+      response: {
+        200: t.Object({
+          data: t.Array(
+            t.Object({
+              id: t.String(),
+              userId: t.String(),
+              userName: t.Optional(t.String()),
+              userPhone: t.Optional(t.String()),
+              status: t.String(),
+              checkedInAt: t.String(),
+              expiresAt: t.String(),
+              matchedTransactionId: t.Optional(t.String()),
+            }),
+          ),
+        }),
+      },
+      detail: { summary: 'Listar check-ins de tienda' },
     },
   )
   .post(
-    "/:storeId/checkins/:checkinId/match",
-    async ({ auth, params, body, status }: {
+    '/:storeId/checkins/:checkinId/match',
+    async ({
+      auth,
+      params,
+      body,
+      status,
+    }: {
       auth: AuthContext | null;
       params: { storeId: string; checkinId: string };
       body: { transactionId: string };
       status: StatusHandler;
     }) => {
       if (!auth) {
-        return status(401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida" } });
+        return status(401, { error: { code: 'UNAUTHORIZED', message: 'Autenticación requerida' } });
       }
 
       try {
         await matchCheckinWithTransaction(params.checkinId, body.transactionId);
         return { data: { matched: true } };
       } catch {
-        return status(404, { error: { code: "CHECKIN_NOT_FOUND", message: "Check-in no encontrado" } });
+        return status(404, { error: { code: 'CHECKIN_NOT_FOUND', message: 'Check-in no encontrado' } });
       }
     },
     {
-      beforeHandle: authGuard({ roles: ["store_admin", "store_staff"], allowApiKey: true }),
+      beforeHandle: authGuard({ roles: ['store_admin', 'store_staff'], allowApiKey: true }),
       params: t.Object({ storeId: t.String(), checkinId: t.String() }),
       body: t.Object({ transactionId: t.String() }),
       response: { 200: t.Object({ data: t.Object({ matched: t.Boolean() }) }) },
-      detail: { summary: "Emparejar check-in con transacción" },
+      detail: { summary: 'Emparejar check-in con transacción' },
     },
   );

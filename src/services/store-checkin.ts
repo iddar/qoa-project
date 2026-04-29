@@ -55,7 +55,11 @@ export const createStoreCheckin = async (input: CreateCheckinInput): Promise<Cre
   return created;
 };
 
-export const findPendingCheckinsForUserAndStore = async (userId: string, storeId: string, database: Database = db): Promise<StoreCheckinRow[]> => {
+export const findPendingCheckinsForUserAndStore = async (
+  userId: string,
+  storeId: string,
+  database: Database = db,
+): Promise<StoreCheckinRow[]> => {
   const now = new Date();
   const rows = (await database
     .select()
@@ -73,12 +77,19 @@ export const findPendingCheckinsForUserAndStore = async (userId: string, storeId
   return rows;
 };
 
-export const findPendingCheckinsForStore = async (storeId: string, options?: { status?: 'pending'; limit?: number }, database: Database = db): Promise<StoreCheckinRow[]> => {
+export const findPendingCheckinsForStore = async (
+  storeId: string,
+  options?: { status?: 'pending'; limit?: number },
+  database: Database = db,
+): Promise<StoreCheckinRow[]> => {
   const limit = options?.limit ?? 50;
   const conditions = [eq(storeCheckins.storeId, storeId)];
 
   if (options?.status) {
     conditions.push(eq(storeCheckins.status, options.status));
+    if (options.status === 'pending') {
+      conditions.push(gt(storeCheckins.expiresAt, new Date()));
+    }
   }
 
   const rows = (await database
@@ -91,7 +102,11 @@ export const findPendingCheckinsForStore = async (storeId: string, options?: { s
   return rows;
 };
 
-export const matchCheckinWithTransaction = async (checkinId: string, transactionId: string, database: Database = db) => {
+export const matchCheckinWithTransaction = async (
+  checkinId: string,
+  transactionId: string,
+  database: Database = db,
+) => {
   const now = new Date();
 
   const [result] = (await database
@@ -112,7 +127,12 @@ export const matchCheckinWithTransaction = async (checkinId: string, transaction
   return result;
 };
 
-export const autoMatchCheckinWithTransaction = async (userId: string, storeId: string, transactionId: string, database: Database = db) => {
+export const autoMatchCheckinWithTransaction = async (
+  userId: string,
+  storeId: string,
+  transactionId: string,
+  database: Database = db,
+) => {
   const pending = await findPendingCheckinsForUserAndStore(userId, storeId, database);
   if (pending.length === 0) {
     return null;
