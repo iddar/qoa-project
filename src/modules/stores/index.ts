@@ -302,6 +302,8 @@ const parseStoreTransactionItemMetadata = (metadata: string | null) => {
   }
 };
 
+const toDateIsoString = (value: Date | string) => (value instanceof Date ? value : new Date(value)).toISOString();
+
 const serializeStore = (store: StoreRow) => ({
   id: store.id,
   code: store.code,
@@ -2213,27 +2215,34 @@ export const storesModule = new Elysia({
         user_id: string | null;
         store_id: string;
         card_id: string | null;
-        total_amount: number;
-        created_at: Date;
+        total_amount: number | string;
+        created_at: Date | string;
       }>;
 
       const hasMore = txRows.length > limit;
       const txs = hasMore ? txRows.slice(0, limit) : txRows;
-      const nextCursor = hasMore ? txs[txs.length - 1]?.created_at.toISOString() : null;
+      const nextCursor =
+        hasMore && txs[txs.length - 1]?.created_at ? toDateIsoString(txs[txs.length - 1]!.created_at) : null;
 
       const txIds = txs.map((tx) => tx.id);
       const itemsRows =
         txIds.length > 0
-          ? ((await db.execute(sql`
-            select "id", "transaction_id", "product_id", "quantity", "amount", "metadata"
-            from "transaction_items"
-            where "transaction_id" = any(${txIds})
-          `)) as Array<{
+          ? ((await db
+              .select({
+                id: transactionItems.id,
+                transaction_id: transactionItems.transactionId,
+                product_id: transactionItems.productId,
+                quantity: transactionItems.quantity,
+                amount: transactionItems.amount,
+                metadata: transactionItems.metadata,
+              })
+              .from(transactionItems)
+              .where(or(...txIds.map((id) => eq(transactionItems.transactionId, id))))) as Array<{
               id: string;
               transaction_id: string;
               product_id: string;
               quantity: number;
-              amount: number;
+              amount: number | string;
               metadata: string | null;
             }>)
           : [];
@@ -2281,13 +2290,13 @@ export const storesModule = new Elysia({
                 productId: spInfo?.productId ?? (spInfo ? undefined : item.product_id),
                 name: metadata?.displayName ?? spInfo?.name ?? item.product_id,
                 quantity: item.quantity,
-                amount: item.amount,
+                amount: Number(item.amount),
               };
             }),
-            totalAmount: tx.total_amount,
+            totalAmount: Number(tx.total_amount),
             guestFlag: !tx.user_id,
             accumulations: [],
-            createdAt: tx.created_at.toISOString(),
+            createdAt: toDateIsoString(tx.created_at),
           };
         }),
         pagination: {

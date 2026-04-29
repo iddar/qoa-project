@@ -492,6 +492,20 @@ describe("Stores module", () => {
       .where(eq(transactionItems.transactionId, txId))) as Array<{ metadata: string | null }>;
     expect(storedItem?.metadata).toContain(storeProduct.id);
 
+    const listed = await api.v1.stores({ storeId: store.id }).transactions.get({
+      query: { limit: "5" },
+      headers: storeHeaders,
+    });
+
+    if (listed.error || !listed.data) {
+      throw listed.error?.value ?? new Error("Store POS transaction list failed");
+    }
+
+    expect(listed.status).toBe(200);
+    expect(
+      listed.data.data.some((tx: { id: string; cardId?: string }) => tx.id === txId && tx.cardId === card.id),
+    ).toBe(true);
+
     const [balance] = (await db
       .select({ current: balances.current })
       .from(balances)

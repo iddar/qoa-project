@@ -59,6 +59,7 @@ describe('Users me endpoint', () => {
     expect(status).toBe(200);
     expect(data.data.id).toBe(user.id);
     expect(data.data.role).toBe('consumer');
+    expect(data.data.createdAt).toBeTruthy();
 
     await deleteUser(user.id);
   });
@@ -98,6 +99,7 @@ describe('Users me endpoint', () => {
     expect(status).toBe(200);
     expect(data.data.id).toBe(user.id);
     expect(data.data.role).toBe('consumer');
+    expect(data.data.createdAt).toBeTruthy();
 
     await deleteUser(user.id);
   });
@@ -132,6 +134,7 @@ describe('Users me endpoint', () => {
     expect(data.data.id).toBe(user.id);
     expect(data.data.name).toBe('Perfil Actualizado');
     expect(data.data.email?.startsWith('updated_')).toBe(true);
+    expect(data.data.createdAt).toBeTruthy();
 
     await deleteUser(user.id);
   });

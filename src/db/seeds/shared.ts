@@ -994,8 +994,8 @@ const upsertSeedStoreProducts = async (
       name: product.name,
       sku: product.sku,
       price: product.price.toString(),
-      unitType: "piece",
       stock: 100,
+      unitType: "piece",
       status: "active",
     });
   }
