@@ -13,6 +13,20 @@ type RewardForm = {
   stock: string;
 };
 
+type CampaignOption = {
+  id: string;
+  name: string;
+};
+
+type RewardItem = {
+  id: string;
+  campaignId: string;
+  name: string;
+  cost: number;
+  stock?: number | null;
+  status: string;
+};
+
 const emptyForm: RewardForm = {
   campaignId: "",
   name: "",
@@ -77,8 +91,8 @@ export default function RewardsPage() {
     },
   });
 
-  const campaigns = campaignsData?.data ?? [];
-  const rewards = rewardsData?.data ?? [];
+  const campaigns = (campaignsData?.data ?? []) as CampaignOption[];
+  const rewards = (rewardsData?.data ?? []) as RewardItem[];
 
   return (
     <div className="space-y-8">

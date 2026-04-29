@@ -5,7 +5,19 @@ import { createHmac } from 'node:crypto';
 import { getExpectedTwilioSignature } from 'twilio/lib/webhooks/webhooks';
 import { createApp, type App } from '../app';
 import { db } from '../db/client';
-import { cards, stores, userStoreEnrollments, users, whatsappMessages, whatsappOnboardingSessions, balances, transactions, transactionItems, accumulations, campaigns } from '../db/schema';
+import {
+  cards,
+  stores,
+  userStoreEnrollments,
+  users,
+  whatsappMessages,
+  whatsappOnboardingSessions,
+  balances,
+  transactions,
+  transactionItems,
+  accumulations,
+  campaigns,
+} from '../db/schema';
 import { buildSignedWhatsappCardQrImageUrl } from '../services/twilio-whatsapp';
 
 process.env.AUTH_DEV_MODE = 'true';
@@ -396,9 +408,15 @@ describe('WhatsApp module', () => {
     const store = await createStore('Tienda Registro Intent');
 
     try {
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Registro', WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Registro', WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })),
+      );
 
       const response = await app.handle(
         buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'registrarme', WaId: phone.slice(1) })),
@@ -430,12 +448,23 @@ describe('WhatsApp module', () => {
 
     try {
       // Complete onboarding
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Balance', WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Balance', WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })),
+      );
 
-      const [createdUser] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, phone))) as Array<{ id: string }>;
-      const [card] = (await db.select({ id: cards.id }).from(cards).where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{ id: string }>;
+      const [createdUser] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, phone))) as Array<{
+        id: string;
+      }>;
+      const [card] = (await db
+        .select({ id: cards.id })
+        .from(cards)
+        .where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{ id: string }>;
 
       // Seed balance
       await db.insert(balances).values({ cardId: card!.id, current: 150, lifetime: 150 });
@@ -460,35 +489,55 @@ describe('WhatsApp module', () => {
 
     try {
       // Complete onboarding
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Actividad', WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Actividad', WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })),
+      );
 
-      const [createdUser] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, phone))) as Array<{ id: string }>;
-      const [card] = (await db.select({ id: cards.id }).from(cards).where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{ id: string }>;
+      const [createdUser] = (await db.select({ id: users.id }).from(users).where(eq(users.phone, phone))) as Array<{
+        id: string;
+      }>;
+      const [card] = (await db
+        .select({ id: cards.id })
+        .from(cards)
+        .where(eq(cards.userId, createdUser?.id ?? ''))) as Array<{ id: string }>;
 
       // Seed a transaction
-      const [tx] = (await db.insert(transactions).values({
-        userId: createdUser!.id,
-        storeId: store.id,
-        cardId: card!.id,
-        totalAmount: 250,
-      }).returning({ id: transactions.id })) as Array<{ id: string }>;
+      const [tx] = (await db
+        .insert(transactions)
+        .values({
+          userId: createdUser!.id,
+          storeId: store.id,
+          cardId: card!.id,
+          totalAmount: 250,
+        })
+        .returning({ id: transactions.id })) as Array<{ id: string }>;
 
-      const [item] = (await db.insert(transactionItems).values({
-        transactionId: tx!.id,
-        productId: 'prod_test',
-        quantity: 1,
-        amount: 250,
-      }).returning({ id: transactionItems.id })) as Array<{ id: string }>;
+      const [item] = (await db
+        .insert(transactionItems)
+        .values({
+          transactionId: tx!.id,
+          productId: 'prod_test',
+          quantity: 1,
+          amount: 250,
+        })
+        .returning({ id: transactionItems.id })) as Array<{ id: string }>;
 
       // Seed campaign for accumulation
-      const [campaign] = (await db.insert(campaigns).values({
-        name: 'Test Campaign',
-        status: 'active',
-        enrollmentMode: 'open',
-        accumulationMode: 'amount',
-      }).returning({ id: campaigns.id })) as Array<{ id: string }>;
+      const [campaign] = (await db
+        .insert(campaigns)
+        .values({
+          name: 'Test Campaign',
+          status: 'active',
+          enrollmentMode: 'open',
+          accumulationMode: 'amount',
+        })
+        .returning({ id: campaigns.id })) as Array<{ id: string }>;
 
       await db.insert(accumulations).values({
         transactionItemId: item!.id,
@@ -519,9 +568,15 @@ describe('WhatsApp module', () => {
 
     try {
       // Complete onboarding
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente QR', WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente QR', WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })),
+      );
 
       const response = await app.handle(
         buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'qr', WaId: phone.slice(1) })),
@@ -543,9 +598,15 @@ describe('WhatsApp module', () => {
 
     try {
       // Complete onboarding
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Ayuda', WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Ayuda', WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })),
+      );
 
       const response = await app.handle(
         buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'ayuda', WaId: phone.slice(1) })),
@@ -567,9 +628,15 @@ describe('WhatsApp module', () => {
 
     try {
       // Complete onboarding
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Unknown', WaId: phone.slice(1) })));
-      await app.handle(buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })));
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Unknown', WaId: phone.slice(1) })),
+      );
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: '01/01/1990', WaId: phone.slice(1) })),
+      );
 
       const response = await app.handle(
         buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'xyz nonsense', WaId: phone.slice(1) })),
@@ -591,7 +658,13 @@ describe('WhatsApp module', () => {
 
     try {
       const response = await app.handle(
-        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: `Quiero registrar mi compra en ${store.code}`, WaId: phone.slice(1) })),
+        buildTwilioRequest(
+          buildTwilioPayload({
+            From: waPhone,
+            Body: `Quiero registrar mi compra en ${store.code}`,
+            WaId: phone.slice(1),
+          }),
+        ),
       );
       const body = (await response.json()) as { data: { sessionState?: string } };
 

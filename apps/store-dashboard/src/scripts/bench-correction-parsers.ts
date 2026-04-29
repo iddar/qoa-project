@@ -1,7 +1,19 @@
 import { parseInventoryCorrections } from "@/lib/store-inventory";
 import { extractInventoryCorrectionsWithLLM } from "@/lib/inventory-correction-extraction";
 
-const TEST_CASES = [
+type ExpectedCorrection = {
+  query: string;
+  quantity?: number;
+  price?: number;
+};
+
+type CorrectionTestCase = {
+  name: string;
+  input: string;
+  expected: ExpectedCorrection[];
+};
+
+const TEST_CASES: CorrectionTestCase[] = [
   {
     name: "single quantity",
     input: "corrige el panque de nuez son 15 unidades",
@@ -62,7 +74,7 @@ const normalizeQuery = (q: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const scoreMatch = (actual: { productQuery?: string; query?: string; quantity?: number; price?: number }, expected: { query: string; quantity?: number; price?: number }) => {
+const scoreMatch = (actual: { productQuery?: string; query?: string; quantity?: number; price?: number }, expected: ExpectedCorrection) => {
   const actualQuery = normalizeQuery(actual.productQuery ?? actual.query ?? "");
   const expectedQuery = normalizeQuery(expected.query);
   const queryScore = actualQuery.includes(expectedQuery) || expectedQuery.includes(actualQuery) ? 1 : 0;

@@ -21,7 +21,6 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: corePublicUrl,
   },
-  typescript: { ignoreBuildErrors: true },
   async rewrites() {
     if (!apiProxyTarget) {
       return [];

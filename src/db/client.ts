@@ -53,11 +53,17 @@ export const sqlClient = new SQL(dbUrl);
 export const db = drizzle(sqlClient) as DbClient;
 
 export async function rawQuery<T = Record<string, unknown>>(query: string, params: unknown[] = []): Promise<T[]> {
-  const result = await (sqlClient as { unsafe: (q: string, p: unknown[]) => Promise<{ rows?: T[] }> }).unsafe(query, params as [string, ...unknown[]]);
+  const result = await (sqlClient as { unsafe: (q: string, p: unknown[]) => Promise<{ rows?: T[] }> }).unsafe(
+    query,
+    params as [string, ...unknown[]],
+  );
   return (result.rows as T[]) ?? [];
 }
 
-export async function rawQueryOne<T = Record<string, unknown>>(query: string, params: unknown[] = []): Promise<T | null> {
+export async function rawQueryOne<T = Record<string, unknown>>(
+  query: string,
+  params: unknown[] = [],
+): Promise<T | null> {
   const results = await rawQuery<T>(query, params);
   return results[0] ?? null;
 }

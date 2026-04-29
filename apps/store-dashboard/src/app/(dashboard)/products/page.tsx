@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
@@ -85,7 +85,7 @@ export default function StoreProductsPage() {
     },
   });
 
-  const products = productsQuery.data ?? [];
+  const products = useMemo(() => productsQuery.data ?? [], [productsQuery.data]);
   const brands = brandsQuery.data ?? [];
 
   const filteredProducts = useMemo(() => {
@@ -301,11 +301,9 @@ type AddProductModalProps = {
 };
 
 function AddProductModal({ storeId, token, brands, product, onClose, onSuccess }: AddProductModalProps) {
-  const [step, setStep] = useState<"brand" | "product">("brand");
   const [selectedBrand, setSelectedBrand] = useState<Brand | null>(null);
   const [createNewBrand, setCreateNewBrand] = useState(false);
   const [newBrandName, setNewBrandName] = useState("");
-  const [globalProducts, setGlobalProducts] = useState<GlobalProduct[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [showNewProductForm, setShowNewProductForm] = useState(false);
 
@@ -314,8 +312,6 @@ function AddProductModal({ storeId, token, brands, product, onClose, onSuccess }
     sku: product?.sku ?? "",
     price: product?.price?.toString() ?? "",
   });
-
-  const queryClient = useQueryClient();
 
   const searchProductsQuery = useQuery({
     queryKey: ["products-by-brand", selectedBrand?.id],

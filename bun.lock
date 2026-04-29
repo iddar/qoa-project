@@ -114,6 +114,7 @@
       },
       "devDependencies": {
         "@tailwindcss/postcss": "^4",
+        "@types/bun": "latest",
         "@types/node": "^20",
         "@types/react": "^19",
         "@types/react-dom": "^19",
@@ -138,6 +139,12 @@
     "packages/ui": {
       "name": "@qoa/ui",
       "version": "0.1.0",
+      "devDependencies": {
+        "@tanstack/react-query": "^5",
+        "@types/react": "^19",
+        "react": "^19",
+        "typescript": "^5",
+      },
       "peerDependencies": {
         "@tanstack/react-query": "^5",
         "react": "^19",

@@ -289,13 +289,12 @@ export default function StoresPage() {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setSelectedStoreId("");
             return;
-        }
+    }
 
-        if (!filteredRelations.some((relation) => relation.storeId === selectedStoreId)) {
-            // eslint-disable-next-line react-hooks/set-state-in-effect
-            setSelectedStoreId(filteredRelations[0]!.storeId);
-        }
-    }, [filteredRelations, selectedStoreId]);
+    if (!filteredRelations.some((relation) => relation.storeId === selectedStoreId)) {
+      setSelectedStoreId(filteredRelations[0]!.storeId);
+    }
+  }, [filteredRelations, selectedStoreId]);
 
     const selectedStore =
         filteredRelations.find((relation) => relation.storeId === selectedStoreId) ??

@@ -19,7 +19,6 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_API_URL: corePublicUrl,
   },
-  typescript: { ignoreBuildErrors: true },
 };
 
 export default nextConfig;

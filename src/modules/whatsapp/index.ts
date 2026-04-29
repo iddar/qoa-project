@@ -8,9 +8,7 @@ import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
 import { db } from '../../db/client';
 import { cards, whatsappMessages } from '../../db/schema';
-import {
-  attachWhatsappOutboundMessageToSession,
-} from '../../services/whatsapp-onboarding';
+import { attachWhatsappOutboundMessageToSession } from '../../services/whatsapp-onboarding';
 import { processWhatsappMessage } from '../../services/whatsapp-message-processor';
 import {
   markInboundWhatsappMessageError,

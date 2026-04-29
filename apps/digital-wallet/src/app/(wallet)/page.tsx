@@ -106,23 +106,23 @@ export default function WalletHomePage() {
         })),
     });
 
-    let nextGoal: NextGoal | null = null;
-    campaigns.forEach((campaign, index) => {
+    const nextGoal = campaigns.reduce<NextGoal | null>((currentGoal, campaign, index) => {
         const rewards = (
             (rewardQueries[index]?.data?.data as RewardItem[] | undefined) ?? []
         ).filter((entry) => entry.status === "active");
-        rewards.forEach((reward) => {
+        return rewards.reduce<NextGoal | null>((bestGoal, reward) => {
             const missing = reward.cost - campaign.current;
             if (missing <= 0) {
-                return;
+                return bestGoal;
             }
 
             const progress = Math.min(100, Math.round((campaign.current / reward.cost) * 100));
-            if (!nextGoal || missing < nextGoal.missing) {
-                nextGoal = { name: reward.name, missing, progress };
+            if (!bestGoal || missing < bestGoal.missing) {
+                return { name: reward.name, missing, progress };
             }
-        });
-    });
+            return bestGoal;
+        }, currentGoal);
+    }, null);
 
     const qrPayload = qrQuery.data?.data.payload;
     const qrValue = qrPayload ? JSON.stringify(qrPayload) : "";

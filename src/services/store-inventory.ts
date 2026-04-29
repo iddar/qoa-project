@@ -133,11 +133,7 @@ const parseInteger = (value: string) => {
 };
 
 const parsePrice = (value: string) => {
-  const normalized = value
-    .replace(/\$/g, '')
-    .replace(/mxn/gi, '')
-    .replace(/,/g, '')
-    .trim();
+  const normalized = value.replace(/\$/g, '').replace(/mxn/gi, '').replace(/,/g, '').trim();
   if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
     return null;
   }
@@ -270,20 +266,25 @@ const parseFreeformLine = (lineNumber: number, rawText: string, cleaned: string)
   let sku: string | undefined;
   const errors: string[] = [];
 
-  const leadingQuantityMatch = remaining.match(/^(\d+)\s*(?:x|pz|pza|pzas|pieza|piezas|ud|uds|unidad|unidades)?\s+(.+)$/i);
+  const leadingQuantityMatch = remaining.match(
+    /^(\d+)\s*(?:x|pz|pza|pzas|pieza|piezas|ud|uds|unidad|unidades)?\s+(.+)$/i,
+  );
   if (leadingQuantityMatch) {
     quantity = Number.parseInt(leadingQuantityMatch[1]!, 10);
     remaining = leadingQuantityMatch[2]!.trim();
   }
 
-  const trailingPriceMatch = remaining.match(/(.+?)\s+(?:precio\s+)?\$\s*(\d+(?:\.\d{1,2})?)$/i)
-    ?? remaining.match(/(.+?)\s+(\d+(?:\.\d{1,2})?)\s*mxn$/i);
+  const trailingPriceMatch =
+    remaining.match(/(.+?)\s+(?:precio\s+)?\$\s*(\d+(?:\.\d{1,2})?)$/i) ??
+    remaining.match(/(.+?)\s+(\d+(?:\.\d{1,2})?)\s*mxn$/i);
   if (trailingPriceMatch) {
     remaining = trailingPriceMatch[1]!.trim();
-    price = parsePrice(trailingPriceMatch[2]! ) ?? undefined;
+    price = parsePrice(trailingPriceMatch[2]!) ?? undefined;
   }
 
-  const trailingQuantityMatch = remaining.match(/(.+?)\s+(\d+)\s*(?:x|pz|pza|pzas|pieza|piezas|ud|uds|unidad|unidades)$/i);
+  const trailingQuantityMatch = remaining.match(
+    /(.+?)\s+(\d+)\s*(?:x|pz|pza|pzas|pieza|piezas|ud|uds|unidad|unidades)$/i,
+  );
   if (!quantity && trailingQuantityMatch) {
     remaining = trailingQuantityMatch[1]!.trim();
     quantity = Number.parseInt(trailingQuantityMatch[2]!, 10);
@@ -436,7 +437,8 @@ export const previewInventoryImport = (text: string, products: InventoryStorePro
       const ranked = rankProducts(row.name, row.sku, products);
       const best = ranked[0];
       const second = ranked[1];
-      const confidentMatch = best && best.score >= 0.86 && (!second || best.score - second.score >= 0.08 || second.score < 0.72);
+      const confidentMatch =
+        best && best.score >= 0.86 && (!second || best.score - second.score >= 0.08 || second.score < 0.72);
 
       if (confidentMatch) {
         return {
@@ -483,9 +485,7 @@ export const previewInventoryImport = (text: string, products: InventoryStorePro
   };
 };
 
-export const summarizeConfirmedInventoryRows = (
-  rows: Array<{ quantityDelta: number; created: boolean }>,
-) => ({
+export const summarizeConfirmedInventoryRows = (rows: Array<{ quantityDelta: number; created: boolean }>) => ({
   totalRows: rows.length,
   totalQuantity: rows.reduce((sum, row) => sum + row.quantityDelta, 0),
   createdProducts: rows.filter((row) => row.created).length,

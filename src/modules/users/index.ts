@@ -1,11 +1,11 @@
-import { and, desc, eq, lt, ne, or, sql } from "drizzle-orm";
-import { Elysia } from "elysia";
-import { authGuard, authPlugin, type AuthContext } from "../../app/plugins/auth";
-import { isUserAuth } from "../../app/plugins/permissions";
-import { allUserRoles, backofficeRoles } from "../../app/plugins/roles";
-import { authorizationHeader } from "../../app/plugins/schemas";
-import { parseCursor, parseLimit } from "../../app/utils/pagination";
-import { db } from "../../db/client";
+import { and, desc, eq, lt, ne, or, sql } from 'drizzle-orm';
+import { Elysia } from 'elysia';
+import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
+import { isUserAuth } from '../../app/plugins/permissions';
+import { allUserRoles, backofficeRoles } from '../../app/plugins/roles';
+import { authorizationHeader } from '../../app/plugins/schemas';
+import { parseCursor, parseLimit } from '../../app/utils/pagination';
+import { db } from '../../db/client';
 import {
   balances,
   campaignBalances,
@@ -15,11 +15,11 @@ import {
   cards,
   tierBenefits,
   users,
-} from "../../db/schema";
-import { ensureUserUniversalWalletCard } from "../../services/wallet-onboarding";
-import type { StatusHandler } from "../../types/handlers";
-import { serializeCard, type CardRow } from "../cards";
-import { cardListQuery, cardListResponse } from "../cards/model";
+} from '../../db/schema';
+import { ensureUserUniversalWalletCard } from '../../services/wallet-onboarding';
+import type { StatusHandler } from '../../types/handlers';
+import { serializeCard, type CardRow } from '../cards';
+import { cardListQuery, cardListResponse } from '../cards/model';
 import {
   adminCreateUserRequest,
   adminCreateUserResponse,
@@ -30,10 +30,10 @@ import {
   userMeResponse,
   userWalletResponse,
   userMeUpdateRequest,
-} from "./model";
+} from './model';
 
 const allowedRoles = allUserRoles;
-const backofficeAdminRoles = ["qoa_admin"] as const;
+const backofficeAdminRoles = ['qoa_admin'] as const;
 const temporaryPasswordLength = 14;
 
 type UserListQuery = {
@@ -59,17 +59,10 @@ type AdminCreateBody = {
   phone: string;
   email?: string;
   name?: string;
-  role:
-    | "consumer"
-    | "customer"
-    | "store_staff"
-    | "store_admin"
-    | "cpg_admin"
-    | "qoa_support"
-    | "qoa_admin";
+  role: 'consumer' | 'customer' | 'store_staff' | 'store_admin' | 'cpg_admin' | 'qoa_support' | 'qoa_admin';
   password?: string;
   tenantId?: string;
-  tenantType?: "cpg" | "store";
+  tenantType?: 'cpg' | 'store';
 };
 
 type UserParams = {
@@ -135,8 +128,8 @@ type UserMeUpdateContext = {
 };
 
 const generateTemporaryPassword = () => {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  let value = "";
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  let value = '';
   for (let i = 0; i < temporaryPasswordLength; i += 1) {
     value += alphabet[Math.floor(Math.random() * alphabet.length)];
   }
@@ -144,14 +137,14 @@ const generateTemporaryPassword = () => {
 };
 
 export const usersModule = new Elysia({
-  prefix: "/users",
+  prefix: '/users',
   detail: {
-    tags: ["Users"],
+    tags: ['Users'],
   },
 })
   .use(authPlugin)
   .get(
-    "/",
+    '/',
     async ({ query, status }: ListUsersContext) => {
       const limit = Math.min(Math.max(Number(query.limit ?? 25), 1), 100);
       const offset = Math.max(Number(query.offset ?? 0), 0);
@@ -184,10 +177,7 @@ export const usersModule = new Elysia({
         listQuery = listQuery.where(whereClause);
       }
 
-      const rows = (await listQuery
-        .orderBy(desc(users.createdAt))
-        .limit(limit)
-        .offset(offset)) as UserListRow[];
+      const rows = (await listQuery.orderBy(desc(users.createdAt)).limit(limit).offset(offset)) as UserListRow[];
 
       let countQuery = db.select({ total: sql<number>`count(*)` }).from(users);
       if (whereClause) {
@@ -221,13 +211,13 @@ export const usersModule = new Elysia({
         200: userListResponse,
       },
       detail: {
-        summary: "Listar usuarios para backoffice",
+        summary: 'Listar usuarios para backoffice',
         security: [{ bearerAuth: [] }],
       },
     },
   )
   .post(
-    "/",
+    '/',
     async ({ body, status }: CreateUserContext) => {
       const email = body.email ? body.email.toLowerCase() : null;
       const conditions = [eq(users.phone, body.phone)];
@@ -240,19 +230,19 @@ export const usersModule = new Elysia({
       if (existing) {
         return status(409, {
           error: {
-            code: "USER_EXISTS",
-            message: "El usuario ya existe",
+            code: 'USER_EXISTS',
+            message: 'El usuario ya existe',
           },
         });
       }
 
       // Validar coherencia rol/tenant
-      const requiresTenant = ["store_staff", "store_admin", "cpg_admin"].includes(body.role);
+      const requiresTenant = ['store_staff', 'store_admin', 'cpg_admin'].includes(body.role);
       if (requiresTenant && (!body.tenantId || !body.tenantType)) {
         return status(400, {
           error: {
-            code: "TENANT_REQUIRED",
-            message: "Este rol requiere tenantId y tenantType",
+            code: 'TENANT_REQUIRED',
+            message: 'Este rol requiere tenantId y tenantType',
           },
         });
       }
@@ -260,26 +250,26 @@ export const usersModule = new Elysia({
       if (!requiresTenant && (body.tenantId || body.tenantType)) {
         return status(400, {
           error: {
-            code: "TENANT_NOT_ALLOWED",
-            message: "Este rol no puede tener tenant",
+            code: 'TENANT_NOT_ALLOWED',
+            message: 'Este rol no puede tener tenant',
           },
         });
       }
 
-      if (body.role === "cpg_admin" && body.tenantType !== "cpg") {
+      if (body.role === 'cpg_admin' && body.tenantType !== 'cpg') {
         return status(400, {
           error: {
-            code: "INVALID_TENANT_TYPE",
-            message: "cpg_admin requiere tenantType = cpg",
+            code: 'INVALID_TENANT_TYPE',
+            message: 'cpg_admin requiere tenantType = cpg',
           },
         });
       }
 
-      if (["store_staff", "store_admin"].includes(body.role) && body.tenantType !== "store") {
+      if (['store_staff', 'store_admin'].includes(body.role) && body.tenantType !== 'store') {
         return status(400, {
           error: {
-            code: "INVALID_TENANT_TYPE",
-            message: "store_staff/store_admin requiere tenantType = store",
+            code: 'INVALID_TENANT_TYPE',
+            message: 'store_staff/store_admin requiere tenantType = store',
           },
         });
       }
@@ -315,14 +305,14 @@ export const usersModule = new Elysia({
         role: string;
         status: string;
         tenantId: string | null;
-        tenantType: "cpg" | "store" | null;
+        tenantType: 'cpg' | 'store' | null;
       }>;
 
       if (!created) {
         return status(500, {
           error: {
-            code: "USER_CREATE_FAILED",
-            message: "No se pudo crear el usuario",
+            code: 'USER_CREATE_FAILED',
+            message: 'No se pudo crear el usuario',
           },
         });
       }
@@ -349,20 +339,20 @@ export const usersModule = new Elysia({
         200: adminCreateUserResponse,
       },
       detail: {
-        summary: "Crear usuario desde backoffice",
+        summary: 'Crear usuario desde backoffice',
         security: [{ bearerAuth: [] }],
       },
     },
   )
   .post(
-    "/:id/block",
+    '/:id/block',
     async ({ params, body, status }: BlockUserContext) => {
       const untilDate = body.until ? new Date(body.until) : null;
       if (body.until && Number.isNaN(untilDate?.getTime())) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "Fecha de bloqueo inválida",
+            code: 'INVALID_ARGUMENT',
+            message: 'Fecha de bloqueo inválida',
           },
         });
       }
@@ -370,8 +360,8 @@ export const usersModule = new Elysia({
       if (untilDate && untilDate.getTime() <= Date.now()) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "La fecha de bloqueo debe ser futura",
+            code: 'INVALID_ARGUMENT',
+            message: 'La fecha de bloqueo debe ser futura',
           },
         });
       }
@@ -379,7 +369,7 @@ export const usersModule = new Elysia({
       const [updated] = (await db
         .update(users)
         .set({
-          status: untilDate ? "active" : "suspended",
+          status: untilDate ? 'active' : 'suspended',
           blockedAt: new Date(),
           blockedUntil: untilDate,
           blockedReason: body.reason ?? null,
@@ -400,8 +390,8 @@ export const usersModule = new Elysia({
       if (!updated) {
         return status(404, {
           error: {
-            code: "USER_NOT_FOUND",
-            message: "Usuario no encontrado",
+            code: 'USER_NOT_FOUND',
+            message: 'Usuario no encontrado',
           },
         });
       }
@@ -423,18 +413,18 @@ export const usersModule = new Elysia({
         200: blockUserResponse,
       },
       detail: {
-        summary: "Bloquear usuario (temporal o permanente)",
+        summary: 'Bloquear usuario (temporal o permanente)',
         security: [{ bearerAuth: [] }],
       },
     },
   )
   .post(
-    "/:id/unblock",
+    '/:id/unblock',
     async ({ params, status }: UserParamsContext) => {
       const [updated] = (await db
         .update(users)
         .set({
-          status: "active",
+          status: 'active',
           blockedAt: null,
           blockedUntil: null,
           blockedReason: null,
@@ -455,8 +445,8 @@ export const usersModule = new Elysia({
       if (!updated) {
         return status(404, {
           error: {
-            code: "USER_NOT_FOUND",
-            message: "Usuario no encontrado",
+            code: 'USER_NOT_FOUND',
+            message: 'Usuario no encontrado',
           },
         });
       }
@@ -477,19 +467,19 @@ export const usersModule = new Elysia({
         200: blockUserResponse,
       },
       detail: {
-        summary: "Desbloquear usuario",
+        summary: 'Desbloquear usuario',
         security: [{ bearerAuth: [] }],
       },
     },
   )
   .get(
-    "/me/cards",
+    '/me/cards',
     async ({ auth, query, status }: UserCardsContext) => {
       if (!auth || !isUserAuth(auth)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "Token de usuario requerido",
+            code: 'FORBIDDEN',
+            message: 'Token de usuario requerido',
           },
         });
       }
@@ -498,8 +488,8 @@ export const usersModule = new Elysia({
       if (query.cursor && !cursorDate) {
         return status(400, {
           error: {
-            code: "INVALID_CURSOR",
-            message: "Cursor inválido",
+            code: 'INVALID_CURSOR',
+            message: 'Cursor inválido',
           },
         });
       }
@@ -507,16 +497,12 @@ export const usersModule = new Elysia({
       const limit = parseLimit(query.limit);
       let queryBuilder = db.select().from(cards);
       if (cursorDate) {
-        queryBuilder = queryBuilder.where(
-          and(eq(cards.userId, auth.userId), lt(cards.createdAt, cursorDate)),
-        );
+        queryBuilder = queryBuilder.where(and(eq(cards.userId, auth.userId), lt(cards.createdAt, cursorDate)));
       } else {
         queryBuilder = queryBuilder.where(eq(cards.userId, auth.userId));
       }
 
-      const results = (await queryBuilder
-        .orderBy(desc(cards.createdAt), desc(cards.id))
-        .limit(limit + 1)) as CardRow[];
+      const results = (await queryBuilder.orderBy(desc(cards.createdAt), desc(cards.id)).limit(limit + 1)) as CardRow[];
       const hasMore = results.length > limit;
       const items = hasMore ? results.slice(0, limit) : results;
       const nextCursor = hasMore ? items[items.length - 1]?.createdAt.toISOString() : null;
@@ -536,18 +522,18 @@ export const usersModule = new Elysia({
         200: cardListResponse,
       },
       detail: {
-        summary: "Listar mis tarjetas",
+        summary: 'Listar mis tarjetas',
       },
     },
   )
   .get(
-    "/me/wallet",
+    '/me/wallet',
     async ({ auth, status }: UserMeWalletContext) => {
       if (!auth || !isUserAuth(auth)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "Token de usuario requerido",
+            code: 'FORBIDDEN',
+            message: 'Token de usuario requerido',
           },
         });
       }
@@ -580,8 +566,8 @@ export const usersModule = new Elysia({
       if (!card) {
         return status(404, {
           error: {
-            code: "CARD_NOT_FOUND",
-            message: "Tarjeta no encontrada",
+            code: 'CARD_NOT_FOUND',
+            message: 'Tarjeta no encontrada',
           },
         });
       }
@@ -608,7 +594,7 @@ export const usersModule = new Elysia({
       `)) as Array<{
         campaignId: string;
         campaignName: string;
-        enrollmentMode: "open" | "opt_in" | "system_universal";
+        enrollmentMode: 'open' | 'opt_in' | 'system_universal';
         subscriptionStatus: string | null;
         current: number | null;
         lifetime: number | null;
@@ -717,19 +703,16 @@ export const usersModule = new Elysia({
       }
 
       const [currentTier] = card.currentTierId
-        ? ((await db
-            .select()
-            .from(campaignTiers)
-            .where(eq(campaignTiers.id, card.currentTierId))) as Array<{
+        ? ((await db.select().from(campaignTiers).where(eq(campaignTiers.id, card.currentTierId))) as Array<{
             id: string;
             name: string;
             order: number;
             thresholdValue: number;
-            windowUnit: "day" | "month" | "year";
+            windowUnit: 'day' | 'month' | 'year';
             windowValue: number;
             minPurchaseCount: number | null;
             minPurchaseAmount: number | null;
-            qualificationMode: "any" | "all";
+            qualificationMode: 'any' | 'all';
             graceDays: number;
           }>)
         : [];
@@ -740,16 +723,16 @@ export const usersModule = new Elysia({
             .from(tierBenefits)
             .where(eq(tierBenefits.tierId, currentTier.id))) as Array<{
             id: string;
-            type: "discount" | "reward" | "multiplier" | "free_product";
+            type: 'discount' | 'reward' | 'multiplier' | 'free_product';
             config: string | null;
           }>)
         : [];
 
       const tierState = card.currentTierId
         ? card.tierGraceUntil && card.tierGraceUntil > new Date()
-          ? "at_risk"
-          : "qualified"
-        : "unqualified";
+          ? 'at_risk'
+          : 'qualified'
+        : 'unqualified';
 
       return {
         data: {
@@ -759,9 +742,7 @@ export const usersModule = new Elysia({
             code: card.code,
             currentTierId: card.currentTierId ?? undefined,
             tierGraceUntil: card.tierGraceUntil ? card.tierGraceUntil.toISOString() : undefined,
-            tierLastEvaluatedAt: card.tierLastEvaluatedAt
-              ? card.tierLastEvaluatedAt.toISOString()
-              : undefined,
+            tierLastEvaluatedAt: card.tierLastEvaluatedAt ? card.tierLastEvaluatedAt.toISOString() : undefined,
             tierState,
             currentTier: currentTier
               ? {
@@ -808,19 +789,19 @@ export const usersModule = new Elysia({
         200: userWalletResponse,
       },
       detail: {
-        summary: "Obtener wallet actual del usuario autenticado",
+        summary: 'Obtener wallet actual del usuario autenticado',
         security: [{ bearerAuth: [] }],
       },
     },
   )
   .get(
-    "/me",
+    '/me',
     async ({ auth, status }: UserMeContext) => {
       if (!auth || !isUserAuth(auth)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "Token de usuario requerido",
+            code: 'FORBIDDEN',
+            message: 'Token de usuario requerido',
           },
         });
       }
@@ -833,15 +814,15 @@ export const usersModule = new Elysia({
         role: string;
         status: string;
         tenantId: string | null;
-        tenantType: "cpg" | "store" | null;
+        tenantType: 'cpg' | 'store' | null;
         blockedUntil: Date | null;
         createdAt: Date;
       }>;
       if (!user) {
         return status(404, {
           error: {
-            code: "USER_NOT_FOUND",
-            message: "Usuario no encontrado",
+            code: 'USER_NOT_FOUND',
+            message: 'Usuario no encontrado',
           },
         });
       }
@@ -868,19 +849,19 @@ export const usersModule = new Elysia({
         200: userMeResponse,
       },
       detail: {
-        summary: "Obtener perfil del usuario autenticado",
+        summary: 'Obtener perfil del usuario autenticado',
         security: [{ bearerAuth: [] }],
       },
     },
   )
   .patch(
-    "/me",
+    '/me',
     async ({ auth, body, status }: UserMeUpdateContext) => {
       if (!auth || !isUserAuth(auth)) {
         return status(403, {
           error: {
-            code: "FORBIDDEN",
-            message: "Token de usuario requerido",
+            code: 'FORBIDDEN',
+            message: 'Token de usuario requerido',
           },
         });
       }
@@ -888,8 +869,8 @@ export const usersModule = new Elysia({
       if (body.name === undefined && body.email === undefined) {
         return status(400, {
           error: {
-            code: "INVALID_ARGUMENT",
-            message: "Debes enviar al menos name o email",
+            code: 'INVALID_ARGUMENT',
+            message: 'Debes enviar al menos name o email',
           },
         });
       }
@@ -904,8 +885,8 @@ export const usersModule = new Elysia({
         if (existingEmail) {
           return status(409, {
             error: {
-              code: "USER_EXISTS",
-              message: "El email ya está en uso",
+              code: 'USER_EXISTS',
+              message: 'El email ya está en uso',
             },
           });
         }
@@ -925,22 +906,18 @@ export const usersModule = new Elysia({
         patch.email = email ?? null;
       }
 
-      const [updated] = (await db
-        .update(users)
-        .set(patch)
-        .where(eq(users.id, auth.userId))
-        .returning({
-          id: users.id,
-          phone: users.phone,
-          email: users.email,
-          name: users.name,
-          role: users.role,
-          status: users.status,
-          tenantId: users.tenantId,
-          tenantType: users.tenantType,
-          blockedUntil: users.blockedUntil,
-          createdAt: users.createdAt,
-        })) as Array<{
+      const [updated] = (await db.update(users).set(patch).where(eq(users.id, auth.userId)).returning({
+        id: users.id,
+        phone: users.phone,
+        email: users.email,
+        name: users.name,
+        role: users.role,
+        status: users.status,
+        tenantId: users.tenantId,
+        tenantType: users.tenantType,
+        blockedUntil: users.blockedUntil,
+        createdAt: users.createdAt,
+      })) as Array<{
         id: string;
         phone: string;
         email: string | null;
@@ -948,7 +925,7 @@ export const usersModule = new Elysia({
         role: string;
         status: string;
         tenantId: string | null;
-        tenantType: "cpg" | "store" | null;
+        tenantType: 'cpg' | 'store' | null;
         blockedUntil: Date | null;
         createdAt: Date;
       }>;
@@ -956,8 +933,8 @@ export const usersModule = new Elysia({
       if (!updated) {
         return status(404, {
           error: {
-            code: "USER_NOT_FOUND",
-            message: "Usuario no encontrado",
+            code: 'USER_NOT_FOUND',
+            message: 'Usuario no encontrado',
           },
         });
       }
@@ -985,7 +962,7 @@ export const usersModule = new Elysia({
         200: userMeResponse,
       },
       detail: {
-        summary: "Actualizar perfil del usuario autenticado",
+        summary: 'Actualizar perfil del usuario autenticado',
         security: [{ bearerAuth: [] }],
       },
     },

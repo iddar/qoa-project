@@ -72,6 +72,11 @@ case "$command" in
     wait_for_service postgres_test
     bun --env-file="$ENV_FILE" run --cwd "$ROOT_DIR/src" db:rebuild
     bun --env-file="$ENV_FILE" run --cwd "$ROOT_DIR/src" db:seed:development
+    export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-http://localhost:3000}"
+    export NEXT_PUBLIC_CPG_PORTAL_URL="${NEXT_PUBLIC_CPG_PORTAL_URL:-http://localhost:3002}"
+    export NEXT_PUBLIC_STORE_DASHBOARD_URL="${NEXT_PUBLIC_STORE_DASHBOARD_URL:-http://localhost:3003}"
+    export NEXT_PUBLIC_WALLET_URL="${NEXT_PUBLIC_WALLET_URL:-http://localhost:3004}"
+    export QOA_API_PROXY_TARGET="${QOA_API_PROXY_TARGET:-http://localhost:3000}"
     bun --env-file="$ENV_FILE" run --parallel --workspaces --if-present dev
     ;;
   down)
