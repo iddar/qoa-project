@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { apiLogin, loginBackoffice, loginCpgPortal, loginStoreDashboard, loginWallet } from "../support/auth";
+import {
+  apiLogin,
+  loginBackoffice,
+  loginCpgPortal,
+  loginStoreDashboard,
+  loginWallet,
+} from "../support/auth";
 import {
   ensureCampaignActive,
   findCampaignByName,
@@ -17,7 +23,10 @@ test.describe.serial("Full platform flow", () => {
   const storeName = `E2E Store ${suffix}`;
   const brandName = `E2E Brand ${suffix}`;
   const productName = `E2E Product ${suffix}`;
-  const productSku = `E2E-${suffix}`.replace(/[^A-Za-z0-9-]/g, "").toUpperCase().slice(0, 30);
+  const productSku = `E2E-${suffix}`
+    .replace(/[^A-Za-z0-9-]/g, "")
+    .toUpperCase()
+    .slice(0, 30);
   const campaignName = `E2E Campaign ${suffix}`;
   const rewardName = `E2E Reward ${suffix}`;
   const consumerEmail = `e2e.consumer.${suffix}@qoa.local`;
@@ -151,7 +160,7 @@ test.describe.serial("Full platform flow", () => {
     await loginStoreDashboard(page);
     await page.goto(`${env.storeDashboardUrl}/scan`);
 
-    await page.getByLabel("Card payload / Card ID").fill(state.cardId!);
+    await page.getByLabel("Card payload / Card ID / código").fill(state.cardId!);
     await page.getByLabel("Product ID").fill(state.productId!);
     await page.getByLabel("Cantidad").fill("1");
     await page.getByLabel("Monto").fill("150");
@@ -164,7 +173,7 @@ test.describe.serial("Full platform flow", () => {
     });
 
     await page.goto(`${env.walletUrl}/transactions`);
-    await expect(page.getByText("Historial de transacciones")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Historial" })).toBeVisible();
 
     const consumerToken = await apiLogin(page.request, {
       email: consumerEmail,

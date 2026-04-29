@@ -11,6 +11,7 @@
         "test": "bun test",
         "smoke:openrouter-audio": "bun run src/scripts/openrouter-audio-smoke.ts",
         "smoke:openrouter-matrix": "bun run src/scripts/openrouter-conversation-matrix.ts",
+        "bench:inventory-agent": "bun run src/scripts/openrouter-inventory-conversation-benchmark.ts",
         "smoke:inventory-image": "bun run src/scripts/openrouter-inventory-image-smoke.ts",
         "smoke:inventory-audio": "bun run src/scripts/openrouter-inventory-audio-smoke.ts"
     },

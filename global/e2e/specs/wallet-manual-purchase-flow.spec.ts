@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { apiLogin, loginWallet } from "../support/auth";
 import {
-  findCampaignByKey,
   findProductBySku,
   findStoreByCode,
   getMyWalletCard,
+  getMyWalletSummary,
   listTransactionsByCard,
   waitForTransactionIncrease,
 } from "../support/api";
@@ -15,25 +15,16 @@ test("wallet manual purchase payload flow", async ({ page, request }) => {
   const consumerToken = await apiLogin(request, env.creds.consumer);
 
   const store = await findStoreByCode(request, adminToken, "seed_store_development");
-  const product = await findProductBySku(request, adminToken, "SEED-DEVELOPMENT-001");
-  const campaign = await findCampaignByKey(request, adminToken, "qoa_seed_reto_development");
+  const product = await findProductBySku(request, adminToken, "QOA-COLA-600-DEVELOPMENT");
 
   expect(store?.id).toBeTruthy();
   expect(product?.id).toBeTruthy();
-  expect(campaign?.id).toBeTruthy();
 
   const card = await getMyWalletCard(request, consumerToken);
+  const beforeWallet = await getMyWalletSummary(request, consumerToken);
   const beforeTransactions = await listTransactionsByCard(request, consumerToken, card.id);
 
   await loginWallet(page, env.creds.consumer);
-
-  await page.goto(`${env.walletUrl}/campaigns`);
-  const campaignCard = page.locator("article", { hasText: campaign?.name ?? "Reto Seed (development)" }).first();
-  await expect(campaignCard).toBeVisible();
-  const subscribeButton = campaignCard.getByRole("button", { name: "Suscribirme" });
-  if (await subscribeButton.isVisible()) {
-    await subscribeButton.click();
-  }
 
   await page.goto(`${env.walletUrl}/purchase`);
   const payload = {
@@ -48,10 +39,20 @@ test("wallet manual purchase payload flow", async ({ page, request }) => {
     metadata: "e2e wallet payload",
   };
 
-  await page.locator("textarea").first().fill(JSON.stringify(payload, null, 2));
+  await page
+    .locator("textarea")
+    .first()
+    .fill(JSON.stringify(payload, null, 2));
   await page.getByRole("button", { name: "Registrar compra" }).click();
   await expect(page.getByText(/Compra registrada/)).toBeVisible();
 
-  const afterTransactions = await waitForTransactionIncrease(request, consumerToken, card.id, beforeTransactions.length);
+  const afterTransactions = await waitForTransactionIncrease(
+    request,
+    consumerToken,
+    card.id,
+    beforeTransactions.length,
+  );
   expect(afterTransactions.length).toBeGreaterThan(beforeTransactions.length);
+  const afterWallet = await getMyWalletSummary(request, consumerToken);
+  expect(afterWallet.totals.current).toBeGreaterThan(beforeWallet.totals.current);
 });

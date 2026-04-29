@@ -88,9 +88,7 @@ export default function StoreHomePage() {
   const daily = (summaryQuery.data?.data.daily ?? []) as DailyPoint[];
   const dailyLastWeek = daily.slice(-7);
   const maxTx = Math.max(...dailyLastWeek.map((item) => item.transactions), 1);
-  const storeQrValue = storeQrQuery.data
-    ? (storeQrQuery.data.data.registrationUrl ?? storeQrQuery.data.data.code)
-    : "";
+  const storeQrValue = storeQrQuery.data?.data.registrationUrl ?? "";
 
   const today = useMemo(
     () =>
@@ -178,12 +176,19 @@ export default function StoreHomePage() {
         <article className="w-full max-w-[380px] justify-self-end rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-white p-5 dark:border-zinc-700 dark:from-zinc-900 dark:to-zinc-950">
           <p className="text-xs uppercase tracking-[0.16em] text-amber-700 dark:text-amber-300">Código de caja</p>
           <h2 className="mt-2 text-lg font-bold text-zinc-900 dark:text-zinc-100">QR de la tienda</h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Tenlo visible para registrar compras rapido en esta sucursal.</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Tenlo visible para registrar compras rápido en esta sucursal.</p>
 
           <div className="mt-4 flex justify-center">
             {storeQrValue && (
               <div className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-white">
-                <ReactQRCode value={storeQrValue} size={184} bgColor="#FFFFFF" fgColor="#111111" />
+                <ReactQRCode
+                  value={storeQrValue}
+                  size={184}
+                  background="#FFFFFF"
+                  dataModulesSettings={{ color: "#111111" }}
+                  finderPatternOuterSettings={{ color: "#111111" }}
+                  finderPatternInnerSettings={{ color: "#111111" }}
+                />
               </div>
             )}
           </div>
@@ -196,6 +201,7 @@ export default function StoreHomePage() {
                 Código tienda: <span className="font-semibold text-zinc-800 dark:text-zinc-100">{storeQrQuery.data.data.code}</span>
               </p>
             )}
+            {storeQrValue && <p className="mt-1 break-all">WhatsApp: {storeQrValue}</p>}
           </div>
         </article>
       </section>

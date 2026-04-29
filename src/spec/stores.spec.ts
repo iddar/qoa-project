@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'bun:test';
-import { treaty } from '@elysiajs/eden';
-import { and, eq } from 'drizzle-orm';
-import { createApp, type App } from '../app';
-import { db } from '../db/client';
+import { describe, expect, it } from "bun:test";
+import { treaty } from "@elysiajs/eden";
+import { and, eq } from "drizzle-orm";
+import { createApp, type App } from "../app";
+import { db } from "../db/client";
 import {
   accumulations,
   balances,
@@ -21,14 +21,14 @@ import {
   userStoreEnrollments,
   users,
   whatsappMessages,
-} from '../db/schema';
+} from "../db/schema";
 
-process.env.AUTH_DEV_MODE = 'true';
-process.env.NODE_ENV = 'test';
-process.env.TWILIO_ACCOUNT = 'ACtesttwilioaccount';
-process.env.TWILIO_AUTH = 'test_twilio_auth';
-process.env.TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886';
-process.env.TWILIO_SMS_FROM = '+12182204117';
+process.env.AUTH_DEV_MODE = "true";
+process.env.NODE_ENV = "test";
+process.env.TWILIO_ACCOUNT = "ACtesttwilioaccount";
+process.env.TWILIO_AUTH = "test_twilio_auth";
+process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
+process.env.TWILIO_SMS_FROM = "+12182204117";
 
 const app = createApp();
 const api = treaty<App>(app);
@@ -36,9 +36,9 @@ const api = treaty<App>(app);
 const createUser = async () => {
   const phone = `+52155${Math.floor(Math.random() * 10_000_000)
     .toString()
-    .padStart(7, '0')}`;
+    .padStart(7, "0")}`;
   const email = `store_${crypto.randomUUID()}@qoa.test`;
-  const password = 'Password123!';
+  const password = "Password123!";
 
   const [created] = (await db
     .insert(users)
@@ -46,7 +46,7 @@ const createUser = async () => {
       phone,
       email,
       passwordHash: await Bun.password.hash(password),
-      role: 'consumer',
+      role: "consumer",
     })
     .returning({ id: users.id, email: users.email, phone: users.phone })) as Array<{
     id: string;
@@ -55,11 +55,11 @@ const createUser = async () => {
   }>;
 
   if (!created) {
-    throw new Error('Failed to create test user');
+    throw new Error("Failed to create test user");
   }
 
   if (!created.email) {
-    throw new Error('Failed to create test user email');
+    throw new Error("Failed to create test user email");
   }
 
   return {
@@ -74,11 +74,11 @@ const buildAuthHeaders = (accessToken: string) => ({
 });
 
 const buildStoreDevHeaders = (storeId: string) => ({
-  authorization: 'Bearer dev-token',
-  'x-dev-user-id': 'dev-store-pos',
-  'x-dev-user-role': 'store_admin',
-  'x-dev-tenant-type': 'store',
-  'x-dev-tenant-id': storeId,
+  authorization: "Bearer dev-token",
+  "x-dev-user-id": "dev-store-pos",
+  "x-dev-user-role": "store_admin",
+  "x-dev-tenant-type": "store",
+  "x-dev-tenant-id": storeId,
 });
 
 const createCatalogProduct = async () => {
@@ -90,7 +90,7 @@ const createCatalogProduct = async () => {
     .returning({ id: cpgs.id })) as Array<{ id: string }>;
 
   if (!cpg) {
-    throw new Error('Failed to create test cpg');
+    throw new Error("Failed to create test cpg");
   }
 
   const [brand] = (await db
@@ -102,7 +102,7 @@ const createCatalogProduct = async () => {
     .returning({ id: brands.id })) as Array<{ id: string }>;
 
   if (!brand) {
-    throw new Error('Failed to create test brand');
+    throw new Error("Failed to create test brand");
   }
 
   const [product] = (await db
@@ -115,7 +115,7 @@ const createCatalogProduct = async () => {
     .returning({ id: products.id })) as Array<{ id: string }>;
 
   if (!product) {
-    throw new Error('Failed to create test product');
+    throw new Error("Failed to create test product");
   }
 
   return {
@@ -125,8 +125,8 @@ const createCatalogProduct = async () => {
   };
 };
 
-describe('Stores module', () => {
-  it('creates, fetches, and returns QR payload for stores', async () => {
+describe("Stores module", () => {
+  it("creates, fetches, and returns QR payload for stores", async () => {
     const user = await createUser();
     const {
       data: loginData,
@@ -142,7 +142,7 @@ describe('Stores module', () => {
     }
 
     if (!loginData) {
-      throw new Error('Login response missing');
+      throw new Error("Login response missing");
     }
 
     expect(loginStatus).toBe(200);
@@ -154,9 +154,9 @@ describe('Stores module', () => {
       status: createStatus,
     } = await api.v1.stores.post(
       {
-        name: 'Tienda Central',
-        type: 'tiendita',
-        address: 'Calle 123',
+        name: "Tienda Central",
+        type: "tiendita",
+        address: "Calle 123",
       },
       {
         headers: authHeaders,
@@ -168,11 +168,11 @@ describe('Stores module', () => {
     }
 
     if (!created) {
-      throw new Error('Store response missing');
+      throw new Error("Store response missing");
     }
 
     expect(createStatus).toBe(201);
-    expect(created.data.code).toContain('sto_');
+    expect(created.data.code).toContain("sto_");
 
     const storeId = created.data.id;
 
@@ -182,7 +182,7 @@ describe('Stores module', () => {
       status: listStatus,
     } = await api.v1.stores.get({
       query: {
-        limit: '20',
+        limit: "20",
       },
       headers: authHeaders,
     });
@@ -192,7 +192,7 @@ describe('Stores module', () => {
     }
 
     if (!listed) {
-      throw new Error('Store list missing');
+      throw new Error("Store list missing");
     }
 
     expect(listStatus).toBe(200);
@@ -211,7 +211,7 @@ describe('Stores module', () => {
     }
 
     if (!fetched) {
-      throw new Error('Store fetch missing');
+      throw new Error("Store fetch missing");
     }
 
     expect(fetchStatus).toBe(200);
@@ -230,26 +230,28 @@ describe('Stores module', () => {
     }
 
     if (!qrData) {
-      throw new Error('QR payload missing');
+      throw new Error("QR payload missing");
     }
 
     expect(qrStatus).toBe(200);
-    expect(qrData.data.payload.entityType).toBe('store');
+    expect(qrData.data.payload.entityType).toBe("store");
     expect(qrData.data.payload.entityId).toBe(storeId);
     expect(qrData.data.code).toBe(created.data.code);
-    expect(qrData.data.registrationUrl).toBe(`https://wa.me/14155238886?text=${created.data.code}`);
+    expect(qrData.data.registrationUrl).toBe(
+      `https://wa.me/14155238886?text=Quiero+registrar+mi+compra+en+${created.data.code}`,
+    );
 
     await db.delete(stores).where(eq(stores.id, storeId));
     await db.delete(users).where(eq(users.id, user.id));
   });
 
-  it('restricts store users to their own tenant store', async () => {
+  it("restricts store users to their own tenant store", async () => {
     const [storeA] = (await db
       .insert(stores)
       .values({
         name: `Store A ${crypto.randomUUID().slice(0, 6)}`,
-        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
-        type: 'tiendita',
+        code: `sto_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+        type: "tiendita",
       })
       .returning({ id: stores.id })) as Array<{ id: string }>;
 
@@ -257,60 +259,64 @@ describe('Stores module', () => {
       .insert(stores)
       .values({
         name: `Store B ${crypto.randomUUID().slice(0, 6)}`,
-        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
-        type: 'superette',
+        code: `sto_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+        type: "superette",
       })
       .returning({ id: stores.id })) as Array<{ id: string }>;
 
     if (!storeA || !storeB) {
-      throw new Error('Failed to create stores for tenant-scope test');
+      throw new Error("Failed to create stores for tenant-scope test");
     }
 
-    const password = 'Password123!';
+    const password = "Password123!";
     const email = `store_scope_${crypto.randomUUID()}@qoa.test`;
     const [storeUser] = (await db
       .insert(users)
       .values({
         phone: `+52155${Math.floor(Math.random() * 10_000_000)
           .toString()
-          .padStart(7, '0')}`,
+          .padStart(7, "0")}`,
         email,
         passwordHash: await Bun.password.hash(password),
-        role: 'store_admin',
+        role: "store_admin",
         tenantId: storeA.id,
-        tenantType: 'store',
+        tenantType: "store",
       })
       .returning({ id: users.id })) as Array<{ id: string }>;
 
     if (!storeUser) {
-      throw new Error('Failed to create store user');
+      throw new Error("Failed to create store user");
     }
 
     const login = await api.v1.auth.login.post({ email, password });
     if (login.error || !login.data) {
-      throw login.error?.value ?? new Error('Login response missing');
+      throw login.error?.value ?? new Error("Login response missing");
     }
 
     const authHeaders = buildAuthHeaders(login.data.data.accessToken);
 
     const storeList = await api.v1.stores.get({
-      query: { limit: '20' },
+      query: { limit: "20" },
       headers: authHeaders,
     });
 
     if (storeList.error || !storeList.data) {
-      throw storeList.error?.value ?? new Error('Store list missing');
+      throw storeList.error?.value ?? new Error("Store list missing");
     }
 
     expect(storeList.status).toBe(200);
     expect(storeList.data.data.length).toBe(1);
     expect(storeList.data.data[0]?.id).toBe(storeA.id);
 
-    const forbiddenStore = await api.v1.stores({ storeId: storeB.id }).get({ headers: authHeaders });
+    const forbiddenStore = await api.v1
+      .stores({ storeId: storeB.id })
+      .get({ headers: authHeaders });
     expect(forbiddenStore.status).toBe(403);
     expect(forbiddenStore.error).toBeDefined();
 
-    const forbiddenQr = await api.v1.stores({ storeId: storeB.id }).qr.get({ headers: authHeaders });
+    const forbiddenQr = await api.v1
+      .stores({ storeId: storeB.id })
+      .qr.get({ headers: authHeaders });
     expect(forbiddenQr.status).toBe(403);
     expect(forbiddenQr.error).toBeDefined();
 
@@ -319,19 +325,19 @@ describe('Stores module', () => {
     await db.delete(stores).where(eq(stores.id, storeA.id));
   });
 
-  it('resolves customers and registers POS transactions with loyalty using the store flow', async () => {
+  it("resolves customers and registers POS transactions with loyalty using the store flow", async () => {
     const user = await createUser();
     const [store] = (await db
       .insert(stores)
       .values({
         name: `POS Store ${crypto.randomUUID().slice(0, 6)}`,
-        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
-        type: 'tiendita',
+        code: `sto_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+        type: "tiendita",
       })
       .returning({ id: stores.id })) as Array<{ id: string }>;
 
     if (!store) {
-      throw new Error('Failed to create POS test store');
+      throw new Error("Failed to create POS test store");
     }
 
     const catalog = await createCatalogProduct();
@@ -342,28 +348,31 @@ describe('Stores module', () => {
         storeId: store.id,
         productId: catalog.productId,
         cpgId: catalog.cpgId,
-        name: 'Refresco 600ml',
+        name: "Refresco 600ml",
         sku: `POS-${crypto.randomUUID().slice(0, 8)}`,
-        unitType: 'piece',
+        unitType: "piece",
         price: 25,
         stock: 10,
       })
       .returning({ id: storeProducts.id })) as Array<{ id: string }>;
 
     if (!storeProduct) {
-      throw new Error('Failed to create POS store product');
+      throw new Error("Failed to create POS store product");
     }
 
     const [campaign] = (await db
       .insert(campaigns)
       .values({
         name: `Campaign POS ${crypto.randomUUID().slice(0, 6)}`,
-        status: 'active',
+        status: "active",
       })
-      .returning({ id: campaigns.id, name: campaigns.name })) as Array<{ id: string; name: string }>;
+      .returning({ id: campaigns.id, name: campaigns.name })) as Array<{
+      id: string;
+      name: string;
+    }>;
 
     if (!campaign) {
-      throw new Error('Failed to create POS campaign');
+      throw new Error("Failed to create POS campaign");
     }
 
     const [card] = (await db
@@ -372,30 +381,42 @@ describe('Stores module', () => {
         userId: user.id,
         campaignId: campaign.id,
         storeId: store.id,
-        code: `card_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
+        code: `card_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
       })
       .returning({ id: cards.id, code: cards.code })) as Array<{ id: string; code: string }>;
 
     if (!card) {
-      throw new Error('Failed to create POS card');
+      throw new Error("Failed to create POS card");
     }
 
     const storeHeaders = buildStoreDevHeaders(store.id);
 
     const resolvedByQr = await api.v1
       .stores({ storeId: store.id })
-      ['customer-resolve'].post(
-        { input: JSON.stringify({ entityType: 'card', entityId: card.id, code: card.code }) },
+      ["customer-resolve"].post(
+        { input: JSON.stringify({ entityType: "card", entityId: card.id, code: card.code }) },
         { headers: storeHeaders },
       );
 
     if (resolvedByQr.error || !resolvedByQr.data) {
-      throw resolvedByQr.error?.value ?? new Error('Customer resolve failed');
+      throw resolvedByQr.error?.value ?? new Error("Customer resolve failed");
     }
 
     expect(resolvedByQr.status).toBe(200);
     expect(resolvedByQr.data.data.userId).toBe(user.id);
     expect(resolvedByQr.data.data.cardId).toBe(card.id);
+
+    const resolvedByCardCode = await api.v1
+      .stores({ storeId: store.id })
+      ["customer-resolve"].post({ input: card.code }, { headers: storeHeaders });
+
+    if (resolvedByCardCode.error || !resolvedByCardCode.data) {
+      throw resolvedByCardCode.error?.value ?? new Error("Customer resolve by card code failed");
+    }
+
+    expect(resolvedByCardCode.status).toBe(200);
+    expect(resolvedByCardCode.data.data.userId).toBe(user.id);
+    expect(resolvedByCardCode.data.data.cardId).toBe(card.id);
 
     const now = new Date();
     const [checkin] = (await db
@@ -403,14 +424,14 @@ describe('Stores module', () => {
       .values({
         userId: user.id,
         storeId: store.id,
-        status: 'pending',
+        status: "pending",
         checkedInAt: now,
         expiresAt: new Date(now.getTime() + 30 * 60_000),
       })
       .returning({ id: storeCheckins.id })) as Array<{ id: string }>;
 
     if (!checkin) {
-      throw new Error('Failed to create POS checkin');
+      throw new Error("Failed to create POS checkin");
     }
 
     const created = await api.v1.stores({ storeId: store.id }).transactions.post(
@@ -429,7 +450,7 @@ describe('Stores module', () => {
     );
 
     if (created.error || !created.data) {
-      throw created.error?.value ?? new Error('Store POS transaction failed');
+      throw created.error?.value ?? new Error("Store POS transaction failed");
     }
 
     expect(created.status).toBe(201);
@@ -439,7 +460,7 @@ describe('Stores module', () => {
     expect(created.data.data.accumulations.length).toBeGreaterThanOrEqual(1);
     expect(created.data.data.accumulations[0]?.campaignName).toBe(campaign.name);
     expect(created.data.data.pointsTotal).toBeGreaterThanOrEqual(2);
-    expect(created.data.data.notificationStatus).toBe('skipped');
+    expect(created.data.data.notificationStatus).toBe("skipped");
     expect(created.data.data.items[0]?.storeProductId).toBe(storeProduct.id);
     expect(created.data.data.totalAmount).toBe(50);
 
@@ -453,10 +474,16 @@ describe('Stores module', () => {
     expect(storedTransaction?.cardId).toBe(card.id);
 
     const [matchedCheckin] = (await db
-      .select({ status: storeCheckins.status, matchedTransactionId: storeCheckins.matchedTransactionId })
+      .select({
+        status: storeCheckins.status,
+        matchedTransactionId: storeCheckins.matchedTransactionId,
+      })
       .from(storeCheckins)
-      .where(eq(storeCheckins.id, checkin.id))) as Array<{ status: string; matchedTransactionId: string | null }>;
-    expect(matchedCheckin?.status).toBe('matched');
+      .where(eq(storeCheckins.id, checkin.id))) as Array<{
+      status: string;
+      matchedTransactionId: string | null;
+    }>;
+    expect(matchedCheckin?.status).toBe("matched");
     expect(matchedCheckin?.matchedTransactionId).toBe(txId);
 
     const [storedItem] = (await db
@@ -488,32 +515,32 @@ describe('Stores module', () => {
     await db.delete(users).where(eq(users.id, user.id));
   });
 
-  it('resolves customer by phone, creates user and sends registration SMS', async () => {
+  it("resolves customer by phone, creates user and sends registration SMS", async () => {
     const [store] = (await db
       .insert(stores)
       .values({
         name: `Phone Resolve Store ${crypto.randomUUID().slice(0, 6)}`,
-        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
-        type: 'tiendita',
+        code: `sto_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+        type: "tiendita",
       })
       .returning({ id: stores.id, code: stores.code })) as Array<{ id: string; code: string }>;
 
     if (!store) {
-      throw new Error('Failed to create phone resolve test store');
+      throw new Error("Failed to create phone resolve test store");
     }
 
     const storeHeaders = buildStoreDevHeaders(store.id);
     const phoneNumber = `55123${Math.floor(Math.random() * 100_000)
       .toString()
-      .padStart(5, '0')}`;
+      .padStart(5, "0")}`;
 
     // Resolve by phone (no existing user)
     const resolvedByPhone = await api.v1
       .stores({ storeId: store.id })
-      ['customer-resolve'].post({ input: phoneNumber }, { headers: storeHeaders });
+      ["customer-resolve"].post({ input: phoneNumber }, { headers: storeHeaders });
 
     if (resolvedByPhone.error || !resolvedByPhone.data) {
-      throw resolvedByPhone.error?.value ?? new Error('Phone customer resolve failed');
+      throw resolvedByPhone.error?.value ?? new Error("Phone customer resolve failed");
     }
 
     expect(resolvedByPhone.status).toBe(200);
@@ -529,19 +556,22 @@ describe('Stores module', () => {
       .from(users)
       .where(eq(users.phone, `+52${phoneNumber}`))) as Array<{ id: string; role: string }>;
     expect(user).toBeDefined();
-    expect(user!.role).toBe('consumer');
+    expect(user!.role).toBe("consumer");
 
     // Verify enrollment
     const [enrollment] = (await db
       .select({ source: userStoreEnrollments.source })
       .from(userStoreEnrollments)
       .where(
-        and(eq(userStoreEnrollments.userId, createdUserId), eq(userStoreEnrollments.storeId, store.id)),
+        and(
+          eq(userStoreEnrollments.userId, createdUserId),
+          eq(userStoreEnrollments.storeId, store.id),
+        ),
       )) as Array<{
       source: string;
     }>;
     expect(enrollment).toBeDefined();
-    expect(enrollment!.source).toBe('pos_phone');
+    expect(enrollment!.source).toBe("pos_phone");
 
     // Verify card was created
     const [card] = await db.select().from(cards).where(eq(cards.userId, createdUserId));
@@ -562,20 +592,20 @@ describe('Stores module', () => {
       textBody: string | null;
     }>;
     expect(smsMessage).toBeDefined();
-    expect(smsMessage!.provider).toBe('twilio_sms');
-    expect(smsMessage!.direction).toBe('outbound');
-    expect(smsMessage!.textBody).toContain('Gracias por registrar tu compra');
-    expect(smsMessage!.textBody).toContain('https://wa.me/14155238886');
-    expect(smsMessage!.textBody).toContain('Quiero+registrar+mi+compra+en');
+    expect(smsMessage!.provider).toBe("twilio_sms");
+    expect(smsMessage!.direction).toBe("outbound");
+    expect(smsMessage!.textBody).toContain("Gracias por registrar tu compra");
+    expect(smsMessage!.textBody).toContain("https://wa.me/14155238886");
+    expect(smsMessage!.textBody).toContain("Quiero+registrar+mi+compra+en");
     expect(smsMessage!.textBody).toContain(store.code);
 
     // Second call with same phone should return same user
-    const resolvedAgain = await api.v1
-      .stores({ storeId: store.id })
-      ['customer-resolve'].post(
-        { input: `+52 ${phoneNumber.slice(0, 2)} ${phoneNumber.slice(2, 6)} ${phoneNumber.slice(6)}` },
-        { headers: storeHeaders },
-      );
+    const resolvedAgain = await api.v1.stores({ storeId: store.id })["customer-resolve"].post(
+      {
+        input: `+52 ${phoneNumber.slice(0, 2)} ${phoneNumber.slice(2, 6)} ${phoneNumber.slice(6)}`,
+      },
+      { headers: storeHeaders },
+    );
 
     expect(resolvedAgain.data?.data.userId).toBe(createdUserId);
 
@@ -587,18 +617,18 @@ describe('Stores module', () => {
     await db.delete(stores).where(eq(stores.id, store.id));
   });
 
-  it('previews and confirms inventory intake with idempotent replay', async () => {
+  it("previews and confirms inventory intake with idempotent replay", async () => {
     const [store] = (await db
       .insert(stores)
       .values({
         name: `Inventory Store ${crypto.randomUUID().slice(0, 6)}`,
-        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
-        type: 'tiendita',
+        code: `sto_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+        type: "tiendita",
       })
       .returning({ id: stores.id })) as Array<{ id: string }>;
 
     if (!store) {
-      throw new Error('Failed to create inventory test store');
+      throw new Error("Failed to create inventory test store");
     }
 
     const catalog = await createCatalogProduct();
@@ -608,32 +638,37 @@ describe('Stores module', () => {
         storeId: store.id,
         productId: catalog.productId,
         cpgId: catalog.cpgId,
-        name: 'Refresco 600ml',
+        name: "Refresco 600ml",
         sku: `INV-${crypto.randomUUID().slice(0, 8)}`,
-        unitType: 'piece',
+        unitType: "piece",
         price: 25,
         stock: 3,
       })
-      .returning({ id: storeProducts.id, sku: storeProducts.sku })) as Array<{ id: string; sku: string | null }>;
+      .returning({ id: storeProducts.id, sku: storeProducts.sku })) as Array<{
+      id: string;
+      sku: string | null;
+    }>;
 
     if (!existingProduct) {
-      throw new Error('Failed to create inventory store product');
+      throw new Error("Failed to create inventory store product");
     }
 
     const headers = buildStoreDevHeaders(store.id);
-    const skuSearch = await api.v1.stores({ storeId: store.id })['products-search'].get({
-      query: { q: existingProduct.sku ?? '', limit: '5' },
+    const skuSearch = await api.v1.stores({ storeId: store.id })["products-search"].get({
+      query: { q: existingProduct.sku ?? "", limit: "5" },
       headers,
     });
 
     if (skuSearch.error || !skuSearch.data) {
-      throw skuSearch.error?.value ?? new Error('Store product SKU search failed');
+      throw skuSearch.error?.value ?? new Error("Store product SKU search failed");
     }
 
     expect(skuSearch.status).toBe(200);
-    expect(skuSearch.data.data.storeProducts.some((entry: { id: string }) => entry.id === existingProduct.id)).toBe(
-      true,
-    );
+    expect(
+      skuSearch.data.data.storeProducts.some(
+        (entry: { id: string }) => entry.id === existingProduct.id,
+      ),
+    ).toBe(true);
 
     const preview = await api.v1.stores({ storeId: store.id }).inventory.intake.preview.post(
       {
@@ -643,15 +678,15 @@ describe('Stores module', () => {
     );
 
     if (preview.error || !preview.data) {
-      throw preview.error?.value ?? new Error('Inventory preview failed');
+      throw preview.error?.value ?? new Error("Inventory preview failed");
     }
 
     expect(preview.status).toBe(200);
     expect(preview.data.data.rows).toHaveLength(3);
-    expect(preview.data.data.rows[0]?.status).toBe('matched');
+    expect(preview.data.data.rows[0]?.status).toBe("matched");
     expect(preview.data.data.rows[0]?.matchedStoreProductId).toBe(existingProduct.id);
-    expect(preview.data.data.rows[1]?.status).toBe('new');
-    expect(preview.data.data.rows[2]?.status).toBe('invalid');
+    expect(preview.data.data.rows[1]?.status).toBe("new");
+    expect(preview.data.data.rows[2]?.status).toBe("invalid");
 
     const idempotencyKey = `inventory-intake-${crypto.randomUUID()}`;
     const confirmed = await api.v1.stores({ storeId: store.id }).inventory.intake.confirm.post(
@@ -660,20 +695,20 @@ describe('Stores module', () => {
         rows: [
           {
             lineNumber: 1,
-            rawText: '2 Refresco 600ml',
-            name: 'Refresco 600ml',
+            rawText: "2 Refresco 600ml",
+            name: "Refresco 600ml",
             quantity: 2,
-            action: 'match_existing',
+            action: "match_existing",
             storeProductId: existingProduct.id,
           },
           {
             lineNumber: 2,
-            rawText: 'Galletas Mantequilla, GAL-001, 6, 30',
-            name: 'Galletas Mantequilla',
-            sku: 'GAL-001',
+            rawText: "Galletas Mantequilla, GAL-001, 6, 30",
+            name: "Galletas Mantequilla",
+            sku: "GAL-001",
             quantity: 6,
             price: 30,
-            action: 'create_new',
+            action: "create_new",
           },
         ],
       },
@@ -681,7 +716,7 @@ describe('Stores module', () => {
     );
 
     if (confirmed.error || !confirmed.data) {
-      throw confirmed.error?.value ?? new Error('Inventory confirm failed');
+      throw confirmed.error?.value ?? new Error("Inventory confirm failed");
     }
 
     expect(confirmed.status).toBe(200);
@@ -692,7 +727,12 @@ describe('Stores module', () => {
     expect(confirmed.data.data.summary.updatedProducts).toBe(1);
 
     const storeProductsAfter = (await db
-      .select({ id: storeProducts.id, name: storeProducts.name, stock: storeProducts.stock, sku: storeProducts.sku })
+      .select({
+        id: storeProducts.id,
+        name: storeProducts.name,
+        stock: storeProducts.stock,
+        sku: storeProducts.sku,
+      })
       .from(storeProducts)
       .where(eq(storeProducts.storeId, store.id))) as Array<{
       id: string;
@@ -701,11 +741,11 @@ describe('Stores module', () => {
       sku: string | null;
     }>;
     const existingAfter = storeProductsAfter.find((entry) => entry.id === existingProduct.id);
-    const createdAfter = storeProductsAfter.find((entry) => entry.name === 'Galletas Mantequilla');
+    const createdAfter = storeProductsAfter.find((entry) => entry.name === "Galletas Mantequilla");
 
     expect(existingAfter?.stock).toBe(5);
     expect(createdAfter?.stock).toBe(6);
-    expect(createdAfter?.sku).toBe('GAL-001');
+    expect(createdAfter?.sku).toBe("GAL-001");
 
     const movements = (await db
       .select({
@@ -728,10 +768,10 @@ describe('Stores module', () => {
         rows: [
           {
             lineNumber: 1,
-            rawText: '2 Refresco 600ml',
-            name: 'Refresco 600ml',
+            rawText: "2 Refresco 600ml",
+            name: "Refresco 600ml",
             quantity: 2,
-            action: 'match_existing',
+            action: "match_existing",
             storeProductId: existingProduct.id,
           },
         ],
@@ -740,7 +780,7 @@ describe('Stores module', () => {
     );
 
     if (replay.error || !replay.data) {
-      throw replay.error?.value ?? new Error('Inventory replay failed');
+      throw replay.error?.value ?? new Error("Inventory replay failed");
     }
 
     expect(replay.status).toBe(200);
@@ -758,18 +798,18 @@ describe('Stores module', () => {
     await db.delete(stores).where(eq(stores.id, store.id));
   });
 
-  it('blocks out-of-stock sales and decrements stock on successful POS transactions', async () => {
+  it("blocks out-of-stock sales and decrements stock on successful POS transactions", async () => {
     const [store] = (await db
       .insert(stores)
       .values({
         name: `Stock Guard Store ${crypto.randomUUID().slice(0, 6)}`,
-        code: `sto_${crypto.randomUUID().replace(/-/g, '').slice(0, 20)}`,
-        type: 'tiendita',
+        code: `sto_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+        type: "tiendita",
       })
       .returning({ id: stores.id })) as Array<{ id: string }>;
 
     if (!store) {
-      throw new Error('Failed to create stock-guard store');
+      throw new Error("Failed to create stock-guard store");
     }
 
     const catalog = await createCatalogProduct();
@@ -779,16 +819,16 @@ describe('Stores module', () => {
         storeId: store.id,
         productId: catalog.productId,
         cpgId: catalog.cpgId,
-        name: 'Agua 1L',
+        name: "Agua 1L",
         sku: `WATER-${crypto.randomUUID().slice(0, 8)}`,
-        unitType: 'piece',
+        unitType: "piece",
         price: 18,
         stock: 2,
       })
       .returning({ id: storeProducts.id })) as Array<{ id: string }>;
 
     if (!storeProduct) {
-      throw new Error('Failed to create guarded stock product');
+      throw new Error("Failed to create guarded stock product");
     }
 
     const headers = buildStoreDevHeaders(store.id);
@@ -807,7 +847,7 @@ describe('Stores module', () => {
     );
 
     expect(rejected.status).toBe(409);
-    expect(rejected.error?.value.error.code).toBe('OUT_OF_STOCK');
+    expect(rejected.error?.value.error.code).toBe("OUT_OF_STOCK");
 
     const accepted = await api.v1.stores({ storeId: store.id }).transactions.post(
       {
@@ -824,7 +864,7 @@ describe('Stores module', () => {
     );
 
     if (accepted.error || !accepted.data) {
-      throw accepted.error?.value ?? new Error('Expected accepted stock transaction');
+      throw accepted.error?.value ?? new Error("Expected accepted stock transaction");
     }
 
     expect(accepted.status).toBe(201);
@@ -849,10 +889,16 @@ describe('Stores module', () => {
       quantityDelta: number;
       referenceId: string | null;
     }>;
-    expect(saleMovements.some((entry) => entry.type === 'sale' && entry.quantityDelta === -2)).toBe(true);
+    expect(saleMovements.some((entry) => entry.type === "sale" && entry.quantityDelta === -2)).toBe(
+      true,
+    );
 
-    await db.delete(inventoryMovements).where(eq(inventoryMovements.storeProductId, storeProduct.id));
-    await db.delete(transactionItems).where(eq(transactionItems.transactionId, accepted.data.data.id));
+    await db
+      .delete(inventoryMovements)
+      .where(eq(inventoryMovements.storeProductId, storeProduct.id));
+    await db
+      .delete(transactionItems)
+      .where(eq(transactionItems.transactionId, accepted.data.data.id));
     await db.delete(transactions).where(eq(transactions.id, accepted.data.data.id));
     await db.delete(storeProducts).where(eq(storeProducts.id, storeProduct.id));
     await db.delete(products).where(eq(products.id, catalog.productId));
