@@ -1,5 +1,5 @@
 import { and, eq, gt } from 'drizzle-orm';
-import { db } from '../db/client';
+import { db, type Database } from '../db/client';
 import { storeCheckins } from '../db/schema';
 
 export type CreateCheckinInput = {
@@ -55,9 +55,9 @@ export const createStoreCheckin = async (input: CreateCheckinInput): Promise<Cre
   return created;
 };
 
-export const findPendingCheckinsForUserAndStore = async (userId: string, storeId: string): Promise<StoreCheckinRow[]> => {
+export const findPendingCheckinsForUserAndStore = async (userId: string, storeId: string, database: Database = db): Promise<StoreCheckinRow[]> => {
   const now = new Date();
-  const rows = (await db
+  const rows = (await database
     .select()
     .from(storeCheckins)
     .where(
@@ -73,7 +73,7 @@ export const findPendingCheckinsForUserAndStore = async (userId: string, storeId
   return rows;
 };
 
-export const findPendingCheckinsForStore = async (storeId: string, options?: { status?: 'pending'; limit?: number }): Promise<StoreCheckinRow[]> => {
+export const findPendingCheckinsForStore = async (storeId: string, options?: { status?: 'pending'; limit?: number }, database: Database = db): Promise<StoreCheckinRow[]> => {
   const limit = options?.limit ?? 50;
   const conditions = [eq(storeCheckins.storeId, storeId)];
 
@@ -81,7 +81,7 @@ export const findPendingCheckinsForStore = async (storeId: string, options?: { s
     conditions.push(eq(storeCheckins.status, options.status));
   }
 
-  const rows = (await db
+  const rows = (await database
     .select()
     .from(storeCheckins)
     .where(and(...conditions))
@@ -91,10 +91,10 @@ export const findPendingCheckinsForStore = async (storeId: string, options?: { s
   return rows;
 };
 
-export const matchCheckinWithTransaction = async (checkinId: string, transactionId: string) => {
+export const matchCheckinWithTransaction = async (checkinId: string, transactionId: string, database: Database = db) => {
   const now = new Date();
 
-  const [result] = (await db
+  const [result] = (await database
     .update(storeCheckins)
     .set({
       status: 'matched' as const,
@@ -112,14 +112,14 @@ export const matchCheckinWithTransaction = async (checkinId: string, transaction
   return result;
 };
 
-export const autoMatchCheckinWithTransaction = async (userId: string, storeId: string, transactionId: string) => {
-  const pending = await findPendingCheckinsForUserAndStore(userId, storeId);
+export const autoMatchCheckinWithTransaction = async (userId: string, storeId: string, transactionId: string, database: Database = db) => {
+  const pending = await findPendingCheckinsForUserAndStore(userId, storeId, database);
   if (pending.length === 0) {
     return null;
   }
 
   // Match the most recent pending checkin
   const checkin = pending[pending.length - 1] as StoreCheckinRow;
-  await matchCheckinWithTransaction(checkin.id, transactionId);
+  await matchCheckinWithTransaction(checkin.id, transactionId, database);
   return checkin;
 };
