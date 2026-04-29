@@ -1,5 +1,15 @@
 import { expect, test } from "bun:test";
-import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, parseInventoryCorrections, parseInventoryQuantityCorrection, resolveInventoryRowState } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, buildInventoryStockAddDraftRow, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, extractInventoryStockAddRequest, findInventoryDraftRowByQuery, findInventoryProductByQuery, parseInventoryCorrections, parseInventoryQuantityCorrection, resolveInventoryRowState, type InventoryDraftMatchedProduct } from "@/lib/store-inventory";
+
+const product = (overrides: Partial<InventoryDraftMatchedProduct> & Pick<InventoryDraftMatchedProduct, "id" | "name">): InventoryDraftMatchedProduct => ({
+  storeId: "store-1",
+  unitType: "piece",
+  price: 18,
+  stock: 4,
+  status: "active",
+  createdAt: new Date().toISOString(),
+  ...overrides,
+});
 
 test("marks row as new once required intake fields are completed", () => {
   const row = resolveInventoryRowState({
@@ -125,6 +135,83 @@ test("appends new preview rows after the current draft line numbers", () => {
     { id: "existing-2", lineNumber: 2 },
     { id: "next-1", lineNumber: 3 },
   ]);
+});
+
+test("extracts inventory stock add requests from direct commands", () => {
+  expect(extractInventoryStockAddRequest("agrega 10 piezas de refresco de lima")).toEqual({
+    query: "refresco de lima",
+    quantity: 10,
+  });
+});
+
+test("finds inventory products by exact or partial SKU", () => {
+  const products = [
+    product({
+      id: "sp-lima",
+      name: "Refresco Lima-Limon 600 ml",
+      sku: "QOA-LIMA-600-STAGING",
+    }),
+  ];
+
+  const exact = findInventoryProductByQuery(products, "QOA-LIMA-600-STAGING");
+  expect(exact.status).toBe("matched");
+  if (exact.status !== "matched") {
+    throw new Error("Expected exact SKU match");
+  }
+  expect(exact.product.id).toBe("sp-lima");
+
+  const partial = findInventoryProductByQuery(products, "QOA-LIMA-600");
+  expect(partial.status).toBe("matched");
+  if (partial.status !== "matched") {
+    throw new Error("Expected partial SKU match");
+  }
+  expect(partial.product.id).toBe("sp-lima");
+});
+
+test("builds a matched inventory draft row from a registered product", () => {
+  const result = buildInventoryStockAddDraftRow(
+    { query: "refresco de lima", quantity: 10 },
+    [
+      product({
+        id: "sp-lima",
+        name: "Refresco Lima-Limon 600 ml",
+        sku: "QOA-LIMA-600-STAGING",
+      }),
+      product({
+        id: "sp-cola",
+        name: "Refresco Cola 600 ml",
+        sku: "QOA-COLA-600-STAGING",
+      }),
+    ],
+    { id: "row-lima", lineNumber: 1 },
+  );
+
+  expect(result.status).toBe("matched");
+  if (result.status !== "matched") {
+    throw new Error("Expected matched product row");
+  }
+  expect(result.row.action).toBe("match_existing");
+  expect(result.row.matchedStoreProductId).toBe("sp-lima");
+  expect(result.row.matchedProduct?.sku).toBe("QOA-LIMA-600-STAGING");
+  expect(result.row.quantity).toBe(10);
+});
+
+test("builds an ambiguous inventory draft row when product matches are close", () => {
+  const result = buildInventoryStockAddDraftRow(
+    { query: "refresco", quantity: 10 },
+    [
+      product({ id: "sp-lima", name: "Refresco Lima-Limon 600 ml" }),
+      product({ id: "sp-cola", name: "Refresco Cola 600 ml" }),
+    ],
+    { id: "row-refresco", lineNumber: 1 },
+  );
+
+  expect(result.status).toBe("ambiguous");
+  if (result.status !== "ambiguous") {
+    throw new Error("Expected ambiguous product row");
+  }
+  expect(result.row.status).toBe("ambiguous");
+  expect(result.row.candidates?.map((candidate) => candidate.storeProductId)).toEqual(["sp-lima", "sp-cola"]);
 });
 
 test("finds an inventory draft row by spoken product name", () => {

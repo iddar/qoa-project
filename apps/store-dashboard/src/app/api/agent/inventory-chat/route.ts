@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { buildInventoryPreviewTextFromImageRows, inventoryImageExtractionSchema } from "@/lib/inventory-image-extraction";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { type AgentAction, type AgentAttachment, type AgentMessage } from "@/lib/store-pos";
-import { appendInventoryDraftRows, applyInventoryDraftRowPatch, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, buildInventoryStockAddDraftRow, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, extractInventoryStockAddRequest, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type InventoryStockAddRequest, type StoreInventoryDraft } from "@/lib/store-inventory";
 import { extractDraftCorrectionsWithContext } from "@/lib/inventory-draft-corrector";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
@@ -396,7 +396,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "STORE_SCOPE_REQUIRED" }, { status: 403 });
   }
 
-  let workingDraft = cloneDraft(draft ?? createEmptyInventoryDraft());
+  let workingDraft = cloneDraft(draft ? { ...draft, idempotencyKey: draft.idempotencyKey ?? null } : createEmptyInventoryDraft());
   const latestUserMessage = [...messages].reverse().find((message) => message.role === "user");
   let latestAttachments = latestUserMessage?.attachments ?? [];
   let normalizedUserMessage = latestUserMessage ? { ...latestUserMessage } : null;
@@ -446,6 +446,34 @@ export async function POST(request: Request) {
     };
 
     return buildPreviewApplicationResult(workingDraft, nextDraftRows.length);
+  };
+
+  const appendResolvedInventoryRows = (rows: InventoryDraftRow[]) => {
+    workingDraft = {
+      rows: appendInventoryDraftRows(workingDraft.rows, rows),
+      lastReceipt: null,
+      idempotencyKey: workingDraft.idempotencyKey ?? createInventoryIntakeIdempotencyKey(),
+    };
+
+    return buildPreviewApplicationResult(workingDraft, rows.length);
+  };
+
+  const addInventoryDraftRowByQuery = async (request: InventoryStockAddRequest) => {
+    const activeStoreProducts = (await getStoreProducts()).filter((product) => product.status === "active");
+    const result = buildInventoryStockAddDraftRow(request, activeStoreProducts, {
+      id: crypto.randomUUID(),
+      lineNumber: 1,
+    });
+
+    if (result.status === "not_found") {
+      return result;
+    }
+
+    const preview = appendResolvedInventoryRows([result.row]);
+    return {
+      ...result,
+      preview,
+    };
   };
 
   const previewInventoryFromText = async (text: string, options?: { overwrite?: boolean }) => {
@@ -597,7 +625,7 @@ export async function POST(request: Request) {
 
     workingDraft.rows = workingDraft.rows.map((row) => row.id === nextRow.id ? nextRow : row);
     return {
-      updated: true,
+      updated: true as const,
       row: nextRow,
       draft: buildSummaryText(workingDraft),
     };
@@ -729,6 +757,35 @@ export async function POST(request: Request) {
     });
   }
 
+  const stockAddRequest = latestUserMessage ? extractInventoryStockAddRequest(latestUserMessage.content) : null;
+  if (stockAddRequest) {
+    const result = await addInventoryDraftRowByQuery(stockAddRequest);
+    const content = (() => {
+      if (result.status === "matched") {
+        return `Agregué **${stockAddRequest.quantity} piezas** de **${result.row.name}** al borrador de inventario. Quedó vinculada al producto existente${result.row.sku ? ` SKU **${result.row.sku}**` : ""}.`;
+      }
+
+      if (result.status === "ambiguous") {
+        const names = result.candidates.map((candidate) => `**${candidate.name}**${candidate.sku ? ` (${candidate.sku})` : ""}`).join(", ");
+        return `Encontré varias coincidencias para **${stockAddRequest.query}**: ${names}. Dejé la fila en el borrador para que selecciones el producto correcto.`;
+      }
+
+      return `No encontré **${stockAddRequest.query}** entre tus productos registrados. Si quieres crearlo como producto nuevo, dime el precio${stockAddRequest.quantity ? ` para cargar **${stockAddRequest.quantity} piezas**` : ""}.`;
+    })();
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        actions: buildActions(workingDraft),
+      } as AgentMessage,
+      userMessage: normalizedUserMessage,
+      draft: workingDraft,
+    });
+  }
+
   const applyCorrections = async (corrections: Array<{ query: string; quantity?: number; price?: number }>) => {
     const updated: Array<{ name: string; quantity?: number; price?: number }> = [];
     const notFound: string[] = [];
@@ -736,7 +793,7 @@ export async function POST(request: Request) {
 
     for (const correction of corrections) {
       const result = await updateDraftRowByQuery(correction);
-      if (result.updated) {
+      if (result.updated && result.row) {
         updated.push({ name: result.row.name, quantity: correction.quantity, price: correction.price });
       } else if (result.reason === "ambiguous") {
         ambiguous.push({ query: correction.query, candidates: result.candidates ?? [] });
@@ -864,6 +921,7 @@ export async function POST(request: Request) {
       "Si el usuario manda audio, interpretalo como instruccion del tendero para preparar, corregir o confirmar el borrador.",
       "Cuando el borrador ya tenga filas y llegue otra foto o lista, agregala al borrador actual salvo que el usuario pida reemplazarlo por completo.",
       "Si el usuario pregunta por un producto (precio, stock, si existe), usa searchStoreProducts para buscarlo.",
+      "Si el usuario pide agregar existencias de un producto que no esta en el borrador, usa addInventoryDraftRowByQuery para buscarlo en productos registrados y crear la fila vinculada.",
       "Si el usuario pide agregar un producto que no esta en el borrador, busca primero con searchStoreProducts para confirmar que existe y obtener su storeProductId.",
       "Si el usuario pide corregir un producto por nombre, usa updateInventoryDraftRowByQuery antes de pedir rowId.",
       "Ejemplo: 'corrige el panque de nuez son 15 unidades' significa buscar Panque Nuez y cambiar quantity a 15.",
@@ -918,6 +976,14 @@ export async function POST(request: Request) {
           storeProductId: z.string().optional(),
         }),
         execute: async (input) => updateDraftRowByQuery(input),
+      }),
+      addInventoryDraftRowByQuery: tool({
+        description: "Busca un producto registrado de la tienda por nombre o SKU y agrega una fila de entrada de inventario vinculada a ese producto.",
+        inputSchema: z.object({
+          query: z.string().min(2).describe("Nombre o SKU del producto registrado"),
+          quantity: z.number().int().min(1).describe("Cantidad de piezas o unidades a cargar"),
+        }),
+        execute: async (input) => addInventoryDraftRowByQuery(input),
       }),
       removeInventoryDraftRow: tool({
         description: "Elimina una fila del borrador de inventario.",
