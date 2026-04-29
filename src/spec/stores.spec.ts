@@ -406,6 +406,18 @@ describe("Stores module", () => {
     expect(resolvedByQr.data.data.userId).toBe(user.id);
     expect(resolvedByQr.data.data.cardId).toBe(card.id);
 
+    const resolvedByCardCode = await api.v1
+      .stores({ storeId: store.id })
+      ["customer-resolve"].post({ input: card.code }, { headers: storeHeaders });
+
+    if (resolvedByCardCode.error || !resolvedByCardCode.data) {
+      throw resolvedByCardCode.error?.value ?? new Error("Customer resolve by card code failed");
+    }
+
+    expect(resolvedByCardCode.status).toBe(200);
+    expect(resolvedByCardCode.data.data.userId).toBe(user.id);
+    expect(resolvedByCardCode.data.data.cardId).toBe(card.id);
+
     const now = new Date();
     const [checkin] = (await db
       .insert(storeCheckins)

@@ -265,8 +265,9 @@ const parseCardLookupInput = (value: string) => {
     };
   }
 
+  const phoneLikeInput = /^[+\d\s().-]+$/.test(trimmed);
   const cleanedForPhone = trimmed.replace(/[^\d+]/g, '');
-  if (/^\+?\d{10,16}$/.test(cleanedForPhone)) {
+  if (phoneLikeInput && /^\+?\d{10,16}$/.test(cleanedForPhone)) {
     return {
       kind: 'phone' as const,
       value: cleanedForPhone,

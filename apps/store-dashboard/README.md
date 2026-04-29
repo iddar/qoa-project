@@ -7,6 +7,7 @@ Dashboard operativo para tienda (tenderos y soporte) construido con Next.js + Re
 - `bun run dev` - Inicia la app en `http://localhost:3003`
 - `bun run lint` - Ejecuta lint.
 - `bun run smoke:openrouter-audio` - Prueba Gemini por OpenRouter con audios locales
+- `bun run bench:inventory-agent` - Corre una matriz de benchmark del agente de inventario con OpenRouter
 
 La app ya escucha en `0.0.0.0`, así que también la puedes abrir desde otros dispositivos usando la IP LAN de tu máquina, por ejemplo `http://192.168.1.203:3003`.
 
@@ -101,6 +102,26 @@ bun run smoke:openrouter-audio ../../examples/sampler-1.mp3 ../../examples/sampl
 ```
 
 La salida imprime modelo, archivo, tipo MIME detectado, uso de tokens, el texto entendido por Gemini y las llamadas reales a una tool simulada `addProductToDraftByQuery` para validar tool calling con audio.
+
+## Benchmark del agente de inventario
+
+Para iterar prompts/modelos del agente de inventario sin depender de la UI, corre:
+
+```sh
+bun run bench:inventory-agent
+```
+
+Variables utiles:
+
+- `OPENROUTER_API_KEY` - requerida.
+- `OPENROUTER_MODEL` - default `google/gemini-2.5-flash`.
+- `INVENTORY_MATRIX_RUNS` - runs por caso, default `3`.
+- `INVENTORY_MATRIX_TEMPERATURES` - lista separada por comas, default `0,0.2`.
+- `INVENTORY_PROMPT_VARIANTS` - filtra variantes, por ejemplo `precise-context`.
+- `INVENTORY_BENCH_OUTPUT` - ruta para guardar JSON con transcripciones y tool calls.
+- `INVENTORY_BENCH_MIN_RATE` - umbral opcional de pass rate; ejemplo `0.9`.
+
+La suite cubre casos fragiles del flujo POS/inventario: `20 de <producto>` sin conservar la palabra `de`, matching sin acentos, SKU directo, expansion de `cada refresco`, ambiguedad sin escoger al azar y bloqueo de confirmacion cuando quedan filas pendientes.
 
 ### Guia legacy: MiniMax + Chough
 
