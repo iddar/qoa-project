@@ -6,9 +6,12 @@ import { z } from "zod";
 import { previewInventoryImport } from "../../../../src/services/store-inventory";
 import {
   appendInventoryDraftRows,
+  buildInventoryAgentActions,
+  buildInventoryDraftSummaryText,
   buildInventoryStockAddDraftRow,
   canConfirmInventoryDraft,
   createEmptyInventoryDraft,
+  extractInventoryStockAddRequests,
   findInventoryDraftRowByQuery,
   getInventoryDraftSummary,
   rankInventoryProductsByQuery,
@@ -169,24 +172,7 @@ const cloneDraft = (draft: StoreInventoryDraft): StoreInventoryDraft => ({
 });
 
 const buildActions = (draft: StoreInventoryDraft): AgentAction[] => {
-  const actions: AgentAction[] = [];
-  if (canConfirmInventoryDraft(draft)) {
-    actions.push({
-      id: "inventory-confirm",
-      label: "Confirmar entrada",
-      prompt: "Confirma la entrada de inventario actual.",
-      variant: "primary",
-    });
-  }
-  if (draft.rows.length > 0) {
-    actions.push({
-      id: "inventory-clear",
-      label: "Vaciar borrador",
-      prompt: "Vacia el borrador de inventario actual.",
-      variant: "danger",
-    });
-  }
-  return actions;
+  return buildInventoryAgentActions(draft);
 };
 
 const buildDraftSummary = (draft: StoreInventoryDraft) => {
@@ -374,6 +360,97 @@ const SCENARIOS: Scenario[] = [
     },
   },
   {
+    id: "ambiguous-refresco-ui-actions",
+    description: "Una fila ambigua debe exponer acciones para que la UI resuelva con un click.",
+    turns: ["agrega 10 de refresco 600"],
+    evaluate: (results) => {
+      const failures: string[] = [];
+      const final = latest(results);
+      if (!final) return ["missing_turn"];
+      const labels = final.assistantMessage.actions?.map((action) => action.label) ?? [];
+      for (const expected of ["Refresco Cola 600 ml (staging)", "Refresco Naranja 600 ml (staging)", "Refresco Lima-Limon 600 ml (staging)"]) {
+        if (!labels.includes(expected)) {
+          failures.push(`missing_ui_action:${expected}`);
+        }
+      }
+      if (hasAction(final, "inventory-confirm")) {
+        failures.push("confirm_action_with_ambiguous_row");
+      }
+      return failures;
+    },
+  },
+  {
+    id: "multiple-products-one-message",
+    description: "Un solo mensaje puede agregar varios productos por nombre/SKU.",
+    turns: ["agrega 10 pza del QOA-COLA-600-STAGING y 20 de Papas Chile y Limon 45 g staging"],
+    evaluate: (results) => {
+      const failures: string[] = [];
+      const final = latest(results);
+      if (!final) return ["missing_turn"];
+      expectMatchedRow(failures, final.draft, "Refresco Cola 600 ml (staging)", 10, "cola");
+      expectMatchedRow(failures, final.draft, "Papas Chile y Limon 45 g (staging)", 20, "papas");
+      if (final.draft.rows.length !== 2) {
+        failures.push(`expected_2_rows:${final.draft.rows.length}`);
+      }
+      return failures;
+    },
+  },
+  {
+    id: "summary-in-chat",
+    description: "El agente debe responder con un resumen confirmable del borrador.",
+    initialDraft: () => ({
+      ...createEmptyInventoryDraft(),
+      idempotencyKey: "inventory-benchmark-summary",
+      rows: [
+        resolveInventoryRowState({
+          id: "row-cola",
+          lineNumber: 1,
+          rawText: "10 cola",
+          name: "Refresco Cola 600 ml (staging)",
+          sku: "QOA-COLA-600-STAGING",
+          quantity: 10,
+          price: 18,
+          status: "matched",
+          action: "match_existing",
+          matchedStoreProductId: "sp-cola-600",
+          matchedProduct: STORE_PRODUCTS[0]!,
+        }),
+        resolveInventoryRowState({
+          id: "row-papas",
+          lineNumber: 2,
+          rawText: "20 papas",
+          name: "Papas Chile y Limon 45 g (staging)",
+          sku: "QOA-PAPAS-CHILE-LIMON-45-STAGING",
+          quantity: 20,
+          price: 16,
+          status: "matched",
+          action: "match_existing",
+          matchedStoreProductId: "sp-papas-chile-limon",
+          matchedProduct: STORE_PRODUCTS[3]!,
+        }),
+      ],
+    }),
+    turns: ["dame un resumen de la carga"],
+    evaluate: (results) => {
+      const failures: string[] = [];
+      const final = latest(results);
+      if (!final) return ["missing_turn"];
+      const normalized = final.assistantMessage.content
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+      for (const needle of ["2 filas", "30 piezas", "refresco cola", "papas chile"]) {
+        if (!normalized.includes(needle)) {
+          failures.push(`summary_missing:${needle}`);
+        }
+      }
+      if (!hasAction(final, "inventory-confirm")) {
+        failures.push("missing_confirm_action");
+      }
+      return failures;
+    },
+  },
+  {
     id: "confirm-blocked-by-pending",
     description: "Confirmar con filas pendientes debe bloquearse y explicar el pendiente.",
     initialDraft: makeAmbiguousRefrescoDraft,
@@ -513,8 +590,99 @@ const runScenario = async (scenario: Scenario, promptVariant: PromptVariant, tem
         };
   };
 
+  const appendRowsForFamily = (query: string, quantity: number) => {
+    const matches = rankInventoryProductsByQuery(
+      STORE_PRODUCTS.filter((product) => product.status === "active"),
+      query,
+    )
+      .filter((entry) => entry.score >= 0.62)
+      .slice(0, 12);
+
+    if (matches.length === 0) {
+      return { status: "not_found" as const, query, quantity };
+    }
+
+    const rows = matches.map((entry) => resolveInventoryRowState({
+      id: crypto.randomUUID(),
+      lineNumber: 1,
+      rawText: `${quantity} ${entry.product.name}`,
+      name: entry.product.name,
+      sku: entry.product.sku,
+      quantity,
+      price: entry.product.price,
+      status: "matched",
+      action: "match_existing",
+      matchedStoreProductId: entry.product.id,
+      matchedProduct: entry.product,
+    }));
+
+    workingDraft = {
+      rows: appendInventoryDraftRows(workingDraft.rows, rows),
+      lastReceipt: null,
+      idempotencyKey: workingDraft.idempotencyKey ?? `inventory-benchmark-${crypto.randomUUID()}`,
+    };
+
+    return { status: "matched_family" as const, rows, query, quantity };
+  };
+
   for (const userInput of scenario.turns) {
     const toolExecutions: ToolExecution[] = [];
+    const deterministicRequests = extractInventoryStockAddRequests(userInput);
+
+    if (deterministicRequests.length > 0) {
+      const results = deterministicRequests.map((request) =>
+        request.mode === "all_matching"
+          ? appendRowsForFamily(request.query, request.quantity)
+          : appendRowByRequest(request.query, request.quantity),
+      );
+      toolExecutions.push({
+        tool: "deterministicInventoryStockAdd",
+        input: { requests: deterministicRequests },
+        output: results,
+      });
+      const assistantMessage: AgentMessage = {
+        id: `assistant-${scenario.id}-${run}-${turnResults.length + 1}`,
+        role: "assistant",
+        content: buildInventoryDraftSummaryText(workingDraft),
+        actions: buildActions(workingDraft),
+      };
+      transcriptMessages.push({
+        id: `user-${scenario.id}-${run}-${turnResults.length + 1}`,
+        role: "user",
+        content: userInput,
+      });
+      transcriptMessages.push(assistantMessage);
+      turnResults.push({
+        assistantMessage,
+        draft: cloneDraft(workingDraft),
+        confirmed,
+        toolExecutions,
+      });
+      continue;
+    }
+
+    if (/^(?:dame\s+)?(?:un\s+)?resumen\b|(?:que|qué)\s+(?:hay|tengo)\s+en\s+(?:el\s+)?borrador|revisa\s+(?:la\s+)?carga/i.test(userInput.trim())) {
+      const assistantMessage: AgentMessage = {
+        id: `assistant-${scenario.id}-${run}-${turnResults.length + 1}`,
+        role: "assistant",
+        content: buildInventoryDraftSummaryText(workingDraft),
+        actions: buildActions(workingDraft),
+      };
+      transcriptMessages.push({
+        id: `user-${scenario.id}-${run}-${turnResults.length + 1}`,
+        role: "user",
+        content: userInput,
+      });
+      transcriptMessages.push(assistantMessage);
+      turnResults.push({
+        assistantMessage,
+        draft: cloneDraft(workingDraft),
+        confirmed,
+        toolExecutions,
+      });
+      continue;
+    }
+
     const systemPrompt = promptVariant.buildSystemPrompt(workingDraft);
     const modelMessages: ModelMessage[] = [
       ...transcriptMessages.map((message) => ({

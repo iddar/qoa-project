@@ -7,7 +7,7 @@ import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
 import { getInitialCopilotActions } from "@/lib/store-copilot";
 import { getDraftItemCount, getDraftTotal, type AgentAttachment, type AgentMessage, type StorePosDraft } from "@/lib/store-pos";
-import { getInventoryDraftSummary, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { formatInventoryCount, getInventoryDraftSummary, type StoreInventoryDraft } from "@/lib/store-inventory";
 import { useStoreInventory } from "@/providers/store-inventory-provider";
 import { useStorePos } from "@/providers/store-pos-provider";
 
@@ -975,7 +975,7 @@ export function StoreAgentDrawer() {
             <p className="mt-1 truncate text-sm font-semibold text-zinc-950 dark:text-zinc-50">
               {isInventoryMode
                 ? inventoryDraft.rows.length > 0
-                  ? `${getInventoryDraftSummary(inventoryDraft).ambiguous + getInventoryDraftSummary(inventoryDraft).invalid} pendientes`
+                  ? formatInventoryCount(getInventoryDraftSummary(inventoryDraft).ambiguous + getInventoryDraftSummary(inventoryDraft).invalid, "pendiente", "pendientes")
                   : (inventoryDraft.lastReceipt?.replayed ? "Replay" : inventoryDraft.lastReceipt ? "Aplicado" : "Sin borrador")
                 : (draft.customer?.name ?? draft.customer?.phone ?? "Sin ligar")}
             </p>

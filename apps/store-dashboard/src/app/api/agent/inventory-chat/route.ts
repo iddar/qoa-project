@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { buildInventoryPreviewTextFromImageRows, inventoryImageExtractionSchema } from "@/lib/inventory-image-extraction";
 import { renderAssistantMarkdownToHtml } from "@/lib/markdown";
 import { type AgentAction, type AgentAttachment, type AgentMessage } from "@/lib/store-pos";
-import { appendInventoryDraftRows, applyInventoryDraftRowPatch, buildInventoryStockAddDraftRow, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, extractInventoryStockAddRequest, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type InventoryStockAddRequest, type StoreInventoryDraft } from "@/lib/store-inventory";
+import { appendInventoryDraftRows, applyInventoryDraftRowPatch, buildInventoryAgentActions, buildInventoryDraftSummaryText, buildInventoryStockAddDraftRow, canConfirmInventoryDraft, createEmptyInventoryDraft, createInventoryIntakeIdempotencyKey, extractInventoryStockAddRequests, findInventoryDraftRowByQuery, getInventoryDraftSummary, parseInventoryCorrections, rankInventoryProductsByQuery, resolveInventoryRowState, type InventoryDraftMatchedProduct, type InventoryDraftRow, type InventoryStockAddRequest, type StoreInventoryDraft } from "@/lib/store-inventory";
 import { extractDraftCorrectionsWithContext } from "@/lib/inventory-draft-corrector";
 
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
@@ -312,29 +312,7 @@ const mapImagePreviewError = (error: unknown) => {
   return "No pude leer esa foto de inventario. Intenta con otra imagen o pega la lista en texto.";
 };
 
-const buildActions = (draft: StoreInventoryDraft): AgentAction[] => {
-  const actions: AgentAction[] = [];
-
-  if (canConfirmInventoryDraft(draft)) {
-    actions.push({
-      id: "inventory-confirm",
-      label: "Confirmar entrada",
-      prompt: "Confirma la entrada de inventario actual.",
-      variant: "primary",
-    });
-  }
-
-  if (draft.rows.length > 0) {
-    actions.push({
-      id: "inventory-clear",
-      label: "Vaciar borrador",
-      prompt: "Vacía el borrador de inventario actual.",
-      variant: "danger",
-    });
-  }
-
-  return actions;
-};
+const buildActions = (draft: StoreInventoryDraft): AgentAction[] => buildInventoryAgentActions(draft);
 
 const buildSummaryText = (draft: StoreInventoryDraft) => {
   const summary = getInventoryDraftSummary(draft);
@@ -474,6 +452,57 @@ export async function POST(request: Request) {
       ...result,
       preview,
     };
+  };
+
+  const addInventoryDraftRowsForFamily = async (request: InventoryStockAddRequest) => {
+    const activeStoreProducts = (await getStoreProducts()).filter((product) => product.status === "active");
+    const matches = rankInventoryProductsByQuery(activeStoreProducts, request.query)
+      .filter((entry) => entry.score >= 0.62)
+      .slice(0, 12);
+
+    if (matches.length === 0) {
+      return {
+        status: "not_found" as const,
+        query: request.query,
+        quantity: request.quantity,
+      };
+    }
+
+    const rows = matches.map((entry) => resolveInventoryRowState({
+      id: crypto.randomUUID(),
+      lineNumber: 1,
+      rawText: `${request.quantity} ${entry.product.name}`,
+      name: entry.product.name,
+      sku: entry.product.sku,
+      quantity: request.quantity,
+      price: entry.product.price,
+      status: "matched" as const,
+      action: "match_existing" as const,
+      matchedStoreProductId: entry.product.id,
+      matchedProduct: entry.product,
+    }));
+
+    const preview = appendResolvedInventoryRows(rows);
+    return {
+      status: "matched_family" as const,
+      query: request.query,
+      quantity: request.quantity,
+      rows,
+      preview,
+    };
+  };
+
+  const addInventoryDraftRowsFromRequests = async (requests: InventoryStockAddRequest[]) => {
+    const results = [];
+    for (const request of requests) {
+      results.push(
+        request.mode === "all_matching"
+          ? await addInventoryDraftRowsForFamily(request)
+          : await addInventoryDraftRowByQuery(request),
+      );
+    }
+
+    return results;
   };
 
   const previewInventoryFromText = async (text: string, options?: { overwrite?: boolean }) => {
@@ -641,6 +670,35 @@ export async function POST(request: Request) {
     return buildSummaryText(workingDraft);
   };
 
+  const selectExistingProductForDraftRow = async (rowId: string, storeProductId: string) => {
+    const row = workingDraft.rows.find((entry) => entry.id === rowId);
+    const product = (await getStoreProducts()).find((entry) => entry.id === storeProductId);
+    if (!row || !product) {
+      return {
+        selected: false as const,
+        reason: row ? "product_not_found" : "row_not_found",
+      };
+    }
+
+    const nextRow = resolveInventoryRowState({
+      ...row,
+      name: product.name,
+      sku: product.sku,
+      price: product.price,
+      action: "match_existing",
+      matchedStoreProductId: product.id,
+      matchedProduct: product,
+      candidates: undefined,
+    });
+
+    workingDraft.rows = workingDraft.rows.map((entry) => entry.id === rowId ? nextRow : entry);
+    return {
+      selected: true as const,
+      row: nextRow,
+      draft: buildSummaryText(workingDraft),
+    };
+  };
+
   const confirmInventoryIntake = async () => {
     if (!canConfirmInventoryDraft(workingDraft)) {
       throw new Error("INVALID_DRAFT");
@@ -701,6 +759,60 @@ export async function POST(request: Request) {
     return transcription.text.trim();
   };
 
+  const latestContent = latestUserMessage?.content.trim() ?? "";
+  const selectionActionMatch = latestContent.match(/\browId=([^\s]+)\s+storeProductId=([^\s]+)/i);
+  if (selectionActionMatch) {
+    const result = await selectExistingProductForDraftRow(selectionActionMatch[1]!, selectionActionMatch[2]!);
+    const content = result.selected
+      ? `Listo, vinculé la fila **${result.row.name}** al producto existente. ${buildInventoryDraftSummaryText(workingDraft)}`
+      : "No pude aplicar esa selección. La fila o el producto ya no están disponibles.";
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        actions: buildActions(workingDraft),
+      } as AgentMessage,
+      userMessage: normalizedUserMessage,
+      draft: workingDraft,
+    });
+  }
+
+  if (/^(?:dame\s+)?(?:un\s+)?resumen\b|(?:que|qué)\s+(?:hay|tengo)\s+en\s+(?:el\s+)?borrador|revisa\s+(?:la\s+)?carga/i.test(latestContent)) {
+    const content = buildInventoryDraftSummaryText(workingDraft);
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        actions: buildActions(workingDraft),
+      } as AgentMessage,
+      userMessage: normalizedUserMessage,
+      draft: workingDraft,
+    });
+  }
+
+  if (/^vac[ií]a\s+(?:el\s+)?borrador/i.test(latestContent)) {
+    await clearDraft();
+    const content = "Listo, vacié el borrador de inventario.";
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        actions: buildActions(workingDraft),
+      } as AgentMessage,
+      userMessage: normalizedUserMessage,
+      draft: workingDraft,
+    });
+  }
+
   const hasLatestImage = latestAttachments.some((attachment) => getAttachmentKind(attachment) === "image");
   if (hasLatestImage) {
     try {
@@ -757,20 +869,38 @@ export async function POST(request: Request) {
     });
   }
 
-  const stockAddRequest = latestUserMessage ? extractInventoryStockAddRequest(latestUserMessage.content) : null;
-  if (stockAddRequest) {
-    const result = await addInventoryDraftRowByQuery(stockAddRequest);
+  const stockAddRequests = latestUserMessage ? extractInventoryStockAddRequests(latestUserMessage.content) : [];
+  if (stockAddRequests.length > 0) {
+    const results = await addInventoryDraftRowsFromRequests(stockAddRequests);
     const content = (() => {
-      if (result.status === "matched") {
-        return `Agregué **${stockAddRequest.quantity} piezas** de **${result.row.name}** al borrador de inventario. Quedó vinculada al producto existente${result.row.sku ? ` SKU **${result.row.sku}**` : ""}.`;
+      const matchedRows = results.flatMap((result) => {
+        if (result.status === "matched") return [result.row];
+        if (result.status === "matched_family") return result.rows;
+        return [];
+      });
+      const ambiguousResults = results.filter((result) => result.status === "ambiguous");
+      const notFoundResults = results.filter((result) => result.status === "not_found");
+
+      const parts: string[] = [];
+      if (matchedRows.length > 0) {
+        const quantity = matchedRows.reduce((sum, row) => sum + row.quantity, 0);
+        const names = matchedRows.map((row) => `**${row.name}**${row.sku ? ` (${row.sku})` : ""}`).join(", ");
+        parts.push(`Agregué **${matchedRows.length} ${matchedRows.length === 1 ? "fila" : "filas"}** (${quantity} piezas): ${names}.`);
       }
 
-      if (result.status === "ambiguous") {
+      for (const result of ambiguousResults) {
+        if (result.status !== "ambiguous") continue;
         const names = result.candidates.map((candidate) => `**${candidate.name}**${candidate.sku ? ` (${candidate.sku})` : ""}`).join(", ");
-        return `Encontré varias coincidencias para **${stockAddRequest.query}**: ${names}. Dejé la fila en el borrador para que selecciones el producto correcto.`;
+        parts.push(`Encontré varias coincidencias para **${result.row.name}**: ${names}. Dejé la fila pendiente para que selecciones el producto correcto.`);
       }
 
-      return `No encontré **${stockAddRequest.query}** entre tus productos registrados. Si quieres crearlo como producto nuevo, dime el precio${stockAddRequest.quantity ? ` para cargar **${stockAddRequest.quantity} piezas**` : ""}.`;
+      for (const result of notFoundResults) {
+        if (result.status !== "not_found") continue;
+        parts.push(`No encontré **${result.query}** entre tus productos registrados. Si quieres crearlo como producto nuevo, dime el precio para cargar **${result.quantity} piezas**.`);
+      }
+
+      parts.push(buildInventoryDraftSummaryText(workingDraft));
+      return parts.join("\n\n");
     })();
     const renderedHtml = await renderAssistantMarkdownToHtml(content);
     return Response.json({
@@ -849,6 +979,54 @@ export async function POST(request: Request) {
     return Response.json({ error: "OPENROUTER_NOT_CONFIGURED" }, { status: 500 });
   }
 
+  if (latestUserMessage && workingDraft.rows.length > 0 && /\b(corrige|cambia|actualiza|ajusta|modifica|precio|cuesta|vale|son|sube|baja)\b/i.test(latestUserMessage.content)) {
+    try {
+      const draftCorrections = await extractDraftCorrectionsWithContext(latestUserMessage.content, workingDraft.rows);
+      if (draftCorrections.length > 0) {
+        const updated: Array<{ name: string; quantity?: number; price?: number }> = [];
+
+        for (const correction of draftCorrections) {
+          const row = workingDraft.rows.find((r) => r.id === correction.rowId);
+          if (!row) continue;
+
+          const nextRow = applyInventoryDraftRowPatch(row, {
+            quantity: correction.quantity,
+            price: correction.price,
+          });
+          workingDraft.rows = workingDraft.rows.map((r) => (r.id === nextRow.id ? nextRow : r));
+          updated.push({
+            name: nextRow.name,
+            quantity: correction.quantity,
+            price: correction.price,
+          });
+        }
+
+        const items = updated.map((u) => {
+          const qtyPart = u.quantity !== undefined ? `**${u.quantity} unidades**` : "";
+          const pricePart = u.price !== undefined ? `**$${u.price}**` : "";
+          const changes = [qtyPart, pricePart].filter(Boolean).join(" / ");
+          return `**${u.name}** → ${changes}`;
+        });
+
+        const content = `Listo, corregí:\n${items.join("\n")}\n\n${buildInventoryDraftSummaryText(workingDraft)}`;
+        const renderedHtml = await renderAssistantMarkdownToHtml(content);
+        return Response.json({
+          message: {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content,
+            renderedHtml: renderedHtml || undefined,
+            actions: buildActions(workingDraft),
+          } as AgentMessage,
+          userMessage: normalizedUserMessage,
+          draft: workingDraft,
+        });
+      }
+    } catch {
+      // Si el extractor contextual no entiende el mensaje, sigue con el flujo normal de tools.
+    }
+  }
+
   const audioTranscript = await transcribeLatestAudio();
   if (audioTranscript && workingDraft.rows.length > 0) {
     try {
@@ -916,6 +1094,14 @@ export async function POST(request: Request) {
       "Responde siempre en espanol claro y breve.",
       "Usa herramientas para interpretar listas de proveedor, editar el borrador y confirmar entradas.",
       "No digas que la entrada fue aplicada si no ejecutaste confirmInventoryIntake.",
+      "Mensajes como '20 de Papas Chile y Limon' significan cantidad=20 y producto='Papas Chile y Limon'. La palabra 'de' o 'del' no forma parte del producto.",
+      "Tolera acentos faltantes, mayusculas, guiones, parentesis y variaciones como pza/pz/piezas/unidades.",
+      "SKU exacto o parcial tiene prioridad sobre nombre hablado.",
+      "Si el usuario dice 'cada refresco', 'cada galleta' o 'todos los X', agrega una fila por cada producto activo encontrado en esa familia.",
+      "Si el usuario solo dice una familia ambigua sin 'cada' o 'todos', no elijas al azar: deja la fila pendiente o pide seleccion.",
+      "Nunca confirmes si hay filas ambiguas, invalidas, sin action, sin matchedStoreProductId cuando action=match_existing, o sin precio cuando action=create_new.",
+      "Si confirmacion esta bloqueada, explica exactamente que fila falta resolver.",
+      "Usa singular/plural correcto: '1 fila', '2 filas', '1 pendiente', '2 pendientes'.",
       "Si el usuario pega una lista o tabla, usa previewInventoryFromText.",
       "Si el usuario adjunta una foto de nota o ticket, usa previewInventoryFromLatestImage.",
       "Si el usuario manda audio, interpretalo como instruccion del tendero para preparar, corregir o confirmar el borrador.",
@@ -925,6 +1111,7 @@ export async function POST(request: Request) {
       "Si el usuario pide agregar un producto que no esta en el borrador, busca primero con searchStoreProducts para confirmar que existe y obtener su storeProductId.",
       "Si el usuario pide corregir un producto por nombre, usa updateInventoryDraftRowByQuery antes de pedir rowId.",
       "Ejemplo: 'corrige el panque de nuez son 15 unidades' significa buscar Panque Nuez y cambiar quantity a 15.",
+      "Si el usuario pide resumen, usa summarizeInventoryDraft y responde con filas, piezas, pendientes y detalle por producto.",
       "Si hay filas ambiguas o invalidas, pide correccion puntual o usa updateInventoryDraftRow/updateInventoryDraftRowByQuery cuando ya tengas la instruccion.",
       `Estado actual del inventario en borrador:\n${buildSummaryText(workingDraft)}`,
     ].join("\n\n"),
