@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { cards, stores, userStoreEnrollments, users } from '../db/schema';
 import { ensureUserUniversalWalletCard } from './wallet-onboarding';
-import { sendTwilioWhatsappMessage } from './twilio-whatsapp';
+import { buildWhatsappRegistrationUrl, sendTwilioSmsMessage } from './twilio-whatsapp';
 
 const PHONE_CLEAN_PATTERN = /[^\d+]/g;
 
@@ -110,15 +110,21 @@ const recordStoreEnrollment = async (userId: string, storeId: string) => {
   });
 };
 
-const sendWelcomeWhatsapp = async (phone: string, storeName: string | null) => {
+const sendRegistrationSms = async (
+  phone: string,
+  store: {
+    name: string | null;
+    code: string;
+  },
+) => {
   try {
-    const storeFragment = storeName ? ` en ${storeName}` : '';
-    await sendTwilioWhatsappMessage({
+    const registrationUrl = buildWhatsappRegistrationUrl(store.code);
+    await sendTwilioSmsMessage({
       to: phone,
-      body: `¡Bienvenido a Qoa${storeFragment}! Tu cuenta fue registrada desde la tienda. Responde a este mensaje con tu nombre para completar tu perfil y recibir tu tarjeta de lealtad digital.`,
+      body: `Gracias por registrar tu compra en ${store.name ?? 'tu tienda'}, completa tu registro en ${registrationUrl}`,
     });
   } catch (error) {
-    console.error('[phone-customer-resolve][whatsapp-failed]', error);
+    console.error('[phone-customer-resolve][sms-failed]', error);
   }
 };
 
@@ -178,13 +184,15 @@ export const resolveCustomerByPhone = async (
   }
 
   if (created) {
-    const storeName = await db
-      .select({ name: stores.name })
+    const store = await db
+      .select({ name: stores.name, code: stores.code })
       .from(stores)
       .where(eq(stores.id, storeId))
-      .then((rows) => (rows[0] as { name: string } | undefined)?.name ?? null);
+      .then((rows) => (rows[0] as { name: string; code: string } | undefined) ?? null);
 
-    await sendWelcomeWhatsapp(normalizedPhone, storeName);
+    if (store) {
+      await sendRegistrationSms(normalizedPhone, store);
+    }
   }
 
   return {

@@ -197,6 +197,35 @@ export default function StorePOSPage() {
     return null;
   }, [confirmTransaction.error, resolveCustomer.error]);
 
+  const lastTransactionCampaignPoints = useMemo(() => {
+    const map = new Map<string, { name: string; points: number }>();
+    for (const accumulation of draft.lastTransaction?.accumulations ?? []) {
+      const current = map.get(accumulation.campaignId) ?? {
+        name: accumulation.campaignName ?? "Campaña",
+        points: 0,
+      };
+      current.points += accumulation.accumulated;
+      map.set(accumulation.campaignId, current);
+    }
+    return [...map.values()].filter((entry) => entry.points > 0);
+  }, [draft.lastTransaction]);
+
+  const notificationLabel = useMemo(() => {
+    if (!draft.lastTransaction?.notificationStatus) {
+      return null;
+    }
+
+    if (draft.lastTransaction.notificationStatus === "sent") {
+      return "Agradecimiento enviado por WhatsApp";
+    }
+
+    if (draft.lastTransaction.notificationStatus === "failed") {
+      return "La venta quedó registrada; no se pudo enviar WhatsApp";
+    }
+
+    return "Sin WhatsApp activo para este cliente";
+  }, [draft.lastTransaction]);
+
   if (!storeId) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -495,7 +524,19 @@ export default function StorePOSPage() {
             <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
               {draft.lastTransaction.customer?.name ?? draft.lastTransaction.customer?.phone ?? "Transacción de invitado"}
             </p>
-            <p className="mt-1 text-xs text-zinc-400">Acumulaciones: {draft.lastTransaction.accumulations.length}</p>
+            <p className="mt-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+              +{draft.lastTransaction.pointsTotal ?? draft.lastTransaction.accumulations.reduce((sum, entry) => sum + entry.accumulated, 0)} punto(s)
+            </p>
+            {lastTransactionCampaignPoints.length > 0 ? (
+              <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                {lastTransactionCampaignPoints.map((entry) => (
+                  <span key={entry.name} className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                    {entry.name}: +{entry.points}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {notificationLabel ? <p className="mt-3 text-xs text-zinc-400">{notificationLabel}</p> : null}
             <button
               type="button"
               onClick={() =>

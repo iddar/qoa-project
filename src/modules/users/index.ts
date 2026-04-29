@@ -600,6 +600,108 @@ export const usersModule = new Elysia({
         lifetime: number | null;
       }>;
 
+      const storeActivityRows = (await db.execute(sql`
+        select
+          s.id as "storeId",
+          s.name as "storeName",
+          count(t.id)::int as "purchases",
+          coalesce(sum(t.total_amount), 0)::int as "totalSpent",
+          max(t.created_at) as "lastPurchaseAt"
+        from transactions t
+        inner join stores s on s.id = t.store_id
+        where t.user_id = ${auth.userId}
+        group by s.id, s.name
+        order by max(t.created_at) desc nulls last, s.name asc
+      `)) as Array<{
+        storeId: string;
+        storeName: string;
+        purchases: number;
+        totalSpent: number;
+        lastPurchaseAt: Date | null;
+      }>;
+
+      const storeCampaignPointRows = (await db.execute(sql`
+        select
+          t.store_id as "storeId",
+          c.id as "campaignId",
+          c.name as "campaignName",
+          coalesce(sum(a.amount), 0)::int as "points"
+        from transactions t
+        inner join transaction_items ti on ti.transaction_id = t.id
+        inner join accumulations a on a.transaction_item_id = ti.id and a.card_id = ${card.id}
+        inner join campaigns c on c.id = a.campaign_id
+        where t.user_id = ${auth.userId}
+        group by t.store_id, c.id, c.name
+        order by c.name asc
+      `)) as Array<{
+        storeId: string;
+        campaignId: string;
+        campaignName: string;
+        points: number;
+      }>;
+
+      const storeCheckinRows = (await db.execute(sql`
+        select
+          sc.store_id as "storeId",
+          s.name as "storeName",
+          count(*)::int as "visits"
+        from store_checkins sc
+        inner join stores s on s.id = sc.store_id
+        where sc.user_id = ${auth.userId}
+        group by sc.store_id, s.name
+      `)) as Array<{ storeId: string; storeName: string; visits: number }>;
+
+      const campaignPointsByStore = new Map<
+        string,
+        Array<{ campaignId: string; campaignName: string; points: number }>
+      >();
+      for (const row of storeCampaignPointRows) {
+        const current = campaignPointsByStore.get(row.storeId) ?? [];
+        current.push({
+          campaignId: row.campaignId,
+          campaignName: row.campaignName,
+          points: row.points,
+        });
+        campaignPointsByStore.set(row.storeId, current);
+      }
+
+      const visitsByStore = new Map(storeCheckinRows.map((row) => [row.storeId, row]));
+      const storeActivityById = new Map(
+        storeActivityRows.map((row) => {
+          const campaignPoints = campaignPointsByStore.get(row.storeId) ?? [];
+          return [
+            row.storeId,
+            {
+              storeId: row.storeId,
+              storeName: row.storeName,
+              purchases: row.purchases,
+              visits: visitsByStore.get(row.storeId)?.visits ?? 0,
+              totalSpent: row.totalSpent,
+              pointsTotal: campaignPoints.reduce((sum, entry) => sum + entry.points, 0),
+              lastPurchaseAt: row.lastPurchaseAt ? row.lastPurchaseAt.toISOString() : undefined,
+              campaignPoints,
+            },
+          ] as const;
+        }),
+      );
+
+      for (const row of storeCheckinRows) {
+        if (storeActivityById.has(row.storeId)) {
+          continue;
+        }
+
+        storeActivityById.set(row.storeId, {
+          storeId: row.storeId,
+          storeName: row.storeName,
+          purchases: 0,
+          visits: row.visits,
+          totalSpent: 0,
+          pointsTotal: 0,
+          lastPurchaseAt: undefined,
+          campaignPoints: [],
+        });
+      }
+
       const [currentTier] = card.currentTierId
         ? ((await db.select().from(campaignTiers).where(eq(campaignTiers.id, card.currentTierId))) as Array<{
             id: string;
@@ -676,6 +778,7 @@ export const usersModule = new Elysia({
             current: row.current ?? 0,
             lifetime: row.lifetime ?? 0,
           })),
+          storeBreakdown: [...storeActivityById.values()],
         },
       };
     },

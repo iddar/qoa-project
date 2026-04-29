@@ -148,6 +148,7 @@ export const storeTransactionCustomerSchema = t.Object({
 export const storeTransactionAccumulationSchema = t.Object({
   cardId: t.String(),
   campaignId: t.String(),
+  campaignName: t.Optional(t.String()),
   accumulated: t.Number(),
   newBalance: t.Number(),
   sourceType: t.String(),
@@ -165,6 +166,8 @@ export const storeTransactionSchema = t.Object({
   guestFlag: t.Boolean(),
   customer: t.Optional(storeTransactionCustomerSchema),
   accumulations: t.Array(storeTransactionAccumulationSchema),
+  pointsTotal: t.Optional(t.Number()),
+  notificationStatus: t.Optional(t.Union([t.Literal('sent'), t.Literal('skipped'), t.Literal('failed')])),
   createdAt: t.String(),
 });
 
@@ -214,12 +217,14 @@ export const storeBrandWithProductsSchema = t.Object({
   cpgId: t.String(),
   name: t.String(),
   logoUrl: t.Optional(t.String()),
-  products: t.Array(t.Object({
-    id: t.String(),
-    name: t.String(),
-    sku: t.Optional(t.String()),
-    price: t.String(),
-  })),
+  products: t.Array(
+    t.Object({
+      id: t.String(),
+      name: t.String(),
+      sku: t.Optional(t.String()),
+      price: t.String(),
+    }),
+  ),
 });
 
 export const inventoryPreviewCandidateSchema = t.Object({
@@ -238,12 +243,7 @@ export const inventoryPreviewRowSchema = t.Object({
   sku: t.Optional(t.String()),
   quantity: t.Number(),
   price: t.Optional(t.Number()),
-  status: t.Union([
-    t.Literal('matched'),
-    t.Literal('new'),
-    t.Literal('ambiguous'),
-    t.Literal('invalid'),
-  ]),
+  status: t.Union([t.Literal('matched'), t.Literal('new'), t.Literal('ambiguous'), t.Literal('invalid')]),
   matchedStoreProductId: t.Optional(t.String()),
   matchedProduct: t.Optional(storeProductSchema),
   candidates: t.Optional(t.Array(inventoryPreviewCandidateSchema)),

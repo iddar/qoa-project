@@ -365,7 +365,8 @@ export const processWhatsappOnboardingMessage = async (
         lastInboundMessageId: input.messageSid,
       });
       return {
-        replyBody: 'No reconocí ese código de tienda. Escanea otra vez el QR o envíame `alta CODIGO_DE_TIENDA`.',
+        replyBody:
+          'No reconocí ese código de tienda. Escanea otra vez el QR o envíame `Quiero registrar mi compra en CODIGO_TIENDA`.',
         sessionState: session.state,
         userId: session.userId ?? undefined,
       };
@@ -448,7 +449,8 @@ export const processWhatsappOnboardingMessage = async (
       state: 'awaiting_store',
     });
     return {
-      replyBody: 'Escanea el QR de tu tiendita o envíame `alta CODIGO_DE_TIENDA` para comenzar a crear tu wallet Qoa.',
+      replyBody:
+        'Escanea el QR de tu tiendita o envíame `Quiero registrar mi compra en CODIGO_TIENDA` para comenzar a crear tu wallet Qoa.',
       sessionState: 'awaiting_store',
     };
   }
@@ -537,7 +539,8 @@ export const processWhatsappOnboardingMessage = async (
       lastInboundMessageId: input.messageSid,
     });
     return {
-      replyBody: 'Para registrarte en una tienda, escanea el QR de la tienda o envíame `alta CODIGO_DE_TIENDA`.',
+      replyBody:
+        'Para registrarte en una tienda, escanea el QR de la tienda o envíame `Quiero registrar mi compra en CODIGO_TIENDA`.',
       sessionState: 'completed',
       userId: user.id,
       storeId: session.pendingStoreId ?? undefined,

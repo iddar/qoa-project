@@ -7,9 +7,12 @@ import { whatsappMessages } from '../db/schema';
 const TWILIO_API_BASE_URL = 'https://api.twilio.com/2010-04-01';
 
 type PersistOutboundPayload = {
+  provider?: string;
+  from: string;
   to: string;
   body?: string;
   mediaUrl?: string;
+  metadata?: Record<string, unknown>;
   sid: string;
   status?: string | null;
 };
@@ -18,6 +21,7 @@ export type TwilioSendMessageInput = {
   to: string;
   body?: string;
   mediaUrl?: string;
+  metadata?: Record<string, unknown>;
 };
 
 export type TwilioSendMessageResult = {
@@ -25,16 +29,35 @@ export type TwilioSendMessageResult = {
   status?: string | null;
 };
 
-const getTwilioConfig = () => {
+const getTwilioCredentials = () => {
   const account = process.env.TWILIO_ACCOUNT ?? null;
   const auth = process.env.TWILIO_AUTH ?? null;
-  const from = process.env.TWILIO_WHATSAPP_FROM ?? null;
 
-  if (!account || !auth || !from) {
+  if (!account || !auth) {
     throw new Error('TWILIO_NOT_CONFIGURED');
   }
 
-  return { account, auth, from };
+  return { account, auth };
+};
+
+const getTwilioConfig = () => {
+  const from = process.env.TWILIO_WHATSAPP_FROM ?? null;
+
+  if (!from) {
+    throw new Error('TWILIO_NOT_CONFIGURED');
+  }
+
+  return { ...getTwilioCredentials(), from };
+};
+
+const getTwilioSmsConfig = () => {
+  const from = process.env.TWILIO_SMS_FROM ?? null;
+
+  if (!from) {
+    throw new Error('TWILIO_SMS_NOT_CONFIGURED');
+  }
+
+  return { ...getTwilioCredentials(), from };
 };
 
 const buildBasicAuthHeader = (account: string, auth: string) =>
@@ -48,7 +71,24 @@ export const normalizeWhatsappPhone = (value: string) => {
   return digits.startsWith('+') ? digits : `+${digits}`;
 };
 
+export const normalizeSmsPhone = (value: string) => {
+  const digits = normalizePhoneDigits(value);
+  return digits.startsWith('+') ? digits : `+${digits}`;
+};
+
 export const formatWhatsappAddress = (phone: string) => `whatsapp:${normalizeWhatsappPhone(phone)}`;
+
+export const buildWhatsappRegistrationUrl = (storeCode: string) => {
+  const rawTarget = process.env.WHATSAPP_REGISTRATION_PHONE ?? process.env.TWILIO_WHATSAPP_FROM ?? null;
+  if (!rawTarget) {
+    throw new Error('WHATSAPP_REGISTRATION_PHONE_MISSING');
+  }
+
+  const target = normalizeWhatsappPhone(rawTarget).replace(/[^\d]/g, '');
+  const url = new URL(`https://wa.me/${target}`);
+  url.searchParams.set('text', `Quiero registrar mi compra en ${storeCode}`);
+  return url.toString();
+};
 
 const buildPublicUrl = (requestUrl: string) => {
   const current = new URL(requestUrl);
@@ -75,16 +115,17 @@ export const validateTwilioWebhookRequest = (payload: {
 
 const persistOutboundMessage = async (payload: PersistOutboundPayload) => {
   await db.insert(whatsappMessages).values({
-    provider: 'twilio',
+    provider: payload.provider ?? 'twilio',
     externalMessageId: payload.sid,
     direction: 'outbound',
-    fromPhone: process.env.TWILIO_WHATSAPP_FROM ?? 'whatsapp:unknown',
+    fromPhone: payload.from,
     toPhone: payload.to,
     textBody: payload.body ?? null,
     payload: JSON.stringify({
       to: payload.to,
       body: payload.body,
       mediaUrl: payload.mediaUrl,
+      metadata: payload.metadata,
       sid: payload.sid,
       status: payload.status ?? undefined,
     }),
@@ -100,9 +141,11 @@ export const sendTwilioWhatsappMessage = async (input: TwilioSendMessageInput): 
   if (process.env.NODE_ENV === 'test') {
     const sid = `SM${crypto.randomUUID().replace(/-/g, '').slice(0, 32)}`;
     await persistOutboundMessage({
+      from,
       to,
       body: input.body,
       mediaUrl: input.mediaUrl,
+      metadata: input.metadata,
       sid,
       status: 'queued',
     });
@@ -140,9 +183,76 @@ export const sendTwilioWhatsappMessage = async (input: TwilioSendMessageInput): 
   }
 
   await persistOutboundMessage({
+    from,
     to,
     body: input.body,
     mediaUrl: input.mediaUrl,
+    metadata: input.metadata,
+    sid: data.sid,
+    status: data.status ?? null,
+  });
+
+  return {
+    sid: data.sid,
+    status: data.status ?? null,
+  };
+};
+
+export const sendTwilioSmsMessage = async (input: TwilioSendMessageInput): Promise<TwilioSendMessageResult> => {
+  const { account, auth, from } = getTwilioSmsConfig();
+  const to = normalizeSmsPhone(input.to);
+
+  if (process.env.NODE_ENV === 'test') {
+    const sid = `SM${crypto.randomUUID().replace(/-/g, '').slice(0, 32)}`;
+    await persistOutboundMessage({
+      provider: 'twilio_sms',
+      from,
+      to,
+      body: input.body,
+      metadata: input.metadata,
+      sid,
+      status: 'queued',
+    });
+    return { sid, status: 'queued' };
+  }
+
+  const params = new URLSearchParams();
+  params.set('To', to);
+  params.set('From', from);
+  if (input.body) {
+    params.set('Body', input.body);
+  }
+  if (input.mediaUrl) {
+    params.set('MediaUrl', input.mediaUrl);
+  }
+
+  const response = await fetch(`${TWILIO_API_BASE_URL}/Accounts/${account}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      authorization: buildBasicAuthHeader(account, auth),
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+
+  const data = (await response.json()) as {
+    sid?: string;
+    status?: string;
+    message?: string;
+    code?: number;
+  };
+
+  if (!response.ok || !data.sid) {
+    throw new Error(data.message ? `TWILIO_SMS_SEND_FAILED:${data.message}` : 'TWILIO_SMS_SEND_FAILED');
+  }
+
+  await persistOutboundMessage({
+    provider: 'twilio_sms',
+    from,
+    to,
+    body: input.body,
+    mediaUrl: input.mediaUrl,
+    metadata: input.metadata,
     sid: data.sid,
     status: data.status ?? null,
   });
