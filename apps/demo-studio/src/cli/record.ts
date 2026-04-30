@@ -272,8 +272,10 @@ const showCameraOverlay = async (
               inset: 0;
               z-index: 2147483600;
               display: grid;
-              place-items: center;
-              background: rgba(2, 6, 23, 0.92);
+              place-items: ${mode === "qr" ? "center" : "center end"};
+              padding: ${mode === "qr" ? "0" : "28px 34px 28px 0"};
+              background: ${mode === "qr" ? "rgba(2, 6, 23, 0.92)" : "rgba(15, 23, 42, 0.28)"};
+              backdrop-filter: ${mode === "qr" ? "none" : "blur(1.5px)"};
               color: #f8fafc;
               font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
               opacity: 0;
@@ -283,9 +285,9 @@ const showCameraOverlay = async (
               opacity: 1;
             }
             .qoa-camera-shell {
-              width: min(88vw, ${mode === "qr" ? "340px" : "760px"});
-              aspect-ratio: ${mode === "qr" ? "9 / 16" : "16 / 10"};
-              border-radius: ${mode === "qr" ? "34px" : "28px"};
+              width: min(${mode === "qr" ? "88vw" : "42vw"}, ${mode === "qr" ? "340px" : "500px"});
+              aspect-ratio: ${mode === "qr" ? "9 / 16" : "4 / 5"};
+              border-radius: ${mode === "qr" ? "34px" : "26px"};
               overflow: hidden;
               position: relative;
               background:
@@ -311,7 +313,7 @@ const showCameraOverlay = async (
             }
             .qoa-camera-stage {
               position: absolute;
-              inset: ${mode === "qr" ? "86px 34px 118px" : "78px 56px 92px"};
+              inset: ${mode === "qr" ? "86px 34px 118px" : "72px 30px 178px"};
               display: grid;
               place-items: center;
               border-radius: ${mode === "qr" ? "24px" : "18px"};
@@ -329,8 +331,8 @@ const showCameraOverlay = async (
               opacity: 0.8;
             }
             .qoa-camera-target {
-              width: ${mode === "qr" ? "190px" : "72%"};
-              max-height: 78%;
+              width: ${mode === "qr" ? "190px" : "88%"};
+              max-height: ${mode === "qr" ? "78%" : "88%"};
               object-fit: contain;
               border-radius: ${mode === "qr" ? "18px" : "12px"};
               box-shadow: 0 22px 70px rgba(0,0,0,0.45);
@@ -374,18 +376,18 @@ const showCameraOverlay = async (
               position: absolute;
               left: 22px;
               right: 22px;
-              bottom: ${mode === "qr" ? "74px" : "34px"};
+              bottom: ${mode === "qr" ? "74px" : "88px"};
               z-index: 4;
               display: grid;
               gap: 6px;
               text-align: center;
             }
             .qoa-camera-title {
-              font-size: ${mode === "qr" ? "20px" : "24px"};
+              font-size: ${mode === "qr" ? "20px" : "21px"};
               font-weight: 820;
             }
             .qoa-camera-subtitle {
-              font-size: ${mode === "qr" ? "13px" : "16px"};
+              font-size: ${mode === "qr" ? "13px" : "14px"};
               color: rgba(248, 250, 252, 0.78);
               line-height: 1.25;
             }
@@ -403,9 +405,9 @@ const showCameraOverlay = async (
             .qoa-shutter {
               position: absolute;
               left: 50%;
-              bottom: 22px;
-              width: 52px;
-              height: 52px;
+              bottom: ${mode === "qr" ? "22px" : "18px"};
+              width: ${mode === "qr" ? "52px" : "58px"};
+              height: ${mode === "qr" ? "52px" : "58px"};
               border-radius: 999px;
               transform: translateX(-50%);
               background: #f8fafc;
@@ -435,9 +437,9 @@ const showCameraOverlay = async (
               to { opacity: 0; }
             }
           </style>
-          <div class="qoa-camera-shell">
-            <div class="qoa-camera-top">
-              <span>${mode === "qr" ? "Cámara" : "Cámara de inventario"}</span>
+            <div class="qoa-camera-shell">
+              <div class="qoa-camera-top">
+              <span>${mode === "qr" ? "Cámara" : "Captura de inventario"}</span>
               <span>QOA</span>
             </div>
             <div class="qoa-camera-stage">
@@ -546,7 +548,8 @@ const recordPosWallet = async (browser: Browser) => {
   const walletQr = await walletQrContext.newPage();
   await waitForApp(walletQr, env.walletUrl);
   await expect(walletQr.getByRole("button", { name: /Ver tarjeta/i })).toBeVisible({ timeout: 20_000 });
-  await walletQr.waitForTimeout(600);
+  await walletQr.waitForTimeout(1500);
+  const walletHomeShot = await screenshot(walletQr, scenarioId, "00-wallet-home.png");
   await walletQr.getByRole("button", { name: /Ver tarjeta/i }).click();
   await expect(walletQr.getByRole("dialog", { name: "Tarjeta QR" })).toBeVisible({ timeout: 10_000 });
   await walletQr.waitForTimeout(1600);
@@ -568,27 +571,32 @@ const recordPosWallet = async (browser: Browser) => {
   await page.waitForTimeout(900);
   await openAgentDrawer(page);
   await page.waitForTimeout(700);
+  const posAgentStartShot = await screenshot(page, scenarioId, "00-pos-agent-start.png");
 
   await page.locator('input[type="file"][accept="audio/*"]').last().setInputFiles(path.join(publicDir, state.assets.posVoice));
   await page.waitForTimeout(900);
   await page.getByRole("button", { name: "Enviar mensaje" }).filter({ visible: true }).last().click();
   await expectTextVisible(page, /pedido listo para cobrar/i);
   await page.waitForTimeout(900);
+  const posOrderShot = await screenshot(page, scenarioId, "01-pos-order.png");
 
   await page.getByRole("button", { name: /Escanear QR en vivo|Adjuntar foto del QR/i }).filter({ visible: true }).last().click();
-  await expectTextVisible(page, /Escaneando QR|Cliente ligado/i, 12_000);
+  await expectTextVisible(page, /Escaneando QR/i, 12_000);
+  await page.waitForTimeout(450);
+  const posScannerShot = await screenshot(page, scenarioId, "02-pos-scanner-start.png");
   await expectTextVisible(page, /Cliente ligado/i);
   await page.waitForTimeout(900);
-  const shot1 = await screenshot(page, scenarioId, "01-pos-agent.png");
+  const posLinkedShot = await screenshot(page, scenarioId, "02-pos-linked.png");
   await closeAgentDrawer(page);
   await page.waitForTimeout(700);
 
   await page.getByRole("main").getByRole("button", { name: "Revisar y confirmar venta" }).click();
   await page.waitForTimeout(500);
+  const posConfirmShot = await screenshot(page, scenarioId, "03-pos-confirm.png");
   await page.getByRole("main").getByRole("button", { name: "Confirmar venta", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Venta registrada" })).toBeVisible({ timeout: 20_000 });
   await page.waitForTimeout(900);
-  const shot2 = await screenshot(page, scenarioId, "02-pos-success.png");
+  const posSuccessShot = await screenshot(page, scenarioId, "04-pos-success.png");
 
   await context.close();
   const posVideo = await saveVideo(page, scenarioId, "01-pos-flow.webm");
@@ -601,15 +609,32 @@ const recordPosWallet = async (browser: Browser) => {
   });
   await installAuthInitScript(walletContext, "wallet");
   const wallet = await walletContext.newPage();
-  await waitForApp(wallet, `${env.walletUrl}/transactions`);
-  await expect(wallet.getByRole("heading", { name: "Historial" })).toBeVisible({ timeout: 20_000 });
+  await waitForApp(wallet, env.walletUrl);
+  await expect(wallet.getByRole("button", { name: /Ver tarjeta/i })).toBeVisible({ timeout: 20_000 });
   await wallet.waitForTimeout(1100);
-  const shot3 = await screenshot(wallet, scenarioId, "03-wallet-history.png");
+  const walletUpdatedShot = await screenshot(wallet, scenarioId, "03-wallet-updated.png");
+  await wallet.getByRole("link", { name: "Historial", exact: true }).click();
+  await expect(wallet.getByRole("heading", { name: "Historial" })).toBeVisible({ timeout: 20_000 });
+  await wallet.getByRole("button", { name: "Por fecha" }).click();
+  await expect(wallet.getByText("$75").first()).toBeVisible({ timeout: 20_000 });
+  await wallet.waitForTimeout(1100);
+  const walletHistoryShot = await screenshot(wallet, scenarioId, "03-wallet-history.png");
   await walletContext.close();
   const walletVideo = await saveVideo(wallet, scenarioId, "03-wallet-flow.webm");
 
   return {
-    screenshots: [walletQrShot, shot1, shot2, shot3],
+    screenshots: [
+      walletHomeShot,
+      walletQrShot,
+      posAgentStartShot,
+      posOrderShot,
+      posScannerShot,
+      posLinkedShot,
+      posConfirmShot,
+      posSuccessShot,
+      walletUpdatedShot,
+      walletHistoryShot,
+    ],
     videos: [walletQrVideo, posVideo, walletVideo].filter(Boolean) as string[],
   };
 };
@@ -627,17 +652,18 @@ const recordInventory = async (browser: Browser) => {
   await page.waitForTimeout(700);
   const inventoryAgent = page.getByRole("complementary").filter({ hasText: "Inventory Agent" });
 
+  const photoChooser = page.waitForEvent("filechooser");
+  await inventoryAgent.getByRole("button", { name: "Subir foto de inventario desde fotos" }).click();
+  const photoFileChooser = await photoChooser;
   await showCameraOverlay(page, {
     mode: "document",
     title: "Capturando ticket de proveedor",
-    subtitle: "La IA prepara una lectura estructurada antes de cargar el archivo fixture.",
+    subtitle: "La captura queda dentro del flujo del asistente antes de generar el preview.",
     imageSrc: await imageDataUrl(state.assets.inventoryPhoto),
     successText: "Documento detectado",
-    durationMs: 3600,
+    durationMs: 3200,
   });
-  const photoChooser = page.waitForEvent("filechooser");
-  await inventoryAgent.getByRole("button", { name: "Subir foto de inventario desde fotos" }).click();
-  await (await photoChooser).setFiles(path.join(publicDir, state.assets.inventoryPhoto));
+  await photoFileChooser.setFiles(path.join(publicDir, state.assets.inventoryPhoto));
   await expectTextVisible(page, /preview de inventario desde la foto/i);
   await page.waitForTimeout(900);
   const shot1 = await screenshot(page, scenarioId, "01-inventory-photo.png");
