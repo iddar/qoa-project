@@ -121,6 +121,21 @@ const formatBytes = (bytes: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const getDemoAgentHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const queryMode = new URLSearchParams(window.location.search).get("demoAgentMode");
+  if (queryMode) {
+    window.localStorage.setItem("qoa_demo_agent_mode", queryMode);
+  }
+
+  return (queryMode ?? window.localStorage.getItem("qoa_demo_agent_mode")) === "fixture"
+    ? { "x-qoa-demo-agent-mode": "fixture" }
+    : {};
+};
+
 const revokeAttachmentPreviewUrl = (attachment: AgentAttachment) => {
   if (attachment.previewUrl?.startsWith("blob:")) {
     URL.revokeObjectURL(attachment.previewUrl);
@@ -419,6 +434,7 @@ export function StoreAgentDrawer() {
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${token}`,
+          ...getDemoAgentHeaders(),
         },
         body: JSON.stringify({
           messages: requestMessages,
@@ -956,6 +972,7 @@ export function StoreAgentDrawer() {
           </div>
           <button
             type="button"
+            aria-label="Cerrar panel del asistente"
             onClick={() => setAgentOpen(false)}
             className="rounded-full border border-zinc-200 p-2 text-zinc-500 hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:hover:text-zinc-50"
           >

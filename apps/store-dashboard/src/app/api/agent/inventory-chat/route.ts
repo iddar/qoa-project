@@ -16,6 +16,22 @@ import { extractDraftCorrectionsWithContext } from "@/lib/inventory-draft-correc
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 const execFileAsync = promisify(execFile);
 
+const isFixtureDemoRequest = (request: Request) =>
+  process.env.QOA_DEMO_AGENT_MODE === "fixture" ||
+  (process.env.NODE_ENV !== "production" && request.headers.get("x-qoa-demo-agent-mode") === "fixture");
+
+const normalizeDemoText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+const findDemoInventoryProduct = (products: StoreProduct[], skuNeedle: string, nameNeedle: string) => {
+  const normalizedNameNeedle = normalizeDemoText(nameNeedle);
+  return products.find((product) => product.sku?.includes(skuNeedle)) ??
+    products.find((product) => normalizeDemoText(product.name).includes(normalizedNameNeedle));
+};
+
 const matchedProductSchema = z.object({
   id: z.string(),
   storeId: z.string(),
@@ -733,6 +749,144 @@ export async function POST(request: Request) {
     return data.data;
   };
 
+  const buildFixtureResponse = async (
+    content: string,
+    userMessage: AgentMessage | null = normalizedUserMessage as AgentMessage | null,
+  ) => {
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        actions: buildActions(workingDraft),
+      } as AgentMessage,
+      userMessage,
+      draft: workingDraft,
+    });
+  };
+
+  const applyDemoInventoryPhotoPreview = async () => {
+    const products = await getStoreProducts();
+    const demoRows = [
+      { product: findDemoInventoryProduct(products, "QOA-COLA-600", "refresco cola"), quantity: 24 },
+      { product: findDemoInventoryProduct(products, "QOA-PAPAS-45", "papas clasicas"), quantity: 18 },
+      { product: findDemoInventoryProduct(products, "QOA-GALLETA-90", "galletas vainilla"), quantity: 12 },
+    ].filter((entry): entry is { product: StoreProduct; quantity: number } => Boolean(entry.product));
+
+    if (demoRows.length === 0) {
+      throw new Error("DEMO_PRODUCTS_NOT_FOUND");
+    }
+
+    const preview = applyPreviewRows(
+      demoRows.map(({ product, quantity }, index) => ({
+        lineNumber: index + 1,
+        rawText: `${quantity} ${product.name}`,
+        name: product.name,
+        sku: product.sku,
+        quantity,
+        price: product.price,
+        status: "matched" as const,
+        matchedStoreProductId: product.id,
+        matchedProduct: product,
+      })),
+      { overwrite: true },
+    );
+
+    return preview;
+  };
+
+  const applyDemoInventoryVoiceCorrection = async () => {
+    const updated: Array<{ name: string; quantity: number }> = [];
+    workingDraft.rows = workingDraft.rows.map((row) => {
+      if (normalizeDemoText(row.name).includes("galletas")) {
+        const nextRow = applyInventoryDraftRowPatch(row, { quantity: 16 });
+        updated.push({ name: nextRow.name, quantity: nextRow.quantity });
+        return nextRow;
+      }
+
+      if (normalizeDemoText(row.name).includes("papas")) {
+        const nextRow = applyInventoryDraftRowPatch(row, { quantity: 20 });
+        updated.push({ name: nextRow.name, quantity: nextRow.quantity });
+        return nextRow;
+      }
+
+      return row;
+    });
+
+    return updated;
+  };
+
+  const tryHandleFixtureDemo = async () => {
+    if (!isFixtureDemoRequest(request) || !normalizedUserMessage || normalizedUserMessage.role !== "user") {
+      return null;
+    }
+
+    const latestContent = normalizedUserMessage.content.trim();
+    const normalizedContent = normalizeDemoText(latestContent);
+    const hasLatestImage = latestAttachments.some((attachment) => getAttachmentKind(attachment) === "image");
+    const hasLatestAudio = latestAttachments.some((attachment) => getAttachmentKind(attachment) === "audio");
+    const wantsPhotoPreview =
+      hasLatestImage ||
+      normalizedContent.includes("demo:inventory:photo") ||
+      normalizedContent.includes("foto de inventario");
+    const wantsVoiceCorrection =
+      hasLatestAudio ||
+      normalizedContent.includes("demo:inventory:voice") ||
+      normalizedContent.includes("nota de voz");
+    const wantsConfirmation = /\b(confirmar|confirma|aplicar|aplica|guardar entrada|guarda entrada)\b/i.test(normalizedContent);
+
+    if (wantsConfirmation) {
+      try {
+        const receipt = await confirmInventoryIntake();
+        return await buildFixtureResponse(
+          `Entrada aplicada: **${receipt.summary.totalQuantity} piezas** cargadas al inventario. Se actualizaron **${receipt.summary.updatedProducts} productos** y se crearon **${receipt.summary.createdProducts}** nuevos.`,
+        );
+      } catch {
+        return await buildFixtureResponse("No pude aplicar la entrada de demo. Revisa que no queden filas pendientes.");
+      }
+    }
+
+    if (wantsVoiceCorrection && workingDraft.rows.length > 0) {
+      const updated = await applyDemoInventoryVoiceCorrection();
+      const userMessageWithTranscript: AgentMessage = {
+        ...(normalizedUserMessage as AgentMessage),
+        attachments: normalizedUserMessage.attachments?.map((attachment) =>
+          getAttachmentKind(attachment) === "audio"
+            ? {
+                ...attachment,
+                transcript: "Corrige las galletas a 16 piezas y las papas a 20.",
+                status: "transcribed" as const,
+              }
+            : attachment,
+        ),
+      };
+
+      const correctionText = updated.length > 0
+        ? updated.map((entry) => `**${entry.name}** → **${entry.quantity} unidades**`).join("\n")
+        : "No encontré filas para corregir en el borrador actual.";
+
+      return await buildFixtureResponse(
+        `Escuché la nota de voz y corregí:\n${correctionText}\n\n${buildInventoryDraftSummaryText(workingDraft)}`,
+        userMessageWithTranscript,
+      );
+    }
+
+    if (wantsPhotoPreview) {
+      try {
+        const preview = await applyDemoInventoryPhotoPreview();
+        return await buildFixtureResponse(
+          `Preparé el preview de inventario desde la foto con **${preview.totalRows} filas** y **${preview.summary.quantity} piezas**. Revísalo antes de confirmar la entrada.`,
+        );
+      } catch {
+        return await buildFixtureResponse("No encontré productos seed para preparar la foto de inventario de demo.");
+      }
+    }
+
+    return null;
+  };
+
   const transcribeLatestAudio = async () => {
     const audioAttachments = latestAttachments.filter((attachment) => getAttachmentKind(attachment) === "audio");
     const latestAudio = audioAttachments.at(-1);
@@ -760,6 +914,11 @@ export async function POST(request: Request) {
   };
 
   const latestContent = latestUserMessage?.content.trim() ?? "";
+  const fixtureDemoResponse = await tryHandleFixtureDemo();
+  if (fixtureDemoResponse) {
+    return fixtureDemoResponse;
+  }
+
   const selectionActionMatch = latestContent.match(/\browId=([^\s]+)\s+storeProductId=([^\s]+)/i);
   if (selectionActionMatch) {
     const result = await selectExistingProductForDraftRow(selectionActionMatch[1]!, selectionActionMatch[2]!);

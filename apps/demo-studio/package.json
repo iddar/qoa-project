@@ -1,0 +1,35 @@
+{
+  "name": "demo-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.8",
+  "scripts": {
+    "demo:prepare": "bun run src/cli/prepare.ts",
+    "record": "bun run src/cli/record.ts",
+    "render": "bun run src/cli/render.ts",
+    "deck": "bun run src/cli/deck.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.58.2",
+    "@remotion/cli": "^4.0.454",
+    "@remotion/renderer": "^4.0.454",
+    "pptxgenjs": "^4.0.1",
+    "qrcode": "^1.5.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "^4.0.454",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  },
+  "trustedDependencies": [
+    "sharp"
+  ]
+}
