@@ -99,3 +99,28 @@ Base revisada:
 - No se puede arrancar produccion sin `JWT_SECRET`.
 - Indices nuevos se agregan via migracion Drizzle y quedan reflejados en snapshots.
 - El PR de implementacion incluye medicion o `EXPLAIN` para indices si staging tiene volumen util.
+
+## Ejecucion 2026-04-29
+
+Implementado en `codex/backend-db-audit-plan`:
+
+- Transacciones de venta ahora envuelven la creacion publica/webhook/POS en `db.transaction` y pasan el `tx` a check-in matching, CPG-store touch, campaign participation, wallet universal y tier evaluation.
+- Saldos de tarjeta y campana se aseguran y bloquean con `for update` antes de recalcular `current/lifetime`, evitando lost updates en compras concurrentes.
+- Redenciones se ejecutan dentro de `db.transaction`; stock y campaign balance usan `update ... where stock > 0/current >= cost returning`, y la migracion agrega `redemptions(card_id, reward_id)` unico.
+- Wallet universal usa lock transaccional e indice parcial unico `cards(user_id, campaign_id) where store_id is null`.
+- Auth exige `JWT_SECRET` en produccion, rota refresh tokens con `update ... returning` atomico y aplica rate limit in-memory por `api_keys.rate_limit`.
+- Notificaciones pasan de idempotencia por `payload LIKE` a tabla `notification_deliveries` con `notification_key` unico; los mensajes Twilio siguen en `whatsapp_messages` como auditoria.
+- Migracion Drizzle `0027_cooing_roughhouse.sql` agrega `notification_deliveries`, indices compuestos operativos y snapshots.
+
+Notas y pendientes:
+
+- La version actual de `drizzle-orm` instalada no expone `inArray`; por compatibilidad se mantuvieron los `or(...ids.map())` en queries de listas cortas. Si se actualiza Drizzle, conviene retomar ese punto.
+- No se ejecuto `EXPLAIN (ANALYZE, BUFFERS)` porque no hay snapshot de staging con volumen util en este workspace. Queda como verificacion previa/posterior al despliegue.
+- Fase 4 queda parcialmente pendiente: no se extrajeron modulos grandes ni se hizo cleanup frontend porque el alcance ejecutado fue backend/DB sin cambiar UX.
+
+Checks ejecutados:
+
+- `bun run fmt:check`
+- `bun run lint`
+- `bun run typecheck`
+- `bun --env-file=.env.test test spec/auth.spec.ts spec/stores.spec.ts spec/transactions.spec.ts spec/rewards.spec.ts spec/store-checkin.spec.ts spec/whatsapp.spec.ts spec/jobs.spec.ts spec/users-me.spec.ts`

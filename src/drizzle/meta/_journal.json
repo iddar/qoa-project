@@ -190,6 +190,13 @@
       "when": 1777413124667,
       "tag": "0026_bent_komodo",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1777509208679,
+      "tag": "0027_cooing_roughhouse",
+      "breakpoints": true
     }
   ]
 }

@@ -35,5 +35,18 @@ export const storeCheckins = pgTable(
     index('store_checkins_expires_idx').on(table.expiresAt),
     index('store_checkins_checked_in_idx').on(table.checkedInAt),
     index('store_checkins_matched_tx_idx').on(table.matchedTransactionId),
+    index('store_checkins_store_status_expires_checked_idx').on(
+      table.storeId,
+      table.status,
+      table.expiresAt,
+      table.checkedInAt,
+    ),
+    index('store_checkins_user_store_status_expires_checked_idx').on(
+      table.userId,
+      table.storeId,
+      table.status,
+      table.expiresAt,
+      table.checkedInAt,
+    ),
   ],
 );

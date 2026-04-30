@@ -17,6 +17,8 @@ export const reminderJobStatus = pgEnum('reminder_job_status', [
 export const alertSeverity = pgEnum('alert_severity', ['low', 'medium', 'high', 'critical']);
 export const alertNotificationChannel = pgEnum('alert_notification_channel', ['email']);
 export const alertNotificationStatus = pgEnum('alert_notification_status', ['mocked', 'failed']);
+export const notificationDeliveryChannel = pgEnum('notification_delivery_channel', ['whatsapp', 'sms']);
+export const notificationDeliveryStatus = pgEnum('notification_delivery_status', ['pending', 'sent', 'failed']);
 
 type WhatsappMessagesTable = {
   provider: unknown;
@@ -39,6 +41,14 @@ type AlertNotificationsTable = {
   channel: unknown;
   severity: unknown;
   status: unknown;
+  createdAt: unknown;
+};
+
+type NotificationDeliveriesTable = {
+  notificationKey: unknown;
+  channel: unknown;
+  status: unknown;
+  recipient: unknown;
   createdAt: unknown;
 };
 
@@ -66,6 +76,7 @@ export const whatsappMessages = pgTable(
     uniqueIndex('whatsapp_messages_provider_external_key').on(table.provider, table.externalMessageId),
     index('whatsapp_messages_status_idx').on(table.status),
     index('whatsapp_messages_received_at_idx').on(table.receivedAt),
+    index('whatsapp_messages_status_received_idx').on(table.status, table.receivedAt),
   ],
 );
 
@@ -99,6 +110,8 @@ export const reminderJobs = pgTable(
     index('reminder_jobs_status_idx').on(table.status),
     index('reminder_jobs_scheduled_for_idx').on(table.scheduledFor),
     index('reminder_jobs_created_at_idx').on(table.createdAt),
+    index('reminder_jobs_status_scheduled_idx').on(table.status, table.scheduledFor),
+    index('reminder_jobs_status_created_idx').on(table.status, table.createdAt),
   ],
 );
 
@@ -123,5 +136,30 @@ export const alertNotifications = pgTable(
     index('alert_notifications_severity_idx').on(table.severity),
     index('alert_notifications_status_idx').on(table.status),
     index('alert_notifications_created_at_idx').on(table.createdAt),
+  ],
+);
+
+export const notificationDeliveries = pgTable(
+  'notification_deliveries',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`uuidv7()`),
+    notificationKey: text('notification_key').notNull(),
+    channel: notificationDeliveryChannel('channel').notNull(),
+    recipient: text('recipient').notNull(),
+    providerMessageId: text('provider_message_id'),
+    status: notificationDeliveryStatus('status').notNull().default('pending'),
+    metadata: text('metadata'),
+    error: text('error'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table: NotificationDeliveriesTable) => [
+    uniqueIndex('notification_deliveries_key').on(table.notificationKey),
+    index('notification_deliveries_channel_idx').on(table.channel),
+    index('notification_deliveries_status_idx').on(table.status),
+    index('notification_deliveries_recipient_idx').on(table.recipient),
+    index('notification_deliveries_created_at_idx').on(table.createdAt),
   ],
 );

@@ -2,12 +2,20 @@ import { jwt } from '@elysiajs/jwt';
 import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import { Elysia } from 'elysia';
 import { createHash, randomBytes } from 'node:crypto';
-import { db } from '../../db/client';
+import { db, type Database } from '../../db/client';
 import { apiKeys, refreshTokens, users } from '../../db/schema';
 import type { AuthPluginContext, JwtSigner } from '../../types/handlers';
 
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.AUTH_ACCESS_TTL_SECONDS ?? 900);
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.AUTH_REFRESH_TTL_DAYS ?? 30);
+const JWT_SECRET =
+  process.env.JWT_SECRET ??
+  (process.env.NODE_ENV === 'production'
+    ? (() => {
+        throw new Error('JWT_SECRET is required in production');
+      })()
+    : 'dev-secret');
+const API_KEY_RATE_LIMIT_WINDOW_MS = Number(process.env.API_KEY_RATE_LIMIT_WINDOW_MS ?? 60_000);
 
 export type AuthContext =
   | {
@@ -24,6 +32,7 @@ export type AuthContext =
       scopes: string[];
       tenantId: string;
       tenantType: 'cpg' | 'store';
+      rateLimit?: number;
     };
 
 export type AuthRequirement = {
@@ -45,6 +54,7 @@ type ApiKeyRow = {
   scopes: string[] | null;
   tenantId: string;
   tenantType: 'cpg' | 'store';
+  rateLimit: number;
 };
 
 type AuthUserRow = {
@@ -74,6 +84,36 @@ type LoginUserRow = {
 
 const toHash = (value: string) => createHash('sha256').update(value).digest('hex');
 
+const apiKeyRateLimitState = new Map<string, { count: number; windowStartMs: number }>();
+
+const consumeApiKeyRateLimit = (apiKeyId: string, rateLimit?: number) => {
+  const limit = rateLimit ?? 60;
+  if (limit <= 0) {
+    return { limited: false, retryAfterSeconds: 0 };
+  }
+
+  const nowMs = Date.now();
+  const existing = apiKeyRateLimitState.get(apiKeyId);
+  if (!existing || nowMs - existing.windowStartMs >= API_KEY_RATE_LIMIT_WINDOW_MS) {
+    apiKeyRateLimitState.set(apiKeyId, { count: 1, windowStartMs: nowMs });
+    return { limited: false, retryAfterSeconds: 0 };
+  }
+
+  if (existing.count >= limit) {
+    return {
+      limited: true,
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((API_KEY_RATE_LIMIT_WINDOW_MS - (nowMs - existing.windowStartMs)) / 1000),
+      ),
+    };
+  }
+
+  existing.count += 1;
+  apiKeyRateLimitState.set(apiKeyId, existing);
+  return { limited: false, retryAfterSeconds: 0 };
+};
+
 const buildError = (code: string, message: string) => ({
   error: {
     code,
@@ -85,7 +125,7 @@ export const authPlugin = new Elysia({ name: 'auth' })
   .use(
     jwt({
       name: 'jwt',
-      secret: process.env.JWT_SECRET ?? 'dev-secret',
+      secret: JWT_SECRET,
     }),
   )
   .derive(() => ({
@@ -152,6 +192,7 @@ const resolveAuth = async (context: AuthContextState, requirement: AuthRequireme
       scopes: apiKey.scopes ?? [],
       tenantId: apiKey.tenantId,
       tenantType: apiKey.tenantType,
+      rateLimit: apiKey.rateLimit,
     } satisfies AuthContext;
   }
 
@@ -191,6 +232,16 @@ const applyAuth = async (context: AuthContextState, requirement?: AuthRequiremen
 
   if (!authContext) {
     return context.status(401, buildError('UNAUTHORIZED', 'Autenticación requerida'));
+  }
+
+  if (authContext.type === 'api_key') {
+    const rateLimit = consumeApiKeyRateLimit(authContext.apiKeyId, authContext.rateLimit);
+    if (rateLimit.limited) {
+      return context.status(
+        429,
+        buildError('RATE_LIMITED', `Demasiadas solicitudes. Intenta de nuevo en ${rateLimit.retryAfterSeconds}s`),
+      );
+    }
   }
 
   if (authContext.type === 'jwt') {
@@ -309,11 +360,11 @@ export const issueAccessToken = async (
   };
 };
 
-export const persistRefreshToken = async (userId: string, refreshToken: string) => {
+export const persistRefreshToken = async (userId: string, refreshToken: string, database: Database = db) => {
   const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
   const tokenHash = toHash(refreshToken);
 
-  await db.insert(refreshTokens).values({
+  await database.insert(refreshTokens).values({
     userId,
     tokenHash,
     expiresAt,
@@ -324,30 +375,28 @@ export const persistRefreshToken = async (userId: string, refreshToken: string) 
 
 export const rotateRefreshToken = async (refreshToken: string) => {
   const tokenHash = toHash(refreshToken);
-  const [session] = (await db
-    .select()
-    .from(refreshTokens)
-    .where(
-      and(
-        eq(refreshTokens.tokenHash, tokenHash),
-        isNull(refreshTokens.revokedAt),
-        gt(refreshTokens.expiresAt, new Date()),
-      ),
-    )) as RefreshSessionRow[];
+  return db.transaction(async (tx) => {
+    const now = new Date();
+    const [session] = (await tx
+      .update(refreshTokens)
+      .set({ revokedAt: now })
+      .where(
+        and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt), gt(refreshTokens.expiresAt, now)),
+      )
+      .returning({ id: refreshTokens.id, userId: refreshTokens.userId })) as RefreshSessionRow[];
 
-  if (!session) {
-    return null;
-  }
+    if (!session) {
+      return null;
+    }
 
-  await db.update(refreshTokens).set({ revokedAt: new Date() }).where(eq(refreshTokens.id, session.id));
+    const newToken = randomBytes(48).toString('base64url');
+    await persistRefreshToken(session.userId, newToken, tx);
 
-  const newToken = randomBytes(48).toString('base64url');
-  await persistRefreshToken(session.userId, newToken);
-
-  return {
-    userId: session.userId,
-    refreshToken: newToken,
-  };
+    return {
+      userId: session.userId,
+      refreshToken: newToken,
+    };
+  });
 };
 
 export const findUserByEmail = async (email: string) => {

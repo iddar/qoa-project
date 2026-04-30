@@ -1,10 +1,10 @@
-import { and, desc, eq, gt, lt, or } from 'drizzle-orm';
+import { and, desc, eq, gt, lt, or, sql } from 'drizzle-orm';
 import { Elysia } from 'elysia';
 import { authGuard, authPlugin, type AuthContext } from '../../app/plugins/auth';
 import { allUserRoles } from '../../app/plugins/roles';
 import { authorizationHeader } from '../../app/plugins/schemas';
 import { parseCursor, parseLimit } from '../../app/utils/pagination';
-import { db } from '../../db/client';
+import { db, type Database } from '../../db/client';
 import { balances, campaignBalances, campaigns, campaignTiers, cards, redemptions, rewards } from '../../db/schema';
 import { evaluateCardTier } from '../../services/tier-engine';
 import type { StatusHandler } from '../../types/handlers';
@@ -39,6 +39,12 @@ type CardBalanceRow = {
   campaignId: string;
   current: number;
   lifetime: number;
+};
+
+type RedeemFailureCode = 'ALREADY_REDEEMED' | 'INSUFFICIENT_BALANCE' | 'REWARD_OUT_OF_STOCK';
+
+type RedeemFailure = Error & {
+  redeemCode?: RedeemFailureCode;
 };
 
 type CampaignScopeRow = {
@@ -98,6 +104,19 @@ const serializeReward = (reward: RewardRow) => ({
   createdAt: reward.createdAt.toISOString(),
   updatedAt: reward.updatedAt ? reward.updatedAt.toISOString() : undefined,
 });
+
+const executeRows = async <T>(database: Database, query: unknown) => (await database.execute(query)) as T[];
+
+const throwRedeemFailure = (code: RedeemFailureCode): never => {
+  const error = new Error(code) as RedeemFailure;
+  error.redeemCode = code;
+  throw error;
+};
+
+const isDuplicateKeyError = (error: unknown) => {
+  const candidate = error as { code?: string; message?: string };
+  return candidate.code === '23505' || candidate.message?.includes('duplicate key value');
+};
 
 const ensureReward = async (rewardId: string) => {
   const [reward] = (await db.select().from(rewards).where(eq(rewards.id, rewardId))) as RewardRow[];
@@ -506,118 +525,155 @@ export const rewardsModule = new Elysia({
         }
       }
 
-      const [existingRedemption] = (await db
-        .select()
-        .from(redemptions)
-        .where(and(eq(redemptions.cardId, card.cardId), eq(redemptions.rewardId, reward.id)))) as Array<{
-        id: string;
-      }>;
+      let redemptionOutcome: {
+        redemptionId: string;
+        createdAt: Date;
+        currentBalance: number;
+        lifetimeBalance: number;
+        rewardStock: number | null;
+      } | null = null;
 
-      if (existingRedemption) {
-        return status(409, {
-          error: {
-            code: 'ALREADY_REDEEMED',
-            message: 'Esta recompensa ya ha sido canjeada',
-          },
+      try {
+        redemptionOutcome = await db.transaction(async (tx) => {
+          const [existingRedemption] = (await tx
+            .select()
+            .from(redemptions)
+            .where(and(eq(redemptions.cardId, card.cardId), eq(redemptions.rewardId, reward.id)))) as Array<{
+            id: string;
+          }>;
+
+          if (existingRedemption) {
+            throwRedeemFailure('ALREADY_REDEEMED');
+          }
+
+          let rewardStock: number | null = reward.stock;
+          if (reward.stock !== null) {
+            const [stockRow] = await executeRows<{ stock: number }>(
+              tx,
+              sql`
+                update rewards
+                set stock = stock - 1, updated_at = ${new Date()}
+                where id = ${reward.id} and stock > 0
+                returning stock
+              `,
+            );
+
+            if (!stockRow) {
+              throwRedeemFailure('REWARD_OUT_OF_STOCK');
+            }
+
+            rewardStock = stockRow!.stock;
+          }
+
+          const [campaignBalance] = await executeRows<{ current: number; lifetime: number }>(
+            tx,
+            sql`
+              update campaign_balances
+              set current = current - ${reward.cost}, updated_at = ${new Date()}
+              where card_id = ${card.cardId}
+                and campaign_id = ${reward.campaignId}
+                and current >= ${reward.cost}
+              returning current, lifetime
+            `,
+          );
+
+          if (!campaignBalance) {
+            throwRedeemFailure('INSUFFICIENT_BALANCE');
+          }
+          const updatedCampaignBalance = campaignBalance!;
+
+          await tx.execute(sql`
+            update balances
+            set current = greatest(0, current - ${reward.cost}), updated_at = ${new Date()}
+            where card_id = ${card.cardId}
+          `);
+
+          const [created] = (await tx
+            .insert(redemptions)
+            .values({
+              cardId: card.cardId,
+              rewardId: reward.id,
+              cost: reward.cost,
+              status: 'completed',
+              completedAt: new Date(),
+            })
+            .returning({ id: redemptions.id, createdAt: redemptions.createdAt })) as Array<{
+            id: string;
+            createdAt: Date;
+          }>;
+
+          if (!created) {
+            throw new Error('REDEMPTION_CREATE_FAILED');
+          }
+
+          await evaluateCardTier({
+            cardId: card.cardId,
+            campaignId: reward.campaignId,
+            database: tx,
+          });
+
+          return {
+            redemptionId: created.id,
+            createdAt: created.createdAt,
+            currentBalance: updatedCampaignBalance.current,
+            lifetimeBalance: updatedCampaignBalance.lifetime,
+            rewardStock,
+          };
         });
+      } catch (error) {
+        const redeemError = error as RedeemFailure;
+        if (redeemError.redeemCode === 'ALREADY_REDEEMED' || isDuplicateKeyError(error)) {
+          return status(409, {
+            error: {
+              code: 'ALREADY_REDEEMED',
+              message: 'Esta recompensa ya ha sido canjeada',
+            },
+          });
+        }
+
+        if (redeemError.redeemCode === 'REWARD_OUT_OF_STOCK') {
+          return status(422, {
+            error: {
+              code: 'REWARD_OUT_OF_STOCK',
+              message: 'No hay stock disponible',
+            },
+          });
+        }
+
+        if (redeemError.redeemCode === 'INSUFFICIENT_BALANCE') {
+          return status(422, {
+            error: {
+              code: 'INSUFFICIENT_BALANCE',
+              message: 'Saldo insuficiente en la campaña para canjear recompensa',
+            },
+          });
+        }
+
+        throw error;
       }
 
-      if (reward.stock !== null && reward.stock <= 0) {
+      if (!redemptionOutcome) {
         return status(422, {
           error: {
-            code: 'REWARD_OUT_OF_STOCK',
-            message: 'No hay stock disponible',
+            code: 'REDEMPTION_CREATE_FAILED',
+            message: 'No se pudo canjear la recompensa',
           },
         });
       }
-
-      const [balance] = (await db.select().from(balances).where(eq(balances.cardId, card.cardId))) as Array<{
-        id: string;
-        current: number;
-        lifetime: number;
-      }>;
-
-      const [campaignBalance] = (await db
-        .select()
-        .from(campaignBalances)
-        .where(
-          and(eq(campaignBalances.cardId, card.cardId), eq(campaignBalances.campaignId, reward.campaignId)),
-        )) as Array<{
-        id: string;
-        current: number;
-        lifetime: number;
-      }>;
-
-      const currentBalance = campaignBalance?.current ?? 0;
-      if (currentBalance < reward.cost) {
-        return status(422, {
-          error: {
-            code: 'INSUFFICIENT_BALANCE',
-            message: 'Saldo insuficiente en la campaña para canjear recompensa',
-          },
-        });
-      }
-
-      const nextCurrent = currentBalance - reward.cost;
-      if (campaignBalance) {
-        await db
-          .update(campaignBalances)
-          .set({
-            current: nextCurrent,
-            updatedAt: new Date(),
-          })
-          .where(eq(campaignBalances.id, campaignBalance.id));
-      }
-
-      if (balance) {
-        await db
-          .update(balances)
-          .set({
-            current: Math.max(0, balance.current - reward.cost),
-            updatedAt: new Date(),
-          })
-          .where(eq(balances.id, balance.id));
-      }
-
-      if (reward.stock !== null) {
-        await db
-          .update(rewards)
-          .set({
-            stock: reward.stock - 1,
-            updatedAt: new Date(),
-          })
-          .where(eq(rewards.id, reward.id));
-      }
-
-      const [created] = (await db
-        .insert(redemptions)
-        .values({
-          cardId: card.cardId,
-          rewardId: reward.id,
-          cost: reward.cost,
-          status: 'completed',
-          completedAt: new Date(),
-        })
-        .returning({ id: redemptions.id, createdAt: redemptions.createdAt })) as Array<{ id: string; createdAt: Date }>;
-
-      await evaluateCardTier({
-        cardId: card.cardId,
-        campaignId: reward.campaignId,
-      });
 
       return {
         data: {
-          redemptionId: created?.id ?? '',
+          redemptionId: redemptionOutcome.redemptionId,
           reward: serializeReward({
             ...reward,
-            stock: reward.stock !== null ? reward.stock - 1 : null,
+            stock: redemptionOutcome.rewardStock,
           }),
           card: {
             id: card.cardId,
-            currentBalance: nextCurrent,
-            lifetimeBalance: campaignBalance?.lifetime ?? 0,
+            currentBalance: redemptionOutcome.currentBalance,
+            lifetimeBalance: redemptionOutcome.lifetimeBalance,
           },
-          redeemedAt: (created?.createdAt ?? new Date()).toISOString(),
+          redeemedAt: redemptionOutcome.createdAt.toISOString(),
         },
       };
     },

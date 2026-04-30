@@ -87,5 +87,6 @@ export const accumulations = pgTable(
     index('accumulations_campaign_idx').on(table.campaignId),
     index('accumulations_source_idx').on(table.sourceType),
     index('accumulations_created_at_idx').on(table.createdAt),
+    index('accumulations_campaign_created_idx').on(table.campaignId, table.createdAt),
   ],
 );

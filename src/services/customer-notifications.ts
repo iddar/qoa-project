@@ -2,10 +2,10 @@ import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import {
   campaigns,
+  notificationDeliveries,
   stores,
   userStoreEnrollments,
   users,
-  whatsappMessages,
   whatsappOnboardingSessions,
 } from '../db/schema';
 import { sendTwilioWhatsappMessage } from './twilio-whatsapp';
@@ -18,16 +18,57 @@ type AccumulationSummary = {
   accumulated: number;
 };
 
-const hasSentNotification = async (notificationKey: string) => {
-  const [existing] = (await db
-    .select({ id: whatsappMessages.id })
-    .from(whatsappMessages)
-    .where(
-      and(eq(whatsappMessages.direction, 'outbound'), sql`${whatsappMessages.payload} like ${`%${notificationKey}%`}`),
-    )
-    .limit(1)) as Array<{ id: string }>;
+const executeRows = async <T>(query: unknown) => (await db.execute(query)) as T[];
 
-  return Boolean(existing);
+const reserveNotificationDelivery = async (payload: {
+  notificationKey: string;
+  recipient: string;
+  metadata?: Record<string, unknown>;
+}) => {
+  const [row] = await executeRows<{ id: string }>(sql`
+    insert into notification_deliveries (notification_key, channel, recipient, status, metadata, updated_at)
+    values (
+      ${payload.notificationKey},
+      'whatsapp',
+      ${payload.recipient},
+      'pending',
+      ${payload.metadata ? JSON.stringify(payload.metadata) : null},
+      ${new Date()}
+    )
+    on conflict (notification_key) do update
+    set status = 'pending',
+        recipient = excluded.recipient,
+        metadata = excluded.metadata,
+        error = null,
+        updated_at = excluded.updated_at
+    where notification_deliveries.status = 'failed'
+    returning id
+  `);
+
+  return row?.id ?? null;
+};
+
+const markNotificationDeliverySent = async (id: string, providerMessageId?: string | null) => {
+  await db
+    .update(notificationDeliveries)
+    .set({
+      status: 'sent',
+      providerMessageId: providerMessageId ?? null,
+      error: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(notificationDeliveries.id, id));
+};
+
+const markNotificationDeliveryFailed = async (id: string, error: unknown) => {
+  await db
+    .update(notificationDeliveries)
+    .set({
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+      updatedAt: new Date(),
+    })
+    .where(eq(notificationDeliveries.id, id));
 };
 
 const isWhatsappContactable = async (phone: string) => {
@@ -67,11 +108,16 @@ export const sendPostTransactionThankYou = async (payload: {
   }
 
   const notificationKey = `transaction-thank-you:${payload.transactionId}`;
-  if (await hasSentNotification(notificationKey)) {
+  if (!(await isWhatsappContactable(payload.phone))) {
     return 'skipped';
   }
 
-  if (!(await isWhatsappContactable(payload.phone))) {
+  const deliveryId = await reserveNotificationDelivery({
+    notificationKey,
+    recipient: payload.phone,
+    metadata: { transactionId: payload.transactionId },
+  });
+  if (!deliveryId) {
     return 'skipped';
   }
 
@@ -83,13 +129,15 @@ export const sendPostTransactionThankYou = async (payload: {
       : '';
 
   try {
-    await sendTwilioWhatsappMessage({
+    const result = await sendTwilioWhatsappMessage({
       to: payload.phone,
       body: `Gracias por tu compra en ${payload.storeName}. Total registrado: $${payload.totalAmount}.${pointsText}`,
       metadata: { notificationKey, transactionId: payload.transactionId },
     });
+    await markNotificationDeliverySent(deliveryId, result.sid);
     return 'sent';
   } catch (error) {
+    await markNotificationDeliveryFailed(deliveryId, error);
     console.error('[customer-notifications][transaction-thank-you-failed]', error);
     return 'failed';
   }
@@ -127,18 +175,27 @@ export const notifyStoreUsersCampaignEnrollment = async (payload: {
 
   for (const row of rows) {
     const notificationKey = `campaign-store-enrolled:${payload.campaignId}:${payload.storeId}:${row.userId}`;
-    if (await hasSentNotification(notificationKey)) {
-      skipped += 1;
-      continue;
-    }
-
     if (!(await isWhatsappContactable(row.phone))) {
       skipped += 1;
       continue;
     }
 
+    const deliveryId = await reserveNotificationDelivery({
+      notificationKey,
+      recipient: row.phone,
+      metadata: {
+        campaignId: payload.campaignId,
+        storeId: payload.storeId,
+        userId: row.userId,
+      },
+    });
+    if (!deliveryId) {
+      skipped += 1;
+      continue;
+    }
+
     try {
-      await sendTwilioWhatsappMessage({
+      const result = await sendTwilioWhatsappMessage({
         to: row.phone,
         body: `${store.name} ya participa en ${campaign.name}. Tus próximas compras elegibles en esta tienda podrán acumular puntos.`,
         metadata: {
@@ -148,8 +205,10 @@ export const notifyStoreUsersCampaignEnrollment = async (payload: {
           userId: row.userId,
         },
       });
+      await markNotificationDeliverySent(deliveryId, result.sid);
       sent += 1;
     } catch (error) {
+      await markNotificationDeliveryFailed(deliveryId, error);
       console.error('[customer-notifications][campaign-enrollment-failed]', error);
       failed += 1;
     }

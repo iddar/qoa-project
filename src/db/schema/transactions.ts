@@ -5,6 +5,7 @@ import { stores } from './stores';
 import { users } from './users';
 
 type TransactionsTable = {
+  id: unknown;
   userId: unknown;
   storeId: unknown;
   cardId: unknown;
@@ -44,6 +45,8 @@ export const transactions = pgTable(
     index('transactions_store_idx').on(table.storeId),
     index('transactions_card_idx').on(table.cardId),
     index('transactions_created_at_idx').on(table.createdAt),
+    index('transactions_store_created_id_idx').on(table.storeId, table.createdAt, table.id),
+    index('transactions_user_created_id_idx').on(table.userId, table.createdAt, table.id),
     uniqueIndex('transactions_idempotency_key')
       .on(table.idempotencyKey)
       .where(sql`${table.idempotencyKey} is not null`),
