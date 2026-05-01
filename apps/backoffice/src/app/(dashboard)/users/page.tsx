@@ -60,6 +60,8 @@ const STATUS_COLORS: Record<string, string> = {
   inactive: "text-zinc-500 bg-zinc-50 border-zinc-200 dark:text-zinc-400 dark:bg-zinc-900 dark:border-zinc-800",
 };
 
+const userDeleteEnabled = process.env.NEXT_PUBLIC_BACKOFFICE_USER_DELETE_ENABLED !== "false";
+
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<UserCreateForm>(emptyForm);
@@ -181,6 +183,20 @@ export default function UsersPage() {
     },
   });
 
+  const deleteUser = useMutation({
+    mutationFn: async (userId: string) => {
+      const token = getAccessToken();
+      const { data, error } = await api.v1.users({ id: userId }).delete(undefined, {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+
   const allUsers = useMemo(() => (data?.data ?? []) as UserListItem[], [data?.data]);
 
   const filteredUsers = useMemo(() => {
@@ -204,7 +220,8 @@ export default function UsersPage() {
 
   const isPending = (userId: string) =>
     (blockUser.isPending && blockUser.variables === userId) ||
-    (unblockUser.isPending && unblockUser.variables === userId);
+    (unblockUser.isPending && unblockUser.variables === userId) ||
+    (deleteUser.isPending && deleteUser.variables === userId);
 
   return (
     <div className="space-y-8">
@@ -349,26 +366,42 @@ export default function UsersPage() {
                       )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        blocked
-                          ? unblockUser.mutate(user.id)
-                          : blockUser.mutate(user.id)
-                      }
-                      disabled={pending}
-                      className={`rounded-md border px-3 py-1.5 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                        blocked
-                          ? "border-green-200 text-green-700 hover:bg-green-50 dark:border-green-900 dark:text-green-400 dark:hover:bg-green-950/40"
-                          : "border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-900 dark:text-amber-400 dark:hover:bg-amber-950/40"
-                      }`}
-                    >
-                      {pending
-                        ? "..."
-                        : blocked
-                          ? "Desbloquear"
-                          : "Bloquear"}
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          blocked
+                            ? unblockUser.mutate(user.id)
+                            : blockUser.mutate(user.id)
+                        }
+                        disabled={pending}
+                        className={`rounded-md border px-3 py-1.5 text-xs transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          blocked
+                            ? "border-green-200 text-green-700 hover:bg-green-50 dark:border-green-900 dark:text-green-400 dark:hover:bg-green-950/40"
+                            : "border-amber-200 text-amber-700 hover:bg-amber-50 dark:border-amber-900 dark:text-amber-400 dark:hover:bg-amber-950/40"
+                        }`}
+                      >
+                        {pending
+                          ? "..."
+                          : blocked
+                            ? "Desbloquear"
+                            : "Bloquear"}
+                      </button>
+                      {userDeleteEnabled ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm("¿Eliminar este usuario y sus movimientos asociados?")) {
+                              deleteUser.mutate(user.id);
+                            }
+                          }}
+                          disabled={pending}
+                          className="rounded-md border border-red-200 px-3 py-1.5 text-xs text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                        >
+                          {deleteUser.isPending && deleteUser.variables === user.id ? "Eliminando..." : "Eliminar"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </li>
               );

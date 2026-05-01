@@ -30,6 +30,7 @@ import {
   userMeResponse,
   userWalletResponse,
   userMeUpdateRequest,
+  userDeleteResponse,
 } from './model';
 
 const allowedRoles = allUserRoles;
@@ -105,6 +106,11 @@ type UserParamsContext = {
   status: StatusHandler;
 };
 
+type DeleteUserContext = {
+  params: UserParams;
+  status: StatusHandler;
+};
+
 type UserCardsContext = {
   auth: AuthContext | null;
   query: CardListQueryParams;
@@ -143,6 +149,60 @@ export const usersModule = new Elysia({
   },
 })
   .use(authPlugin)
+  // @ts-ignore: TypeScript loses the Elysia delete helper signature in this module chain
+  .delete(
+    '/:id',
+    async ({ params, status }: DeleteUserContext) => {
+      if (process.env.BACKOFFICE_USER_DELETE_ENABLED === 'false') {
+        return status(403, {
+          error: {
+            code: 'FEATURE_DISABLED',
+            message: 'La eliminación de usuarios está deshabilitada',
+          },
+        });
+      }
+
+      const deleted = await db.transaction(async (tx) => {
+        const [existing] = (await tx.select({ id: users.id }).from(users).where(eq(users.id, params.id)).limit(1)) as Array<{
+          id: string;
+        }>;
+
+        if (!existing) {
+          return null;
+        }
+
+        await tx.delete(users).where(eq(users.id, params.id));
+        return existing.id;
+      });
+
+      if (!deleted) {
+        return status(404, {
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'Usuario no encontrado',
+          },
+        });
+      }
+
+      return {
+        data: {
+          id: deleted,
+          deleted: true as const,
+        },
+      };
+    },
+    {
+      beforeHandle: authGuard({ roles: [...backofficeAdminRoles] }),
+      headers: authorizationHeader,
+      response: {
+        200: userDeleteResponse,
+      },
+      detail: {
+        summary: 'Eliminar usuario de prueba',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+  )
   .get(
     '/',
     async ({ query, status }: ListUsersContext) => {
