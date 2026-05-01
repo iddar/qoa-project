@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2, UserRoundPlus } from "lucide-react";
+import { AlertTriangle, Trash2, UserRoundPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
@@ -19,6 +19,7 @@ type StoreProduct = {
   sku?: string;
   unitType: string;
   price: number;
+  stock: number;
   status: string;
   createdAt: string;
 };
@@ -330,31 +331,49 @@ export default function StorePOSPage() {
 
         <div className="min-h-0 flex-1 lg:overflow-y-auto">
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
-            {catalog.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                onClick={() =>
-                  addItem(
-                    {
-                      storeProductId: product.id,
-                      productId: product.productId,
-                      name: product.name,
-                      sku: product.sku,
-                      unitType: product.unitType,
-                      price: Number(product.price),
-                    },
-                    1,
-                  )
-                }
-                className="cursor-pointer rounded-3xl border border-zinc-200 bg-white p-4 text-left transition hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
-              >
-                <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{product.name}</span>
-                {product.sku ? <span className="mt-1 block text-xs text-zinc-400">SKU: {product.sku}</span> : null}
-                <span className="mt-3 block text-lg font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(Number(product.price))}</span>
-                <span className="mt-1 block text-xs text-zinc-400 capitalize">{product.unitType}</span>
-              </button>
-            ))}
+            {catalog.map((product) => {
+              const stock = Number(product.stock ?? 0);
+              const isOutOfStock = stock <= 0;
+              const isLowStock = stock > 0 && stock <= 5;
+              return (
+                <button
+                  key={product.id}
+                  type="button"
+                  disabled={isOutOfStock}
+                  title={isLowStock ? "Stock bajo" : undefined}
+                  onClick={() =>
+                    addItem(
+                      {
+                        storeProductId: product.id,
+                        productId: product.productId,
+                        name: product.name,
+                        sku: product.sku,
+                        unitType: product.unitType,
+                        price: Number(product.price),
+                        stock,
+                      },
+                      1,
+                    )
+                  }
+                  className="cursor-pointer rounded-3xl border border-zinc-200 bg-white p-4 text-left transition hover:border-zinc-300 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+                >
+                  <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{product.name}</span>
+                  {product.sku ? <span className="mt-1 block text-xs text-zinc-400">SKU: {product.sku}</span> : null}
+                  <span className="mt-3 block text-lg font-bold text-emerald-600 dark:text-emerald-400">{formatMoney(Number(product.price))}</span>
+                  <span className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                    Existencia: {stock}
+                    {isLowStock ? <AlertTriangle className="h-3.5 w-3.5 text-amber-500" aria-label="Stock bajo" /> : null}
+                  </span>
+                  {isOutOfStock ? (
+                    <span className="mt-2 inline-flex rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600 dark:bg-red-950/30 dark:text-red-300">
+                      Sin stock
+                    </span>
+                  ) : (
+                    <span className="mt-1 block text-xs text-zinc-400 capitalize">{product.unitType}</span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {catalog.length === 0 && !productsQuery.isLoading ? (
@@ -405,7 +424,9 @@ export default function StorePOSPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.name}</p>
-                      <p className="text-xs text-zinc-500">{formatMoney(item.price)} c/u</p>
+                      <p className="text-xs text-zinc-500">
+                        {formatMoney(item.price)} c/u{typeof item.stock === "number" ? ` · Existencia ${item.stock}` : ""}
+                      </p>
                     </div>
                     <button
                       type="button"
@@ -421,7 +442,7 @@ export default function StorePOSPage() {
                       <button
                         type="button"
                         onClick={() => updateItemQuantity(item.storeProductId, item.quantity - 1)}
-                        className="h-8 w-8 rounded-full border border-zinc-200 text-sm dark:border-zinc-700"
+                        className="h-8 w-8 rounded-full border border-zinc-200 text-sm disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700"
                       >
                         -
                       </button>
@@ -429,7 +450,8 @@ export default function StorePOSPage() {
                       <button
                         type="button"
                         onClick={() => updateItemQuantity(item.storeProductId, item.quantity + 1)}
-                        className="h-8 w-8 rounded-full border border-zinc-200 text-sm dark:border-zinc-700"
+                        disabled={typeof item.stock === "number" && item.quantity >= item.stock}
+                        className="h-8 w-8 rounded-full border border-zinc-200 text-sm disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700"
                       >
                         +
                       </button>

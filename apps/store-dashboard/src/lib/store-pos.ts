@@ -14,6 +14,7 @@ export type DraftItem = {
   sku?: string;
   unitType?: string;
   price: number;
+  stock?: number;
   quantity: number;
 };
 
@@ -54,6 +55,7 @@ export type DraftPendingProductChoice = {
   storeProductId: string;
   name: string;
   price: number;
+  stock?: number;
   score: number;
 };
 
@@ -130,3 +132,12 @@ export const getDraftTotal = (draft: StorePosDraft) =>
 
 export const getDraftItemCount = (draft: StorePosDraft) =>
   draft.items.reduce((sum, item) => sum + item.quantity, 0);
+
+export const getStockLimitedQuantity = (quantity: number, stock?: number) => {
+  const normalizedQuantity = Math.max(quantity, 0);
+  if (typeof stock !== "number") {
+    return normalizedQuantity;
+  }
+
+  return Math.min(normalizedQuantity, Math.max(stock, 0));
+};
