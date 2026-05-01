@@ -169,7 +169,7 @@ export default function StoreInventoryPage() {
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Inventario</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Usa el agente para interpretar fotos o listas del proveedor y confirma la entrada solo cuando el preview esté correcto.
+            Usa el agente para interpretar fotos o listas del proveedor y confirma la entrada solo cuando la vista previa esté correcta.
           </p>
         </div>
         <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700 xl:max-w-md dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-300">
@@ -206,7 +206,7 @@ export default function StoreInventoryPage() {
             <div>
               <p className="font-medium text-zinc-900 dark:text-zinc-100">Carga el borrador desde el agente</p>
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                Pega una lista o sube una foto con el `Inventory Agent` de la derecha. Aquí solo revisas, corriges y confirmas.
+                Pega una lista o sube una foto con el asistente de inventario. Aquí revisas, corriges y confirmas.
               </p>
             </div>
             <button
@@ -215,19 +215,19 @@ export default function StoreInventoryPage() {
               className="inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
             >
               <Sparkles className="h-4 w-4" />
-              Abrir Inventory Agent
+              Abrir asistente
             </button>
           </div>
         </div>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Inventory Preview</h2>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Vista previa de inventario</h2>
               <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Edita, corrige o elimina filas antes de confirmar.</p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 lg:justify-end">
             <button
               type="button"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["store-products", storeId, "inventory-list"] })}
@@ -250,14 +250,14 @@ export default function StoreInventoryPage() {
 
         {draft.rows.length === 0 ? (
           <div className="mt-6 rounded-3xl border border-dashed border-zinc-200 px-4 py-10 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-            El preview sigue vacío. Usa el agente para pegar una lista o subir una foto del ticket del proveedor.
+            La vista previa sigue vacía. Usa el agente para pegar una lista o subir una foto del ticket del proveedor.
           </div>
         ) : (
           <div className="mt-4 space-y-3">
             {draft.rows.map((row) => (
-              <article key={row.id} className="rounded-3xl border border-zinc-200 p-4 dark:border-zinc-800">
+              <article key={row.id} className="min-w-0 rounded-3xl border border-zinc-200 p-4 dark:border-zinc-800">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${badgeClasses[row.status]}`}>
                         {row.status === "matched" ? "Existente" : row.status === "new" ? "Nuevo" : row.status === "ambiguous" ? "Revisar" : "Inválido"}
                       </span>
@@ -273,20 +273,20 @@ export default function StoreInventoryPage() {
                     </button>
                   </div>
 
-                  <div className="mt-4 grid gap-3 md:grid-cols-[1.5fr_0.8fr_0.7fr_0.8fr]">
+                  <div className="mt-4 grid min-w-0 gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.8fr)]">
                     <input
                       type="text"
                       value={row.name}
                       onChange={(event) => updateRow(row.id, { name: event.target.value })}
                       placeholder="Nombre del producto"
-                      className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      className="min-w-0 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
                     />
                     <input
                       type="text"
                       value={row.sku ?? ""}
                       onChange={(event) => updateRow(row.id, { sku: event.target.value || undefined })}
                       placeholder="SKU"
-                      className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      className="min-w-0 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
                     />
                     <input
                       type="number"
@@ -294,7 +294,7 @@ export default function StoreInventoryPage() {
                       value={row.quantity}
                       onChange={(event) => updateRow(row.id, { quantity: Number(event.target.value) })}
                       placeholder="Cantidad"
-                      className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      className="min-w-0 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
                     />
                     <input
                       type="number"
@@ -305,11 +305,11 @@ export default function StoreInventoryPage() {
                         updateRow(row.id, { price: nextPrice, action: row.action ?? "create_new" });
                       }}
                       placeholder="Precio venta"
-                      className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      className="min-w-0 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
                     />
                   </div>
 
-                  <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_1fr]">
+                  <div className="mt-3 grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                     <select
                       value={row.action ?? ""}
                       onChange={(event) => {
@@ -328,7 +328,7 @@ export default function StoreInventoryPage() {
                           updateRow(row.id, { action: "match_existing" });
                         }
                       }}
-                      className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      className="min-w-0 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
                     >
                       <option value="">Selecciona qué hacer</option>
                       <option value="match_existing">Sumar a producto existente</option>
@@ -351,7 +351,7 @@ export default function StoreInventoryPage() {
                           matchedProduct,
                         });
                       }}
-                      className="rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      className="min-w-0 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
                     >
                       <option value="">Selecciona producto existente</option>
                       {(row.candidates ?? storeProducts.slice(0, 50).map((product) => ({
@@ -370,9 +370,9 @@ export default function StoreInventoryPage() {
                   </div>
 
                   {row.matchedProduct ? (
-                    <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200">
-                      <p className="font-semibold">{row.matchedProduct.name}</p>
-                      <p className="mt-1 text-xs opacity-80">
+                    <div className="mt-3 min-w-0 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/20 dark:text-emerald-200">
+                      <p className="break-words font-semibold">{row.matchedProduct.name}</p>
+                      <p className="mt-1 break-words text-xs opacity-80">
                         Stock actual {row.matchedProduct.stock} · Quedará en {row.matchedProduct.stock + row.quantity} · Precio actual {formatMoney(row.matchedProduct.price)}
                       </p>
                     </div>
@@ -382,9 +382,9 @@ export default function StoreInventoryPage() {
                     <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="mt-0.5 h-4 w-4" />
-                        <div className="space-y-1">
+                        <div className="min-w-0 space-y-1">
                           {row.errors.map((error) => (
-                            <p key={`${row.id}-${error}`}>{error}</p>
+                            <p key={`${row.id}-${error}`} className="break-words">{error}</p>
                           ))}
                         </div>
                       </div>
@@ -420,7 +420,7 @@ export default function StoreInventoryPage() {
           <div>
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Historial de movimientos</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Revisa las ultimas entradas y ventas que movieron tu stock.
+              Revisa las últimas entradas y ventas que movieron tu stock.
             </p>
           </div>
 
@@ -446,7 +446,7 @@ export default function StoreInventoryPage() {
 
         {!movementsQuery.isLoading && !movementsQuery.isError && recentMovements.length === 0 ? (
           <div className="mt-4 rounded-3xl border border-dashed border-zinc-200 px-4 py-8 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-            Aun no hay movimientos para este filtro.
+            Aún no hay movimientos para este filtro.
           </div>
         ) : null}
 
@@ -455,15 +455,15 @@ export default function StoreInventoryPage() {
             {recentMovements.map((movement) => (
               <article key={movement.id} className="rounded-3xl border border-zinc-200 p-4 dark:border-zinc-800">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${movement.type === "sale" ? "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-300" : movement.type === "adjustment" ? "bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-300" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300"}`}>
                         {movementLabels[movement.type]}
                       </span>
                       <span className="text-xs text-zinc-400">{formatMovementDate(movement.createdAt)}</span>
                     </div>
-                    <p className="mt-3 font-medium text-zinc-900 dark:text-zinc-100">{movement.storeProductName}</p>
-                    <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                    <p className="mt-3 break-words font-medium text-zinc-900 dark:text-zinc-100">{movement.storeProductName}</p>
+                    <p className="mt-1 break-words text-sm text-zinc-500 dark:text-zinc-400">
                       {movement.sku ? `${movement.sku} · ` : ""}
                       {describeMovementReference(movement)}
                       {movement.notes ? ` · ${movement.notes}` : ""}

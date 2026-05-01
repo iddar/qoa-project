@@ -10,6 +10,7 @@ export type ApiEntity = {
   price?: number;
   stock?: number;
   status?: string;
+  createdAt?: string;
 };
 
 const authHeaders = (token: string) => ({ authorization: `Bearer ${token}` });
@@ -75,8 +76,27 @@ export const patchJson = async <T>(path: string, token: string, data: unknown) =
 };
 
 export const findStoreByCode = async (token: string, code: string) => {
-  const body = await getJson<{ data: ApiEntity[] }>("/v1/stores?limit=500", token);
-  return body.data.find((entry) => entry.code === code);
+  let cursor: string | undefined;
+
+  for (let page = 0; page < 10; page += 1) {
+    const params = new URLSearchParams({ limit: "100" });
+    if (cursor) {
+      params.set("cursor", cursor);
+    }
+
+    const body = await getJson<{ data: ApiEntity[] }>(`/v1/stores?${params.toString()}`, token);
+    const match = body.data.find((entry) => entry.code === code);
+    if (match) {
+      return match;
+    }
+
+    cursor = body.data.at(-1)?.createdAt;
+    if (!cursor || body.data.length === 0) {
+      return undefined;
+    }
+  }
+
+  return undefined;
 };
 
 export const getStoreProducts = async (token: string, storeId: string) => {

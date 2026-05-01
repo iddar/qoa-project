@@ -522,7 +522,7 @@ const openAgentDrawer = async (page: Page) => {
     return;
   }
 
-  await page.getByRole("button", { name: /Abrir asistente/i }).click();
+  await page.getByRole("button", { name: /Abrir asistente/i }).filter({ visible: true }).last().click();
   await expect(closeButton).toBeVisible({ timeout: 10_000 });
 };
 
@@ -530,7 +530,7 @@ const closeAgentDrawer = async (page: Page) => {
   const closeButton = page.getByRole("button", { name: "Cerrar panel del asistente" }).filter({ visible: true }).first();
   if (await closeButton.isVisible().catch(() => false)) {
     await closeButton.click();
-    await expect(page.getByRole("button", { name: /Abrir asistente/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole("button", { name: /Abrir asistente/i }).filter({ visible: true }).last()).toBeVisible({ timeout: 10_000 });
   }
 };
 
@@ -650,7 +650,7 @@ const recordInventory = async (browser: Browser) => {
   await page.waitForTimeout(900);
   await openAgentDrawer(page);
   await page.waitForTimeout(700);
-  const inventoryAgent = page.getByRole("complementary").filter({ hasText: "Inventory Agent" });
+  const inventoryAgent = page.getByRole("complementary").filter({ hasText: "Asistente de inventario" });
 
   const photoChooser = page.waitForEvent("filechooser");
   await inventoryAgent.getByRole("button", { name: "Subir foto de inventario desde fotos" }).click();
@@ -658,13 +658,13 @@ const recordInventory = async (browser: Browser) => {
   await showCameraOverlay(page, {
     mode: "document",
     title: "Capturando ticket de proveedor",
-    subtitle: "La captura queda dentro del flujo del asistente antes de generar el preview.",
+    subtitle: "La captura queda dentro del flujo del asistente antes de generar la vista previa.",
     imageSrc: await imageDataUrl(state.assets.inventoryPhoto),
     successText: "Documento detectado",
     durationMs: 3200,
   });
   await photoFileChooser.setFiles(path.join(publicDir, state.assets.inventoryPhoto));
-  await expectTextVisible(page, /preview de inventario desde la foto/i);
+  await expectTextVisible(page, /vista previa de inventario desde la foto/i);
   await page.waitForTimeout(900);
   const shot1 = await screenshot(page, scenarioId, "01-inventory-photo.png");
 
@@ -728,12 +728,12 @@ const recordCampaigns = async (browser: Browser) => {
   await page.getByRole("button", { name: "Guardar alcance" }).click();
   await expectTextVisible(page, /Mapa de tiendas participantes/i);
   await page.waitForTimeout(700);
-  await page.getByRole("button", { name: /Agregar politica/i }).click();
+  await page.getByRole("button", { name: /Agregar política/i }).click();
   await page.getByLabel("Tipo").selectOption("min_amount");
   await page.getByLabel("Periodo").selectOption("transaction");
   await page.getByLabel("Valor").pressSequentially("120", { delay: 40 });
   await page.waitForTimeout(500);
-  await page.getByRole("button", { name: "Agregar politica" }).last().click();
+  await page.getByRole("button", { name: "Agregar política" }).last().click();
   await expectTextVisible(page, /Compra mínima/i);
   await page.waitForTimeout(900);
   const shot3 = await screenshot(page, scenarioId, "03-campaign-rules.png");

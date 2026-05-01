@@ -258,7 +258,7 @@ const posBeats: PosBeat[] = [
     id: "voice-order",
     durationSeconds: 11,
     activeSide: "left",
-    narrative: "Tendero: dicta refrescos, papas y galletas; la IA convierte la voz en un carrito de $75.",
+    narrative: "Tendero: dicta el pedido; la IA arma el carrito y deja el total listo para cobrar.",
     left: {
       label: "POS",
       screenshot: "recordings/pos-wallet/01-pos-order.png",
@@ -281,7 +281,7 @@ const posBeats: PosBeat[] = [
     id: "client-wallet",
     durationSeconds: 11,
     activeSide: "right",
-    narrative: "Cliente: abre su wallet y prepara el QR mientras el pedido queda en espera.",
+    narrative: "Cliente: abre su wallet y muestra su QR de lealtad, sin formularios ni fricción.",
     left: {
       label: "POS",
       screenshot: "recordings/pos-wallet/01-pos-order.png",
@@ -303,7 +303,7 @@ const posBeats: PosBeat[] = [
     id: "qr-scan",
     durationSeconds: 12,
     activeSide: "left",
-    narrative: "Tendero: abre la cámara del POS, escanea el QR de la wallet y liga al cliente.",
+    narrative: "Tendero: escanea el QR desde el POS y liga la venta al cliente correcto.",
     left: {
       label: "POS",
       screenshot: "recordings/pos-wallet/02-pos-linked.png",
@@ -326,7 +326,7 @@ const posBeats: PosBeat[] = [
     id: "sale-confirmation",
     durationSeconds: 11,
     activeSide: "left",
-    narrative: "Tendero: confirma la venta; el motor aplica reglas y acumula puntos en tiempo real.",
+    narrative: "Tendero: confirma la venta; QOA calcula puntos y campañas en el mismo paso.",
     left: {
       label: "POS",
       screenshot: "recordings/pos-wallet/04-pos-success.png",
@@ -349,7 +349,7 @@ const posBeats: PosBeat[] = [
     id: "wallet-points",
     durationSeconds: 8,
     activeSide: "right",
-    narrative: "Cliente: vuelve a su wallet; los puntos y el avance de campaña ya reflejan la venta.",
+    narrative: "Cliente: vuelve a su wallet y ve puntos, avance de campaña y saldo actualizados.",
     left: {
       label: "POS",
       screenshot: "recordings/pos-wallet/04-pos-success.png",
@@ -367,7 +367,7 @@ const posBeats: PosBeat[] = [
     id: "wallet-history",
     durationSeconds: 10,
     activeSide: "right",
-    narrative: "Cliente: entra al historial y confirma la compra reciente de $75 en orden cronológico.",
+    narrative: "Cliente: revisa el historial y confirma que la compra de $75 quedó registrada.",
     left: {
       label: "POS",
       screenshot: "recordings/pos-wallet/04-pos-success.png",
@@ -581,7 +581,7 @@ const NarrativeOverlay = ({
         position: "absolute",
         left: align === "center" ? "50%" : 74,
         bottom: 34,
-        width: `min(${maxWidth}px, calc(100% - 120px))`,
+        width: `min(${maxWidth}px, calc(100% - 148px))`,
         transform:
           align === "center"
             ? `translateX(-50%) translateY(${interpolate(entrance, [0, 1], [26, 0])}px)`
@@ -592,12 +592,12 @@ const NarrativeOverlay = ({
         background: "rgba(255, 255, 255, 0.94)",
         border: "1px solid rgba(15, 23, 42, 0.09)",
         boxShadow: "0 26px 80px rgba(15,23,42,0.22)",
-        padding: "20px 24px",
+        padding: "18px 22px",
         color: "#111827",
       }}
     >
       <div style={{ color: scenario.accent, fontSize: 15, fontWeight: 900, marginBottom: 8 }}>{label}</div>
-      <div style={{ fontSize: 27, lineHeight: 1.18, fontWeight: 780 }}>
+      <div style={{ fontSize: 25, lineHeight: 1.18, fontWeight: 780, overflowWrap: "break-word" }}>
         <TypewriterText text={text} frame={localFrame} startFrame={12} charsPerSecond={42} />
       </div>
     </div>
@@ -945,8 +945,8 @@ const inventoryBeats: StudioBeat[] = [
     id: "inventory-assistant-open",
     durationSeconds: 10,
     stepLabel: "Operador",
-    title: "Abre el asistente de inventario",
-    narrative: "El operador empieza desde la app real: inventario visible, asistente abierto y carga lista para foto.",
+    title: "El asistente abre el flujo de inventario",
+    narrative: "El operador parte de inventario real: abre el asistente y prepara la evidencia del proveedor.",
     media: {
       label: "Store Dashboard",
       screenshot: "recordings/inventory-intake/01-inventory-photo.png",
@@ -960,9 +960,9 @@ const inventoryBeats: StudioBeat[] = [
   {
     id: "inventory-photo-capture",
     durationSeconds: 11,
-    stepLabel: "Captura",
-    title: "La foto entra como evidencia",
-    narrative: "El fake de cámara mantiene el gesto real: se captura un ticket y el agente lo convierte en datos verificables.",
+    stepLabel: "Foto",
+    title: "El ticket se captura dentro del flujo",
+    narrative: "La foto del ticket entra como evidencia y el asistente la convierte en un borrador revisable.",
     media: {
       label: "Store Dashboard",
       screenshot: "recordings/inventory-intake/01-inventory-photo.png",
@@ -977,20 +977,20 @@ const inventoryBeats: StudioBeat[] = [
     id: "inventory-preview",
     durationSeconds: 10,
     stepLabel: "IA",
-    title: "Preview editable antes de tocar stock",
-    narrative: "La IA no aplica cambios a ciegas: propone filas, cantidades y coincidencias contra catálogo para revisión.",
+    title: "Vista previa antes de tocar stock",
+    narrative: "El sistema propone productos, cantidades y coincidencias; el operador conserva el control.",
     media: {
       label: "Store Dashboard",
       screenshot: "recordings/inventory-intake/01-inventory-photo.png",
-      cursor: { x: 64, y: 48, label: "preview" },
+      cursor: { x: 64, y: 48, label: "vista previa" },
     },
   },
   {
     id: "inventory-voice-correction",
     durationSeconds: 11,
     stepLabel: "Corrección por voz",
-    title: "El operador corrige sin teclado",
-    narrative: "Una nota de voz ajusta cantidades específicas; el asistente conserva qué cambió antes de confirmar.",
+    title: "Corrección natural por voz",
+    narrative: "La voz corrige cantidades puntuales y deja claro qué cambió antes de aplicar la entrada.",
     media: {
       label: "Store Dashboard",
       screenshot: "recordings/inventory-intake/02-inventory-corrected.png",
@@ -1005,8 +1005,8 @@ const inventoryBeats: StudioBeat[] = [
     id: "inventory-apply-stock",
     durationSeconds: 10,
     stepLabel: "Confirmación",
-    title: "El stock se aplica cuando el usuario confirma",
-    narrative: "Al confirmar, el movimiento impacta inventario real y queda trazabilidad del origen: foto, voz y usuario.",
+    title: "Confirmación con trazabilidad",
+    narrative: "Al confirmar, QOA actualiza stock y conserva el origen de cada ajuste.",
     media: {
       label: "Store Dashboard",
       screenshot: "recordings/inventory-intake/03-inventory-stock.png",
@@ -1021,8 +1021,8 @@ const inventoryBeats: StudioBeat[] = [
     id: "inventory-audit",
     durationSeconds: 10,
     stepLabel: "Resultado",
-    title: "Inventario actualizado y auditable",
-    narrative: "El cierre muestra el nuevo estado: entradas aplicadas, historial actualizado y menos captura manual.",
+    title: "Inventario listo para operar",
+    narrative: "El equipo termina con existencias actualizadas, historial y menos captura manual.",
     media: {
       label: "Store Dashboard",
       screenshot: "recordings/inventory-intake/03-inventory-stock.png",
@@ -1036,8 +1036,8 @@ const campaignBeats: StudioBeat[] = [
     id: "campaign-create",
     durationSeconds: 12,
     stepLabel: "Marketing",
-    title: "La campaña nace desde el portal CPG",
-    narrative: "El equipo define nombre, ventana y tipo de acumulación sin salir de su operación comercial.",
+    title: "La campaña nace con intención comercial",
+    narrative: "Marketing define objetivo, vigencia y mecánica desde el portal.",
     media: {
       label: "CPG Portal",
       screenshot: "recordings/geo-campaigns/01-campaign-new.png",
@@ -1052,8 +1052,8 @@ const campaignBeats: StudioBeat[] = [
     id: "campaign-detail",
     durationSeconds: 12,
     stepLabel: "Campaña",
-    title: "El borrador queda listo para configurar alcance",
-    narrative: "El flujo pausa en el detalle: métricas, estado y paneles de reglas quedan en contexto antes de segmentar tiendas.",
+    title: "El borrador queda listo para avanzar",
+    narrative: "La campaña queda en borrador con estado, métricas y configuración visibles para el equipo.",
     media: {
       label: "CPG Portal",
       screenshot: "recordings/geo-campaigns/01-campaign-new.png",
@@ -1068,8 +1068,8 @@ const campaignBeats: StudioBeat[] = [
     id: "campaign-scope",
     durationSeconds: 13,
     stepLabel: "Alcance",
-    title: "La zona convierte geografía en cobertura",
-    narrative: "El usuario abre alcance de tiendas y delimita una zona desde el mapa para seleccionar puntos elegibles.",
+    title: "La zona convierte territorio en cobertura",
+    narrative: "El equipo abre alcance, dibuja la zona y convierte territorio en tiendas accionables.",
     media: {
       label: "CPG Portal",
       screenshot: "recordings/geo-campaigns/02-campaign-map.png",
@@ -1084,8 +1084,8 @@ const campaignBeats: StudioBeat[] = [
     id: "campaign-map-saved",
     durationSeconds: 12,
     stepLabel: "Cobertura",
-    title: "Tiendas seleccionadas con evidencia visual",
-    narrative: "El mapa queda guardado con tiendas seleccionadas; la cobertura es visible y auditable para el equipo.",
+    title: "Tiendas seleccionadas con claridad",
+    narrative: "La cobertura queda guardada con tiendas seleccionadas y una vista fácil de auditar.",
     media: {
       label: "CPG Portal",
       screenshot: "recordings/geo-campaigns/02-campaign-map.png",
@@ -1096,8 +1096,8 @@ const campaignBeats: StudioBeat[] = [
     id: "campaign-rule",
     durationSeconds: 12,
     stepLabel: "Reglas",
-    title: "Políticas comerciales medibles",
-    narrative: "La campaña agrega reglas de acumulación: compra, monto, frecuencia o mix, siempre ligadas al objetivo.",
+    title: "Reglas comerciales medibles",
+    narrative: "Las reglas traducen la estrategia comercial en incentivos medibles.",
     media: {
       label: "CPG Portal",
       screenshot: "recordings/geo-campaigns/03-campaign-rules.png",
@@ -1113,7 +1113,7 @@ const campaignBeats: StudioBeat[] = [
     durationSeconds: 10,
     stepLabel: "Activación",
     title: "La campaña queda lista para operar",
-    narrative: "El cierre combina zona, tiendas y reglas: una campaña lista para activarse y medirse desde el portal.",
+    narrative: "Zona, tiendas y reglas quedan listas para revisión, activación y medición.",
     media: {
       label: "CPG Portal",
       screenshot: "recordings/geo-campaigns/03-campaign-rules.png",
@@ -1148,10 +1148,10 @@ const InventoryIntro = ({ scenario }: { scenario: Scenario }) => {
           ASISTENTE DE INVENTARIO EN VIVO
         </div>
         <h1 style={{ ...titleStyle, fontSize: 78, lineHeight: 0.96, margin: 0 }}>
-          Foto, voz y stock real en una sola operación.
+          De evidencia de proveedor a inventario confiable.
         </h1>
         <p style={{ color: "#334155", fontSize: 31, lineHeight: 1.24, marginTop: 30, maxWidth: 1040 }}>
-          El foco no está en capturar datos: está en revisar lo que la IA entendió, corregirlo y aplicarlo con trazabilidad.
+          QOA convierte foto y voz en una revisión guiada: el operador valida, corrige y confirma antes de mover stock.
         </p>
       </div>
     </AbsoluteFill>
@@ -1327,10 +1327,10 @@ const CampaignIntro = ({ scenario }: { scenario: Scenario }) => {
           CPG PORTAL EN DESKTOP
         </div>
         <h1 style={{ ...titleStyle, fontSize: 78, lineHeight: 0.96, margin: 0 }}>
-          De una zona en mapa a una campaña medible.
+          De territorio comercial a campaña medible.
         </h1>
         <p style={{ color: "#334155", fontSize: 31, lineHeight: 1.24, marginTop: 30, maxWidth: 1040 }}>
-          El portal coordina objetivo, cobertura de tiendas y reglas de acumulación en una misma historia comercial.
+          El portal conecta objetivo, cobertura y reglas para activar promociones con control operativo.
         </p>
       </div>
     </AbsoluteFill>

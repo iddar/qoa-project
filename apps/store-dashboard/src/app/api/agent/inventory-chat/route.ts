@@ -315,7 +315,7 @@ const mapImagePreviewError = (error: unknown) => {
   if (error instanceof Error) {
     switch (error.message) {
       case "IMAGE_ATTACHMENT_REQUIRED":
-        return "Necesito una foto para preparar el preview de inventario.";
+        return "Necesito una foto para preparar la vista previa de inventario.";
       case "INVENTORY_IMAGE_EMPTY":
         return "No pude extraer productos claros de esa foto. Intenta con otra imagen mas centrada o con mejor luz.";
       case "OPENROUTER_NOT_CONFIGURED":
@@ -562,7 +562,7 @@ export async function POST(request: Request) {
           content: [
             {
               type: "text",
-              text: `Lee esta foto de inventario y extrae las filas de producto. Instruccion del tendero: ${latestUserMessage?.content.trim() || "Preparar preview de inventario desde la foto."}`,
+              text: `Lee esta foto de inventario y extrae las filas de producto. Instrucción del tendero: ${latestUserMessage?.content.trim() || "Preparar vista previa de inventario desde la foto."}`,
             },
             {
               type: "file",
@@ -877,7 +877,7 @@ export async function POST(request: Request) {
       try {
         const preview = await applyDemoInventoryPhotoPreview();
         return await buildFixtureResponse(
-          `Preparé el preview de inventario desde la foto con **${preview.totalRows} filas** y **${preview.summary.quantity} piezas**. Revísalo antes de confirmar la entrada.`,
+          `Preparé la vista previa de inventario desde la foto con **${preview.totalRows} filas** y **${preview.summary.quantity} piezas**. Revísala antes de confirmar la entrada.`,
         );
       } catch {
         return await buildFixtureResponse("No encontré productos seed para preparar la foto de inventario de demo.");
@@ -978,7 +978,7 @@ export async function POST(request: Request) {
       const preview = await previewInventoryFromLatestImage();
       const content = workingDraft.rows.length > preview.addedRows
         ? `Agregué **${preview.addedRows} filas** desde la foto al borrador actual. Ahora tienes **${preview.totalRows} filas** para revisar antes de confirmar.`
-        : `Preparé el preview de inventario desde la foto con **${preview.totalRows} filas**. Revísalo y edítalo antes de confirmar la entrada.`;
+        : `Preparé la vista previa de inventario desde la foto con **${preview.totalRows} filas**. Revísala y edítala antes de confirmar la entrada.`;
       const renderedHtml = await renderAssistantMarkdownToHtml(content);
       return Response.json({
         message: {
@@ -1013,7 +1013,7 @@ export async function POST(request: Request) {
     const preview = await previewInventoryFromText(latestUserMessage.content);
     const content = workingDraft.rows.length > preview.addedRows
       ? `Agregué **${preview.addedRows} filas** al borrador actual. Ahora tienes **${preview.totalRows} filas** para revisar antes de confirmar.`
-      : `Preparé el preview de inventario con **${preview.totalRows} filas**. Revisa las coincidencias y confirma la entrada cuando esté lista.`;
+      : `Preparé la vista previa de inventario con **${preview.totalRows} filas**. Revisa las coincidencias y confirma la entrada cuando esté lista.`;
     const renderedHtml = await renderAssistantMarkdownToHtml(content);
     return Response.json({
       message: {
@@ -1283,7 +1283,7 @@ export async function POST(request: Request) {
         execute: async ({ text }) => previewInventoryFromText(text),
       }),
       previewInventoryFromLatestImage: tool({
-        description: "Lee la foto mas reciente adjunta y agrega sus filas al preview de inventario actual, salvo que se pida overwrite.",
+        description: "Lee la foto más reciente adjunta y agrega sus filas a la vista previa de inventario actual, salvo que se pida overwrite.",
         inputSchema: z.object({
           overwrite: z.boolean().optional(),
         }),
