@@ -41,6 +41,7 @@ type SeedCatalogItem = {
 };
 
 const DEFAULT_PASSWORD = 'Password123!';
+const SEED_STORE_STOCK_FLOOR = 500;
 
 const SEED_CATALOG: SeedCatalogItem[] = [
   { brandName: 'Refrescos Monte', sku: 'QOA-COLA-600', name: 'Refresco Cola 600 ml', price: 18 },
@@ -117,7 +118,7 @@ const SEED_STORE_ADDRESSES: SeedStoreAddress[] = [
     neighborhood: 'Portales Sur',
     city: 'Benito Juárez',
     state: 'Ciudad de México',
-    postalCode: '03portal',
+    postalCode: '03300',
     country: 'MEX',
     latitude: '19.3590500',
     longitude: '-99.1430800',
@@ -744,6 +745,45 @@ const buildAddress = (addr: SeedStoreAddress): string => {
 
 const TOTAL_SEED_STORES = 100;
 const RELATED_SEED_STORES = 50;
+const PRIMARY_STORE_CODES: Record<'development' | 'local' | 'staging' | 'test', string> = {
+  development: 'JUANITA_DEV',
+  local: 'JUANITA_LOCAL',
+  staging: 'JUANITA_STG',
+  test: 'JUANITA_TEST',
+};
+const SECONDARY_STORE_CODES: Record<'development' | 'local' | 'staging' | 'test', string> = {
+  development: 'DON_PEPE_DEV',
+  local: 'DON_PEPE_LOCAL',
+  staging: 'DON_PEPE_STG',
+  test: 'DON_PEPE_TEST',
+};
+const SEED_STORE_NAMES = [
+  'Abarrotes Juanita',
+  'Miscelánea Don Pepe',
+  'La Esquina de Lupita',
+  'Mini Súper San Ángel',
+  'Abarrotes La Central',
+  'Tienda El Buen Precio',
+  'Miscelánea Los Portales',
+  'Abarrotes La Providencia',
+  'Súper Barrio Roma',
+  'Tienda La Familiar',
+  'Abarrotes El Puente',
+  'Miscelánea Santa Cecilia',
+  'Tienda Los Pinos',
+  'Mini Súper La Estrella',
+  'Abarrotes San Judas',
+  'Tienda El Mercado',
+];
+
+const normalizePublicCode = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 32);
 
 type SeedStorePayload = {
   code: string;
@@ -789,9 +829,11 @@ const buildSeedStoreVariants = (scope: string, count: number): SeedStorePayload[
       longitude: formatCoordinate(base.longitude, lngOffset),
     };
 
+    const baseStoreName = SEED_STORE_NAMES[index % SEED_STORE_NAMES.length]!;
+
     variants.push({
-      code: `seed_store_${scope}_${codeSuffix}`,
-      name: `${base.neighborhood} ${sequence} (${scope})`,
+      code: normalizePublicCode(`${scope}_${codeSuffix}_${baseStoreName}`),
+      name: `${baseStoreName} ${codeSuffix}`,
       type: base.type,
       address: buildAddress(storeRecord),
       phone: `+521559${String(sequence).padStart(7, '0')}`,
@@ -812,9 +854,9 @@ const buildSeedStoreVariants = (scope: string, count: number): SeedStorePayload[
 };
 
 const upsertSeedStore = async (scope: string): Promise<string> => {
-  const code = `seed_store_${scope}`;
+  const code = PRIMARY_STORE_CODES[scope];
   const addr = SEED_STORE_ADDRESSES[0]!;
-  const name = `Tienda Seed (${scope})`;
+  const name = `Abarrotes Juanita ${scope === 'development' ? 'Demo' : scope}`;
 
   const [existing] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.code, code)).limit(1)) as Array<{
     id: string;
@@ -871,7 +913,7 @@ const upsertSeedStore = async (scope: string): Promise<string> => {
 };
 
 const upsertSeedBrand = async (scope: string, cpgId: string): Promise<string> => {
-  const name = `Brand Seed (${scope})`;
+  const name = `Refrescos Monte (${scope})`;
 
   const [existing] = (await db
     .select({ id: brands.id })
@@ -961,7 +1003,7 @@ const upsertSeedStoreProducts = async (
           sku: product.sku,
           price: product.price.toString(),
           unitType: 'piece',
-          stock: sql`greatest(${storeProducts.stock}, 100)`,
+          stock: sql`greatest(${storeProducts.stock}, ${SEED_STORE_STOCK_FLOOR})`,
           status: 'active',
           updatedAt: new Date(),
         })
@@ -976,7 +1018,7 @@ const upsertSeedStoreProducts = async (
       name: product.name,
       sku: product.sku,
       price: product.price.toString(),
-      stock: 100,
+      stock: SEED_STORE_STOCK_FLOOR,
       unitType: 'piece',
       status: 'active',
     });
@@ -998,8 +1040,8 @@ const upsertSeedCampaign = async (scope: string, cpgId: string): Promise<string>
     await db
       .update(campaigns)
       .set({
-        name: `Reto Seed (${scope})`,
-        description: 'Campaña de prueba para wallet/rewards en entorno local.',
+        name: `Reto Compra Vecinal (${scope})`,
+        description: 'Acumula puntos por compras frecuentes en tienditas participantes.',
         cpgId,
         status: 'active',
         enrollmentMode: 'opt_in',
@@ -1014,8 +1056,8 @@ const upsertSeedCampaign = async (scope: string, cpgId: string): Promise<string>
     .insert(campaigns)
     .values({
       key,
-      name: `Reto Seed (${scope})`,
-      description: 'Campaña de prueba para wallet/rewards en entorno local.',
+      name: `Reto Compra Vecinal (${scope})`,
+      description: 'Acumula puntos por compras frecuentes en tienditas participantes.',
       cpgId,
       status: 'active',
       enrollmentMode: 'opt_in',
@@ -1027,7 +1069,7 @@ const upsertSeedCampaign = async (scope: string, cpgId: string): Promise<string>
 };
 
 const upsertSeedReward = async (scope: string, campaignId: string): Promise<string> => {
-  const name = `Recompensa Seed (${scope})`;
+  const name = `Canasta de Lealtad (${scope})`;
 
   const [existing] = (await db
     .select({ id: rewards.id })
@@ -1053,7 +1095,7 @@ const upsertSeedReward = async (scope: string, campaignId: string): Promise<stri
     .values({
       campaignId,
       name,
-      description: 'Recompensa seed para pruebas funcionales.',
+      description: 'Canje para probar recompensas con productos de la tiendita.',
       cost: 10,
       stock: 100,
       status: 'active',
@@ -1486,7 +1528,7 @@ const ensurePolicy = async (payload: {
  * Uses the CPG name as the stable identity key.
  */
 const upsertSeedCpg = async (scope: string): Promise<string> => {
-  const name = `Acme CPG (${scope})`;
+  const name = `Grupo Sabores Cercanos (${scope})`;
 
   const [existing] = (await db.select({ id: cpgs.id }).from(cpgs).where(eq(cpgs.name, name)).limit(1)) as Array<{
     id: string;
@@ -2027,8 +2069,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
   if (scope === 'development' || scope === 'local' || scope === 'staging') {
     const addrB = SEED_STORE_ADDRESSES[1]!;
     const secondaryStoreId = await upsertStoreByCode({
-      code: `seed_store_b_${scope}`,
-      name: `Tienda Seed B (${scope})`,
+      code: SECONDARY_STORE_CODES[scope],
+      name: `Miscelánea Don Pepe ${scope === 'development' ? 'Demo' : scope}`,
       type: addrB.type,
       address: buildAddress(addrB),
       phone: `+52155899000${scope === 'local' ? '12' : scope === 'staging' ? '14' : '13'}`,
@@ -2074,8 +2116,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     const openCampaignId = await upsertCampaignByKey({
       key: `qoa_seed_open_${scope}`,
-      name: `Campaña Open Seed (${scope})`,
-      description: 'Campaña abierta para demo de acumulaciones adicionales.',
+      name: `Puntos en Cada Compra (${scope})`,
+      description: 'Campaña abierta para demostrar acumulación automática en tiendas relacionadas.',
       cpgId,
       storeAccessMode: 'all_related_stores',
       storeEnrollmentMode: 'auto_enroll',
@@ -2085,8 +2127,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     const flashCampaignId = await upsertCampaignByKey({
       key: `qoa_seed_flash_${scope}`,
-      name: `Campaña Flash Seed (${scope})`,
-      description: 'Campaña de temporada para demostrar variantes de rewards.',
+      name: `Promoción de Fin de Semana (${scope})`,
+      description: 'Campaña de temporada para demostrar variantes de recompensas.',
       cpgId,
       storeAccessMode: 'selected_stores',
       storeEnrollmentMode: 'store_opt_in',
@@ -2096,8 +2138,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     await upsertCampaignByKey({
       key: `qoa_seed_reto_${scope}`,
-      name: `Reto Seed (${scope})`,
-      description: 'Campaña de prueba para wallet/rewards en entorno local.',
+      name: `Reto Compra Vecinal (${scope})`,
+      description: 'Campaña de prueba para wallet/recompensas en entorno local.',
       cpgId,
       storeAccessMode: 'selected_stores',
       storeEnrollmentMode: 'store_opt_in',
@@ -2134,29 +2176,29 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
       rewardId,
       await upsertRewardByName({
         campaignId,
-        name: `Cupón 2x1 Seed (${scope})`,
+        name: `Cupón 2x1 Botanas (${scope})`,
         description: 'Cupón promocional para demos de canje.',
         cost: 30,
         stock: 120,
       }),
       await upsertRewardByName({
         campaignId: openCampaignId,
-        name: `Reward Open Plus (${scope})`,
-        description: 'Reward activa para campaña abierta.',
+        name: `Bono Compra Frecuente (${scope})`,
+        description: 'Recompensa activa para campaña abierta.',
         cost: 20,
         stock: 140,
       }),
       await upsertRewardByName({
         campaignId: openCampaignId,
-        name: `Reward Open Max (${scope})`,
-        description: 'Reward adicional para demostrar variedad.',
+        name: `Bono Familiar (${scope})`,
+        description: 'Recompensa adicional para demostrar variedad.',
         cost: 120,
         stock: 90,
       }),
       await upsertRewardByName({
         campaignId: flashCampaignId,
-        name: `Reward Flash (${scope})`,
-        description: 'Reward de campaña flash.',
+        name: `Premio Fin de Semana (${scope})`,
+        description: 'Recompensa de campaña flash.',
         cost: 25,
         stock: 80,
       }),
@@ -2405,15 +2447,15 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     await upsertRewardByName({
       campaignId: cpg3Campaign1Id,
-      name: `Reward Universal Básico (${scope})`,
+      name: `Despensa Básica (${scope})`,
       description: 'Canjeable por productos básicos de la canasta.',
       cost: 20,
       stock: 180,
     });
     await upsertRewardByName({
       campaignId: cpg3Campaign1Id,
-      name: `Reward Universal Premium (${scope})`,
-      description: 'Reward de alto valor para consumidores frecuentes.',
+      name: `Despensa Premium (${scope})`,
+      description: 'Recompensa de alto valor para consumidores frecuentes.',
       cost: 50,
       stock: 70,
     });
@@ -2449,12 +2491,12 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
     console.log(`[seed:${scope}] CPG3 seed: ${cpg3Id} (Grupo Abarrotes Universal)`);
   }
 
-  console.log(`[seed:${scope}] CPG seed: ${cpgId} (Acme CPG)`);
-  console.log(`[seed:${scope}] Store seed: ${storeId} (Tienda Seed)`);
-  console.log(`[seed:${scope}] Brand seed: ${brandId}`);
-  console.log(`[seed:${scope}] Product seed: ${productId}`);
-  console.log(`[seed:${scope}] Campaign seed: ${campaignId} (qoa_seed_reto_${scope})`);
-  console.log(`[seed:${scope}] Reward seed: ${rewardId}`);
+  console.log(`[seed:${scope}] CPG principal: ${cpgId} (Grupo Sabores Cercanos)`);
+  console.log(`[seed:${scope}] Tienda principal: ${storeId} (${PRIMARY_STORE_CODES[scope]})`);
+  console.log(`[seed:${scope}] Marca principal: ${brandId}`);
+  console.log(`[seed:${scope}] Producto principal: ${productId}`);
+  console.log(`[seed:${scope}] Campaña principal: ${campaignId} (qoa_seed_reto_${scope})`);
+  console.log(`[seed:${scope}] Recompensa principal: ${rewardId}`);
   if (scope === 'development' || scope === 'local' || scope === 'staging') {
     console.log(
       `[seed:${scope}] Demo data: 30 días de transacciones + campañas/recompensas extra + ${RELATED_SEED_STORES} tiendas relacionadas de ${TOTAL_SEED_STORES} disponibles`,
