@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../db/client';
 import { cards, stores, userStoreEnrollments, users, whatsappOnboardingSessions } from '../db/schema';
 import { ensureUserUniversalWalletCard } from './wallet-onboarding';
@@ -45,11 +45,15 @@ export type ProcessWhatsappOnboardingResult = {
   storeId?: string;
 };
 
-const STORE_CODE_PATTERN = /^[a-z0-9]+(?:[_-][a-z0-9]+)+$/i;
-const STORE_SIGNUP_PATTERN = /^alta\s+([a-z0-9]+(?:[_-][a-z0-9]+)+)$/i;
-const STORE_CHECKIN_PATTERN = /(?:quiero\s+)?registrar\s+(?:mi\s+)?compra\s+(?:en\s+)?([a-z0-9]+(?:[_-][a-z0-9]+)+)/i;
+const WALLET_PUBLIC_URL_FALLBACK = 'https://digital-wallet-production-93fb.up.railway.app';
+const STORE_CODE_PATTERN = /^[a-z0-9][a-z0-9_-]{2,48}$/i;
+const STORE_SIGNUP_PATTERN = /^alta\s+([a-z0-9][a-z0-9_-]{2,48})$/i;
+const STORE_CHECKIN_PATTERN = /(?:quiero\s+)?registrar\s+(?:mi\s+)?compra\s+(?:en\s+)?([a-z0-9][a-z0-9_-]{2,48})/i;
 
 const normalizeName = (value: string) => value.trim().replace(/\s+/g, ' ').slice(0, 100);
+const shouldRequireBirthDate = () => process.env.WHATSAPP_REQUIRE_BIRTH_DATE === 'true';
+const isUserOnboardingComplete = (user: UserRow) => Boolean(user.name && (!shouldRequireBirthDate() || user.birthDate));
+const buildWalletUrl = () => (process.env.WALLET_PUBLIC_URL ?? WALLET_PUBLIC_URL_FALLBACK).replace(/\/+$/, '');
 
 const parseBirthDate = (value: string) => {
   const trimmed = value.trim();
@@ -81,18 +85,18 @@ export const extractStoreCodeFromText = (value: string | null | undefined): stri
   }
 
   const trimmed = value.trim();
-  if (STORE_CODE_PATTERN.test(trimmed)) {
-    return trimmed.toLowerCase();
+  if (STORE_CODE_PATTERN.test(trimmed) && (/[0-9_-]/.test(trimmed) || trimmed === trimmed.toUpperCase())) {
+    return trimmed;
   }
 
   const altaMatch = trimmed.match(STORE_SIGNUP_PATTERN);
   if (altaMatch?.[1]) {
-    return altaMatch[1].toLowerCase();
+    return altaMatch[1];
   }
 
   const checkinMatch = trimmed.match(STORE_CHECKIN_PATTERN);
   if (checkinMatch?.[1]) {
-    return checkinMatch[1].toLowerCase();
+    return checkinMatch[1];
   }
 
   try {
@@ -105,7 +109,7 @@ export const extractStoreCodeFromText = (value: string | null | undefined): stri
     };
     const code = parsed.payload?.entityType === 'store' ? parsed.payload.code : parsed.code;
     if (typeof code === 'string' && STORE_CODE_PATTERN.test(code.trim())) {
-      return code.trim().toLowerCase();
+      return code.trim();
     }
   } catch {
     // Older printed QRs may not be JSON; continue with URL parsing below.
@@ -171,7 +175,7 @@ const findStoreByCode = async (code: string) => {
       name: stores.name,
     })
     .from(stores)
-    .where(eq(stores.code, code))) as StoreRow[];
+    .where(sql`lower(${stores.code}) = lower(${code})`)) as StoreRow[];
 
   return store ?? null;
 };
@@ -319,25 +323,15 @@ const buildCompletionMessage = async (payload: { userId: string; storeName: stri
     throw new Error('WHATSAPP_CARD_NOT_FOUND');
   }
 
-  const storeFragment = payload.storeName ? ` ligada a ${payload.storeName}` : '';
   return {
-    replyBody: `Listo, ya quedó tu tarjeta Qoa${storeFragment}. Este es tu QR de lealtad. Guárdalo y muéstralo cuando compres.\n\nCódigo: ${cardCode}`,
+    replyBody: `¡Listo! Ya estás enrolado en el esquema de lealtad de ${payload.storeName ?? 'tu tienda'}. Aquí puedes encontrar tu wallet de puntos de lealtad: ${buildWalletUrl()}`,
     mediaUrl: buildSignedWhatsappCardQrImageUrl(ensuredCard.cardId),
   };
 };
 
-const buildCheckinMessage = async (payload: { userId: string; storeName: string }) => {
-  const ensuredCard = await ensureUserUniversalWalletCard(payload.userId);
-  const cardCode = await getCardCode(ensuredCard.cardId);
-  if (!cardCode) {
-    throw new Error('WHATSAPP_CARD_NOT_FOUND');
-  }
-
-  return {
-    replyBody: `¡Gracias por tu visita a ${payload.storeName}! 🎉\n\nAquí está tu QR de lealtad. Muéstralo al pagar para acumular puntos.\n\nCódigo: ${cardCode}`,
-    mediaUrl: buildSignedWhatsappCardQrImageUrl(ensuredCard.cardId),
-  };
-};
+const buildCheckinMessage = () => ({
+  replyBody: 'Gracias por tu visita, comentale a tu tendero que confirma tu visita.',
+});
 
 export const processWhatsappOnboardingMessage = async (
   input: ProcessWhatsappOnboardingInput,
@@ -372,11 +366,11 @@ export const processWhatsappOnboardingMessage = async (
       };
     }
 
-    // If user already exists and is complete, treat as check-in
-    if (user && user.name && user.birthDate) {
+    // If user already exists and is complete, treat as check-in.
+    if (user && isUserOnboardingComplete(user)) {
       await recordStoreEnrollment(user.id, store.id);
       await recordStoreCheckin(user.id, store.id);
-      const checkin = await buildCheckinMessage({ userId: user.id, storeName: store.name });
+      const checkin = buildCheckinMessage();
       await updateSession(session.id, {
         lastInboundMessageId: input.messageSid,
       });
@@ -410,7 +404,7 @@ export const processWhatsappOnboardingMessage = async (
       };
     }
 
-    if (!user.birthDate) {
+    if (shouldRequireBirthDate() && !user.birthDate) {
       await updateSession(session.id, {
         userId: user.id,
         pendingStoreId: store.id,
@@ -482,6 +476,26 @@ export const processWhatsappOnboardingMessage = async (
       })
       .where(eq(users.id, user.id));
 
+    if (!shouldRequireBirthDate()) {
+      const storeName = await getStoreName(session.pendingStoreId);
+      const completed = await buildCompletionMessage({ userId: user.id, storeName });
+      if (session.pendingStoreId) {
+        await recordStoreCheckin(user.id, session.pendingStoreId);
+      }
+      await updateSession(session.id, {
+        state: 'completed',
+        lastInboundMessageId: input.messageSid,
+        completedAt: new Date(),
+      });
+
+      return {
+        ...completed,
+        sessionState: 'completed',
+        userId: user.id,
+        storeId: session.pendingStoreId ?? undefined,
+      };
+    }
+
     await updateSession(session.id, {
       state: 'awaiting_birth_date',
       lastInboundMessageId: input.messageSid,
@@ -496,6 +510,26 @@ export const processWhatsappOnboardingMessage = async (
   }
 
   if (session.state === 'awaiting_birth_date') {
+    if (!shouldRequireBirthDate()) {
+      const storeName = await getStoreName(session.pendingStoreId);
+      const completed = await buildCompletionMessage({ userId: user.id, storeName });
+      if (session.pendingStoreId) {
+        await recordStoreCheckin(user.id, session.pendingStoreId);
+      }
+      await updateSession(session.id, {
+        state: 'completed',
+        lastInboundMessageId: input.messageSid,
+        completedAt: new Date(),
+      });
+
+      return {
+        ...completed,
+        sessionState: 'completed',
+        userId: user.id,
+        storeId: session.pendingStoreId ?? undefined,
+      };
+    }
+
     const birthDate = parseBirthDate(text);
     if (!birthDate) {
       await updateSession(session.id, {

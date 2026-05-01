@@ -111,6 +111,7 @@ const requestSchema = z.object({
         sku: z.string().optional(),
         unitType: z.string().optional(),
         price: z.number(),
+        stock: z.number().optional(),
         quantity: z.number(),
       }),
     ),
@@ -172,6 +173,7 @@ const requestSchema = z.object({
           storeProductId: z.string(),
           name: z.string(),
           price: z.number(),
+          stock: z.number().optional(),
           score: z.number(),
         }),
       )
@@ -193,11 +195,19 @@ type StoreProduct = {
   sku?: string;
   unitType: string;
   price: number;
+  stock: number;
 };
 
 type RankedStoreProduct = {
   product: StoreProduct;
   score: number;
+};
+
+type AddProductToDraftResult = {
+  product: StoreProduct;
+  requestedQuantity: number;
+  addedQuantity: number;
+  omittedReason?: "out_of_stock" | "limited_stock";
 };
 
 const cloneDraft = (draft: StorePosDraft): StorePosDraft => ({
@@ -223,6 +233,7 @@ const buildDraftSummary = (draft: StorePosDraft) => ({
     name: item.name,
     quantity: item.quantity,
     price: item.price,
+    stock: item.stock,
   })),
   pendingProductChoices: draft.pendingProductChoices ?? [],
   pendingProductContext: draft.pendingProductContext ?? null,
@@ -611,15 +622,31 @@ export async function POST(request: Request) {
     };
   };
 
-  const addProductToDraftById = async (storeProductId: string, quantity: number) => {
+  const addProductToDraftById = async (storeProductId: string, quantity: number): Promise<AddProductToDraftResult> => {
     const product = await findStoreProductById(storeProductId);
     if (!product) {
       throw new Error("STORE_PRODUCT_NOT_FOUND");
     }
 
     const existing = workingDraft.items.find((item) => item.storeProductId === storeProductId);
+    const productStock = typeof product.stock === "number" ? product.stock : Number.POSITIVE_INFINITY;
+    const currentQuantity = existing?.quantity ?? 0;
+    const availableToAdd = Math.max(productStock - currentQuantity, 0);
+    const addedQuantity = Math.min(quantity, availableToAdd);
+
+    if (addedQuantity <= 0) {
+      clearPendingProductChoices();
+      return {
+        product,
+        requestedQuantity: quantity,
+        addedQuantity: 0,
+        omittedReason: "out_of_stock",
+      };
+    }
+
     if (existing) {
-      existing.quantity += quantity;
+      existing.quantity += addedQuantity;
+      existing.stock = typeof product.stock === "number" ? product.stock : existing.stock;
     } else {
       workingDraft.items.push({
         storeProductId: product.id,
@@ -628,13 +655,19 @@ export async function POST(request: Request) {
         sku: product.sku,
         unitType: product.unitType,
         price: Number(product.price),
-        quantity,
+        stock: typeof product.stock === "number" ? product.stock : undefined,
+        quantity: addedQuantity,
       });
     }
 
     clearPendingProductChoices();
 
-    return product;
+    return {
+      product,
+      requestedQuantity: quantity,
+      addedQuantity,
+      omittedReason: addedQuantity < quantity ? "limited_stock" : undefined,
+    };
   };
 
   const buildAddedItem = (product: StoreProduct, quantity: number): AgentAddedItem => ({
@@ -645,14 +678,19 @@ export async function POST(request: Request) {
     lineTotal: Number(product.price) * quantity,
   });
 
-  const buildAddedItemsMessage = (addedItems: AgentAddedItem[]) => {
+  const buildAddedItemsMessage = (addedItems: AgentAddedItem[], omittedItems: string[] = []) => {
+    if (addedItems.length === 0 && omittedItems.length > 0) {
+      return `No agregué productos al pedido. Sin stock: ${omittedItems.join(", ")}.`;
+    }
+
+    const omittedText = omittedItems.length > 0 ? `\n\nOmití por falta de stock: ${omittedItems.join(", ")}.` : "";
     if (addedItems.length === 1) {
       const [item] = addedItems;
-      return `Listo, agregué **${item?.quantity} ${item?.name}** al pedido por **$${item?.lineTotal}**.`;
+      return `Listo, agregué **${item?.quantity} ${item?.name}** al pedido por **$${item?.lineTotal}**.${omittedText}`;
     }
 
     const lines = addedItems.map((item) => `- **${item.quantity} x ${item.name}** · $${item.lineTotal}`);
-    return `Listo, agregué estos productos al pedido:\n${lines.join("\n")}`;
+    return `Listo, agregué estos productos al pedido:\n${lines.join("\n")}${omittedText}`;
   };
 
   const collectAddedItemsFromDraftDiff = () => {
@@ -806,9 +844,15 @@ export async function POST(request: Request) {
       ].filter((entry): entry is { product: StoreProduct; quantity: number } => Boolean(entry.product));
 
       const addedItems: AgentAddedItem[] = [];
+      const omittedItems: string[] = [];
       for (const entry of cartSpec) {
-        const addedProduct = await addProductToDraftById(entry.product.id, entry.quantity);
-        addedItems.push(buildAddedItem(addedProduct, entry.quantity));
+        const result = await addProductToDraftById(entry.product.id, entry.quantity);
+        if (result.addedQuantity > 0) {
+          addedItems.push(buildAddedItem(result.product, result.addedQuantity));
+        }
+        if (result.omittedReason) {
+          omittedItems.push(result.product.name);
+        }
       }
 
       if (addedItems.length === 0) {
@@ -829,7 +873,7 @@ export async function POST(request: Request) {
       };
 
       return await buildFixtureResponse(
-        `${buildAddedItemsMessage(addedItems)}\n\nLa nota de voz quedó convertida en un pedido listo para cobrar.`,
+        `${buildAddedItemsMessage(addedItems, omittedItems)}\n\nLa nota de voz quedó convertida en un pedido listo para cobrar.`,
         { addedItems },
         userMessageWithTranscript,
       );
@@ -853,12 +897,18 @@ export async function POST(request: Request) {
     }
 
     const addedItems: AgentAddedItem[] = [];
+    const omittedItems: string[] = [];
     for (const entry of plannedOrder.resolved) {
-      const addedProduct = await addProductToDraftById(entry.match.product.id, entry.request.quantity);
-      addedItems.push(buildAddedItem(addedProduct, entry.request.quantity));
+      const result = await addProductToDraftById(entry.match.product.id, entry.request.quantity);
+      if (result.addedQuantity > 0) {
+        addedItems.push(buildAddedItem(result.product, result.addedQuantity));
+      }
+      if (result.omittedReason) {
+        omittedItems.push(result.product.name);
+      }
     }
 
-    const content = buildAddedItemsMessage(addedItems);
+    const content = buildAddedItemsMessage(addedItems, omittedItems);
     const renderedHtml = await renderAssistantMarkdownToHtml(content);
 
     return Response.json({
@@ -881,14 +931,17 @@ export async function POST(request: Request) {
       return resolution;
     }
 
-    const addedProduct = await addProductToDraftById(resolution.choice.storeProductId, quantity);
+    const result = await addProductToDraftById(resolution.choice.storeProductId, quantity);
 
     return {
-      resolved: true,
+      resolved: result.addedQuantity > 0,
+      reason: result.addedQuantity > 0 ? undefined : "out_of_stock",
       product: {
-        storeProductId: addedProduct.id,
-        name: addedProduct.name,
-        price: Number(addedProduct.price),
+        storeProductId: result.product.id,
+        name: result.product.name,
+        price: Number(result.product.price),
+        requestedQuantity: result.requestedQuantity,
+        addedQuantity: result.addedQuantity,
       },
       draft: buildDraftSummary(workingDraft),
     };
@@ -933,6 +986,7 @@ export async function POST(request: Request) {
         storeProductId: entry.product.id,
         name: entry.product.name,
         price: Number(entry.product.price),
+        stock: entry.product.stock,
         score: Number(entry.score.toFixed(3)),
       })),
     );
@@ -943,6 +997,8 @@ export async function POST(request: Request) {
     "Responde siempre en espanol claro y breve.",
     "Usa herramientas para cambiar el pedido, ligar clientes y confirmar ventas.",
     "No digas que una venta fue registrada si no ejecutaste confirmDraftTransaction.",
+    "No agregues productos sin stock; si una solicitud trae varios productos, agrega los disponibles y reporta los omitidos.",
+    "Si la cantidad solicitada supera la existencia, agrega solo lo disponible y dilo claramente.",
     "Si el usuario pide escanear una imagen, usa resolveCustomerCard sin input y toma el adjunto mas reciente.",
     "Tambien puedes ligar clientes por numero de telefono usando resolveCustomerCard.",
     "Tolera errores pequenos de transcripcion o dictado en nombres de producto.",
@@ -995,13 +1051,14 @@ export async function POST(request: Request) {
             throw new Error("PRODUCT_SEARCH_FAILED");
           }
 
-          const merged = new Map<string, { storeProductId: string; name: string; sku?: string; price: number; score?: number }>();
+          const merged = new Map<string, { storeProductId: string; name: string; sku?: string; price: number; stock: number; score?: number }>();
           for (const product of ((apiResults.data?.data?.storeProducts ?? []) as StoreProduct[])) {
             merged.set(product.id, {
               storeProductId: product.id,
               name: product.name,
               sku: product.sku,
               price: Number(product.price),
+              stock: product.stock,
               score: 1,
             });
           }
@@ -1013,6 +1070,7 @@ export async function POST(request: Request) {
                 name: entry.product.name,
                 sku: entry.product.sku,
                 price: Number(entry.product.price),
+                stock: entry.product.stock,
                 score: Number(entry.score.toFixed(3)),
               });
             }
@@ -1048,6 +1106,7 @@ export async function POST(request: Request) {
               storeProductId: entry.product.id,
               name: entry.product.name,
               price: Number(entry.product.price),
+              stock: entry.product.stock,
               score: Number(entry.score.toFixed(3)),
             }));
             setPendingProductChoices(query, candidates);
@@ -1060,15 +1119,18 @@ export async function POST(request: Request) {
             };
           }
 
-          const addedProduct = await addProductToDraftById(best.product.id, quantity);
+          const result = await addProductToDraftById(best.product.id, quantity);
 
           return {
-            added: true,
+            added: result.addedQuantity > 0,
+            reason: result.addedQuantity > 0 ? result.omittedReason : "out_of_stock",
             matchedQuery: query,
             product: {
-              storeProductId: addedProduct.id,
-              name: addedProduct.name,
-              price: Number(addedProduct.price),
+              storeProductId: result.product.id,
+              name: result.product.name,
+              price: Number(result.product.price),
+              requestedQuantity: result.requestedQuantity,
+              addedQuantity: result.addedQuantity,
               score: Number(best.score.toFixed(3)),
             },
             draft: buildDraftSummary(workingDraft),
@@ -1090,9 +1152,15 @@ export async function POST(request: Request) {
           quantity: z.number().int().min(1).default(1),
         }),
         execute: async ({ storeProductId, quantity }) => {
-          await addProductToDraftById(storeProductId, quantity);
+          const result = await addProductToDraftById(storeProductId, quantity);
 
-          return buildDraftSummary(workingDraft);
+          return {
+            added: result.addedQuantity > 0,
+            reason: result.addedQuantity > 0 ? result.omittedReason : "out_of_stock",
+            requestedQuantity: result.requestedQuantity,
+            addedQuantity: result.addedQuantity,
+            draft: buildDraftSummary(workingDraft),
+          };
         },
       }),
       updateDraftItemQuantity: tool({
@@ -1106,7 +1174,9 @@ export async function POST(request: Request) {
           workingDraft.items = quantity === 0
             ? workingDraft.items.filter((item) => item.storeProductId !== storeProductId)
             : workingDraft.items.map((item) =>
-                item.storeProductId === storeProductId ? { ...item, quantity } : item,
+                item.storeProductId === storeProductId
+                  ? { ...item, quantity: typeof item.stock === "number" ? Math.min(quantity, item.stock) : quantity }
+                  : item,
               );
 
           return buildDraftSummary(workingDraft);

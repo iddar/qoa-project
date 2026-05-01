@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/providers/auth-provider";
-import { createEmptyDraft, type DraftCustomer, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
+import { createEmptyDraft, getStockLimitedQuantity, type DraftCustomer, type DraftItem, type DraftTransaction, type StorePosDraft } from "@/lib/store-pos";
 
 type StorePosContextValue = {
   draft: StorePosDraft;
@@ -68,21 +68,28 @@ export function StorePosProvider({ children }: { children: React.ReactNode }) {
       setAgentOpen,
       addItem: (item, quantity = 1) => {
         setDraft((current) => {
+          const availableStock = typeof item.stock === "number" ? Math.max(item.stock, 0) : null;
+          if (availableStock === 0) {
+            return current;
+          }
+
           const existing = current.items.find((entry) => entry.storeProductId === item.storeProductId);
           if (existing) {
+            const nextQuantity = getStockLimitedQuantity(existing.quantity + quantity, item.stock);
             return {
               ...current,
               items: current.items.map((entry) =>
                 entry.storeProductId === item.storeProductId
-                  ? { ...entry, quantity: entry.quantity + quantity }
+                  ? { ...entry, ...item, quantity: nextQuantity }
                   : entry,
               ),
             };
           }
 
+          const nextQuantity = getStockLimitedQuantity(quantity, item.stock);
           return {
             ...current,
-            items: [...current.items, { ...item, quantity }],
+            items: [...current.items, { ...item, quantity: nextQuantity }],
           };
         });
       },
@@ -93,7 +100,9 @@ export function StorePosProvider({ children }: { children: React.ReactNode }) {
             quantity <= 0
               ? current.items.filter((entry) => entry.storeProductId !== storeProductId)
               : current.items.map((entry) =>
-                  entry.storeProductId === storeProductId ? { ...entry, quantity } : entry,
+                  entry.storeProductId === storeProductId
+                    ? { ...entry, quantity: getStockLimitedQuantity(quantity, entry.stock) }
+                    : entry,
                 ),
         }));
       },

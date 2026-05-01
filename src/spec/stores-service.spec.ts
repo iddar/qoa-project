@@ -7,16 +7,16 @@ describe('Stores service', () => {
 
     const payload = generateStoreQrPayload({
       id: '11111111-1111-4111-8111-111111111111',
-      code: 'sto_seed_123',
+      code: 'JUANITA',
     });
 
-    expect(payload.code).toBe('sto_seed_123');
-    expect(payload.registrationUrl).toBe('https://wa.me/14155238886?text=Quiero+registrar+mi+compra+en+sto_seed_123');
+    expect(payload.code).toBe('JUANITA');
+    expect(payload.registrationUrl).toBe('https://wa.me/14155238886?text=Quiero+registrar+mi+compra+en+JUANITA');
     expect(payload.expiresAt).toBeUndefined();
     expect(payload.payload).toEqual({
       entityType: 'store',
       entityId: '11111111-1111-4111-8111-111111111111',
-      code: 'sto_seed_123',
+      code: 'JUANITA',
     });
   });
 });

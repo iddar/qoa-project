@@ -238,14 +238,7 @@ describe('WhatsApp module', () => {
       const nameBody = (await nameResponse.json()) as { data: { sessionState?: string } };
 
       expect(nameResponse.status).toBe(201);
-      expect(nameBody.data.sessionState).toBe('awaiting_birth_date');
-
-      const birthPayload = buildTwilioPayload({ From: waPhone, Body: '07/11/1994', WaId: phone.slice(1) });
-      const birthResponse = await app.handle(buildTwilioRequest(birthPayload));
-      const birthBody = (await birthResponse.json()) as { data: { sessionState?: string } };
-
-      expect(birthResponse.status).toBe(201);
-      expect(birthBody.data.sessionState).toBe('completed');
+      expect(nameBody.data.sessionState).toBe('completed');
 
       const [createdUser] = (await db
         .select({ id: users.id, name: users.name, birthDate: users.birthDate })
@@ -253,7 +246,20 @@ describe('WhatsApp module', () => {
         .where(eq(users.phone, phone))) as Array<{ id: string; name: string | null; birthDate: Date | null }>;
 
       expect(createdUser?.name).toBe('Iddar Cliente');
-      expect(createdUser?.birthDate?.toISOString().slice(0, 10)).toBe('1994-11-07');
+      expect(createdUser?.birthDate).toBeNull();
+
+      const [completionMessage] = (await db
+        .select({ textBody: whatsappMessages.textBody, payload: whatsappMessages.payload })
+        .from(whatsappMessages)
+        .where(and(eq(whatsappMessages.direction, 'outbound'), eq(whatsappMessages.toPhone, waPhone)))
+        .orderBy(desc(whatsappMessages.receivedAt))
+        .limit(1)) as Array<{ textBody: string | null; payload: string | null }>;
+
+      expect(completionMessage?.textBody).toContain(
+        'Ya estás enrolado en el esquema de lealtad de Tienda WhatsApp Uno',
+      );
+      expect(completionMessage?.textBody).toContain('https://digital-wallet-production-93fb.up.railway.app');
+      expect(completionMessage?.payload ?? '').toContain('/v1/whatsapp/cards/');
 
       const initialCards = (await db
         .select({ id: cards.id, code: cards.code })
@@ -268,6 +274,16 @@ describe('WhatsApp module', () => {
 
       expect(secondStoreResponse.status).toBe(201);
       expect(secondStoreBody.data.sessionState).toBe('completed');
+
+      const [checkinMessage] = (await db
+        .select({ textBody: whatsappMessages.textBody, payload: whatsappMessages.payload })
+        .from(whatsappMessages)
+        .where(and(eq(whatsappMessages.direction, 'outbound'), eq(whatsappMessages.toPhone, waPhone)))
+        .orderBy(desc(whatsappMessages.receivedAt))
+        .limit(1)) as Array<{ textBody: string | null; payload: string | null }>;
+
+      expect(checkinMessage?.textBody).toBe('Gracias por tu visita, comentale a tu tendero que confirma tu visita.');
+      expect(checkinMessage?.payload ?? '').not.toContain('/v1/whatsapp/cards/');
 
       const cardsAfterSecondStore = (await db
         .select({ id: cards.id, code: cards.code })
@@ -288,6 +304,36 @@ describe('WhatsApp module', () => {
       await cleanupPhoneData(phone);
       await db.delete(stores).where(and(eq(stores.id, firstStore.id), eq(stores.code, firstStore.code)));
       await db.delete(stores).where(and(eq(stores.id, secondStore.id), eq(stores.code, secondStore.code)));
+    }
+  });
+
+  it('keeps birth date request when WHATSAPP_REQUIRE_BIRTH_DATE is enabled', async () => {
+    const previousFlag = process.env.WHATSAPP_REQUIRE_BIRTH_DATE;
+    process.env.WHATSAPP_REQUIRE_BIRTH_DATE = 'true';
+    const phone = '+5215512000091';
+    const waPhone = `whatsapp:${phone}`;
+    const store = await createStore('Tienda Fecha Requerida');
+
+    try {
+      await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: store.code, WaId: phone.slice(1) })),
+      );
+
+      const nameResponse = await app.handle(
+        buildTwilioRequest(buildTwilioPayload({ From: waPhone, Body: 'Cliente Fecha', WaId: phone.slice(1) })),
+      );
+      const nameBody = (await nameResponse.json()) as { data: { sessionState?: string } };
+
+      expect(nameResponse.status).toBe(201);
+      expect(nameBody.data.sessionState).toBe('awaiting_birth_date');
+    } finally {
+      if (previousFlag === undefined) {
+        delete process.env.WHATSAPP_REQUIRE_BIRTH_DATE;
+      } else {
+        process.env.WHATSAPP_REQUIRE_BIRTH_DATE = previousFlag;
+      }
+      await cleanupPhoneData(phone);
+      await db.delete(stores).where(eq(stores.id, store.id));
     }
   });
 
@@ -359,7 +405,7 @@ describe('WhatsApp module', () => {
   it('accepts store onboarding with alta plus existing store code', async () => {
     const phone = '+5215512000004';
     const waPhone = `whatsapp:${phone}`;
-    const store = await createStore('Tienda Seed Staging', 'seed_store_staging');
+    const store = await createStore('Tienda Staging Bonita', 'JUANITA_STG');
 
     try {
       const response = await app.handle(

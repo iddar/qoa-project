@@ -181,3 +181,10 @@ export const blockUserResponse = t.Object({
     blockedReason: t.Optional(t.String()),
   }),
 });
+
+export const userDeleteResponse = t.Object({
+  data: t.Object({
+    id: t.String(),
+    deleted: t.Boolean(),
+  }),
+});
