@@ -52,8 +52,8 @@ export const ensureUniversalCampaign = async () => {
     .insert(campaigns)
     .values({
       key: UNIVERSAL_CAMPAIGN_KEY,
-      name: 'Qoa Universal Wallet',
-      description: 'Campaña base para acumulación universal de onboarding wallet.',
+      name: 'Puntos base de lealtad',
+      description: 'Acumulación base para compras elegibles en tiendas participantes.',
       status: 'active',
       enrollmentMode: 'system_universal',
       startsAt: new Date(),

@@ -858,7 +858,7 @@ const buildSeedStoreVariants = (scope: string, count: number): SeedStorePayload[
 const upsertSeedStore = async (scope: SeedScope): Promise<string> => {
   const code = PRIMARY_STORE_CODES[scope];
   const addr = SEED_STORE_ADDRESSES[0]!;
-  const name = `Abarrotes Juanita ${scope === 'development' ? 'Demo' : scope}`;
+  const name = 'Abarrotes Juanita';
 
   const [existing] = (await db.select({ id: stores.id }).from(stores).where(eq(stores.code, code)).limit(1)) as Array<{
     id: string;
@@ -915,7 +915,7 @@ const upsertSeedStore = async (scope: SeedScope): Promise<string> => {
 };
 
 const upsertSeedBrand = async (scope: string, cpgId: string): Promise<string> => {
-  const name = `Refrescos Monte (${scope})`;
+  const name = `Refrescos Monte`;
 
   const [existing] = (await db
     .select({ id: brands.id })
@@ -1042,7 +1042,7 @@ const upsertSeedCampaign = async (scope: string, cpgId: string): Promise<string>
     await db
       .update(campaigns)
       .set({
-        name: `Reto Compra Vecinal (${scope})`,
+        name: `Reto Compra Vecinal`,
         description: 'Acumula puntos por compras frecuentes en tienditas participantes.',
         cpgId,
         status: 'active',
@@ -1058,7 +1058,7 @@ const upsertSeedCampaign = async (scope: string, cpgId: string): Promise<string>
     .insert(campaigns)
     .values({
       key,
-      name: `Reto Compra Vecinal (${scope})`,
+      name: `Reto Compra Vecinal`,
       description: 'Acumula puntos por compras frecuentes en tienditas participantes.',
       cpgId,
       status: 'active',
@@ -1071,7 +1071,7 @@ const upsertSeedCampaign = async (scope: string, cpgId: string): Promise<string>
 };
 
 const upsertSeedReward = async (scope: string, campaignId: string): Promise<string> => {
-  const name = `Canasta de Lealtad (${scope})`;
+  const name = `Canasta de Lealtad`;
 
   const [existing] = (await db
     .select({ id: rewards.id })
@@ -1300,18 +1300,14 @@ const upsertSeedCatalog = async (scope: string, cpgId: string) => {
   }> = [];
 
   for (const item of SEED_CATALOG) {
-    const brandId = await upsertBrandByName(cpgId, `${item.brandName} (${scope})`);
-    const productId = await upsertProductBySku(
-      brandId,
-      `${item.sku}-${scope.toUpperCase()}`,
-      `${item.name} (${scope})`,
-    );
+    const brandId = await upsertBrandByName(cpgId, `${item.brandName}`);
+    const productId = await upsertProductBySku(brandId, `${item.sku}-${scope.toUpperCase()}`, `${item.name}`);
 
     catalogEntries.push({
       productId,
       brandId,
       sku: `${item.sku}-${scope.toUpperCase()}`,
-      name: `${item.name} (${scope})`,
+      name: `${item.name}`,
       price: item.price,
     });
   }
@@ -1530,7 +1526,7 @@ const ensurePolicy = async (payload: {
  * Uses the CPG name as the stable identity key.
  */
 const upsertSeedCpg = async (scope: string): Promise<string> => {
-  const name = `Grupo Sabores Cercanos (${scope})`;
+  const name = `Grupo Sabores Cercanos`;
 
   const [existing] = (await db.select({ id: cpgs.id }).from(cpgs).where(eq(cpgs.name, name)).limit(1)) as Array<{
     id: string;
@@ -1963,21 +1959,21 @@ const baseUsers = (scope: string, cpgId: string, storeId: string): SeedUser[] =>
   {
     email: `admin.${scope}@qoa.local`,
     phone: `+52155100000${scope === 'test' ? '01' : scope === 'local' ? '02' : scope === 'staging' ? '04' : '03'}`,
-    name: `Qoa Admin (${scope})`,
+    name: 'Administracion QOA',
     role: 'qoa_admin',
     password: DEFAULT_PASSWORD,
   },
   {
     email: `support.${scope}@qoa.local`,
     phone: `+52155100000${scope === 'test' ? '11' : scope === 'local' ? '12' : scope === 'staging' ? '14' : '13'}`,
-    name: `Qoa Support (${scope})`,
+    name: 'Soporte QOA',
     role: 'qoa_support',
     password: DEFAULT_PASSWORD,
   },
   {
     email: `store.${scope}@qoa.local`,
     phone: `+52155100000${scope === 'test' ? '21' : scope === 'local' ? '22' : scope === 'staging' ? '24' : '23'}`,
-    name: `Store Admin (${scope})`,
+    name: 'Tendero Juanita',
     role: 'store_admin',
     password: DEFAULT_PASSWORD,
     tenantId: storeId,
@@ -1986,14 +1982,14 @@ const baseUsers = (scope: string, cpgId: string, storeId: string): SeedUser[] =>
   {
     email: `consumer.${scope}@qoa.local`,
     phone: `+52155100000${scope === 'test' ? '31' : scope === 'local' ? '32' : scope === 'staging' ? '34' : '33'}`,
-    name: `Consumer (${scope})`,
+    name: 'Valeria Martinez',
     role: 'consumer',
     password: DEFAULT_PASSWORD,
   },
   {
     email: `cpg.${scope}@qoa.local`,
     phone: `+52155100000${scope === 'test' ? '41' : scope === 'local' ? '42' : scope === 'staging' ? '44' : '43'}`,
-    name: `CPG Admin (${scope})`,
+    name: 'Gerente Sabores Cercanos',
     role: 'cpg_admin',
     password: DEFAULT_PASSWORD,
     tenantId: cpgId,
@@ -2072,7 +2068,7 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
     const addrB = SEED_STORE_ADDRESSES[1]!;
     const secondaryStoreId = await upsertStoreByCode({
       code: SECONDARY_STORE_CODES[scope],
-      name: `Miscelánea Don Pepe ${scope === 'development' ? 'Demo' : scope}`,
+      name: 'Miscelánea Don Pepe',
       type: addrB.type,
       address: buildAddress(addrB),
       phone: `+52155899000${scope === 'local' ? '12' : scope === 'staging' ? '14' : '13'}`,
@@ -2118,8 +2114,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     const openCampaignId = await upsertCampaignByKey({
       key: `qoa_seed_open_${scope}`,
-      name: `Puntos en Cada Compra (${scope})`,
-      description: 'Campaña abierta para demostrar acumulación automática en tiendas relacionadas.',
+      name: `Puntos en Cada Compra`,
+      description: 'Acumula puntos automáticamente en cada compra elegible de tiendas participantes.',
       cpgId,
       storeAccessMode: 'all_related_stores',
       storeEnrollmentMode: 'auto_enroll',
@@ -2129,8 +2125,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     const flashCampaignId = await upsertCampaignByKey({
       key: `qoa_seed_flash_${scope}`,
-      name: `Promoción de Fin de Semana (${scope})`,
-      description: 'Campaña de temporada para demostrar variantes de recompensas.',
+      name: `Promoción de Fin de Semana`,
+      description: 'Puntos extra y recompensas especiales durante el fin de semana.',
       cpgId,
       storeAccessMode: 'selected_stores',
       storeEnrollmentMode: 'store_opt_in',
@@ -2140,8 +2136,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     await upsertCampaignByKey({
       key: `qoa_seed_reto_${scope}`,
-      name: `Reto Compra Vecinal (${scope})`,
-      description: 'Campaña de prueba para wallet/recompensas en entorno local.',
+      name: `Reto Compra Vecinal`,
+      description: 'Gana puntos por visitar y comprar de forma recurrente en tu tiendita.',
       cpgId,
       storeAccessMode: 'selected_stores',
       storeEnrollmentMode: 'store_opt_in',
@@ -2178,28 +2174,28 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
       rewardId,
       await upsertRewardByName({
         campaignId,
-        name: `Cupón 2x1 Botanas (${scope})`,
-        description: 'Cupón promocional para demos de canje.',
+        name: `Cupón 2x1 Botanas`,
+        description: 'Cupón promocional para canjear botanas participantes.',
         cost: 30,
         stock: 120,
       }),
       await upsertRewardByName({
         campaignId: openCampaignId,
-        name: `Bono Compra Frecuente (${scope})`,
+        name: `Bono Compra Frecuente`,
         description: 'Recompensa activa para campaña abierta.',
         cost: 20,
         stock: 140,
       }),
       await upsertRewardByName({
         campaignId: openCampaignId,
-        name: `Bono Familiar (${scope})`,
-        description: 'Recompensa adicional para demostrar variedad.',
+        name: `Bono Familiar`,
+        description: 'Apoyo en puntos para compras familiares frecuentes.',
         cost: 120,
         stock: 90,
       }),
       await upsertRewardByName({
         campaignId: flashCampaignId,
-        name: `Premio Fin de Semana (${scope})`,
+        name: `Premio Fin de Semana`,
         description: 'Recompensa de campaña flash.',
         cost: 25,
         stock: 80,
@@ -2272,40 +2268,40 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
     }
 
     // ── CPG 2: Refrescos del Norte S.A. ───────────────────────────────────────
-    const cpg2Id = await upsertCpgByName(`Refrescos del Norte S.A. (${scope})`);
-    const cpg2BrandId = await upsertBrandByName(cpg2Id, `Bebidas Norte (${scope})`);
+    const cpg2Id = await upsertCpgByName(`Refrescos del Norte S.A.`);
+    const cpg2BrandId = await upsertBrandByName(cpg2Id, `Bebidas Norte`);
     const cpg2Catalog = [
       {
         productId: await upsertProductBySku(
           cpg2BrandId,
           `RDN-MINERAL-500-${scope.toUpperCase()}`,
-          `Agua Mineral 500 ml (${scope})`,
+          `Agua Mineral 500 ml`,
         ),
         brandId: cpg2BrandId,
         sku: `RDN-MINERAL-500-${scope.toUpperCase()}`,
-        name: `Agua Mineral 500 ml (${scope})`,
+        name: `Agua Mineral 500 ml`,
         price: 12,
       },
       {
         productId: await upsertProductBySku(
           cpg2BrandId,
           `RDN-JUGO-NARANJA-330-${scope.toUpperCase()}`,
-          `Jugo Naranja 330 ml (${scope})`,
+          `Jugo Naranja 330 ml`,
         ),
         brandId: cpg2BrandId,
         sku: `RDN-JUGO-NARANJA-330-${scope.toUpperCase()}`,
-        name: `Jugo Naranja 330 ml (${scope})`,
+        name: `Jugo Naranja 330 ml`,
         price: 22,
       },
       {
         productId: await upsertProductBySku(
           cpg2BrandId,
           `RDN-ISOTONIC-600-${scope.toUpperCase()}`,
-          `Bebida Isotónica 600 ml (${scope})`,
+          `Bebida Isotónica 600 ml`,
         ),
         brandId: cpg2BrandId,
         sku: `RDN-ISOTONIC-600-${scope.toUpperCase()}`,
-        name: `Bebida Isotónica 600 ml (${scope})`,
+        name: `Bebida Isotónica 600 ml`,
         price: 28,
       },
     ];
@@ -2316,7 +2312,7 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     const cpg2Campaign1Id = await upsertCampaignByKey({
       key: `qoa_seed_norte_promo_${scope}`,
-      name: `Promo Norte (${scope})`,
+      name: `Promo Norte`,
       description: 'Campaña de acumulación abierta para todas las tiendas relacionadas.',
       cpgId: cpg2Id,
       storeAccessMode: 'all_related_stores',
@@ -2327,7 +2323,7 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     const cpg2Campaign2Id = await upsertCampaignByKey({
       key: `qoa_seed_norte_reto_${scope}`,
-      name: `Reto Norte (${scope})`,
+      name: `Reto Norte`,
       description: 'Reto de temporada para tiendas seleccionadas.',
       cpgId: cpg2Id,
       storeAccessMode: 'selected_stores',
@@ -2338,14 +2334,14 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     await upsertRewardByName({
       campaignId: cpg2Campaign1Id,
-      name: `Cupón Norte Bebidas (${scope})`,
+      name: `Cupón Norte Bebidas`,
       description: 'Descuento en compra de bebidas Refrescos del Norte.',
       cost: 15,
       stock: 200,
     });
     await upsertRewardByName({
       campaignId: cpg2Campaign2Id,
-      name: `Premio Reto Norte (${scope})`,
+      name: `Premio Reto Norte`,
       description: 'Premio exclusivo al completar el reto de temporada.',
       cost: 40,
       stock: 60,
@@ -2372,51 +2368,47 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
     });
 
     // ── CPG 3: Grupo Abarrotes Universal ──────────────────────────────────────
-    const cpg3Id = await upsertCpgByName(`Grupo Abarrotes Universal (${scope})`);
-    const cpg3BrandId = await upsertBrandByName(cpg3Id, `Abarrotes Universal (${scope})`);
+    const cpg3Id = await upsertCpgByName(`Grupo Abarrotes Universal`);
+    const cpg3BrandId = await upsertBrandByName(cpg3Id, `Abarrotes Universal`);
     const cpg3Catalog = [
       {
-        productId: await upsertProductBySku(
-          cpg3BrandId,
-          `GAU-ARROZ-1KG-${scope.toUpperCase()}`,
-          `Arroz Blanco 1 kg (${scope})`,
-        ),
+        productId: await upsertProductBySku(cpg3BrandId, `GAU-ARROZ-1KG-${scope.toUpperCase()}`, `Arroz Blanco 1 kg`),
         brandId: cpg3BrandId,
         sku: `GAU-ARROZ-1KG-${scope.toUpperCase()}`,
-        name: `Arroz Blanco 1 kg (${scope})`,
+        name: `Arroz Blanco 1 kg`,
         price: 28,
       },
       {
         productId: await upsertProductBySku(
           cpg3BrandId,
           `GAU-FRIJOL-900G-${scope.toUpperCase()}`,
-          `Frijol Negro 900 g (${scope})`,
+          `Frijol Negro 900 g`,
         ),
         brandId: cpg3BrandId,
         sku: `GAU-FRIJOL-900G-${scope.toUpperCase()}`,
-        name: `Frijol Negro 900 g (${scope})`,
+        name: `Frijol Negro 900 g`,
         price: 34,
       },
       {
         productId: await upsertProductBySku(
           cpg3BrandId,
           `GAU-ACEITE-900ML-${scope.toUpperCase()}`,
-          `Aceite Vegetal 900 ml (${scope})`,
+          `Aceite Vegetal 900 ml`,
         ),
         brandId: cpg3BrandId,
         sku: `GAU-ACEITE-900ML-${scope.toUpperCase()}`,
-        name: `Aceite Vegetal 900 ml (${scope})`,
+        name: `Aceite Vegetal 900 ml`,
         price: 42,
       },
       {
         productId: await upsertProductBySku(
           cpg3BrandId,
           `GAU-AZUCAR-1KG-${scope.toUpperCase()}`,
-          `Azúcar Estándar 1 kg (${scope})`,
+          `Azúcar Estándar 1 kg`,
         ),
         brandId: cpg3BrandId,
         sku: `GAU-AZUCAR-1KG-${scope.toUpperCase()}`,
-        name: `Azúcar Estándar 1 kg (${scope})`,
+        name: `Azúcar Estándar 1 kg`,
         price: 26,
       },
     ];
@@ -2427,7 +2419,7 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     const cpg3Campaign1Id = await upsertCampaignByKey({
       key: `qoa_seed_universal_promo_${scope}`,
-      name: `Promo Universal (${scope})`,
+      name: `Promo Universal`,
       description: 'Acumulación automática para tiendas relacionadas con Abarrotes Universal.',
       cpgId: cpg3Id,
       storeAccessMode: 'all_related_stores',
@@ -2438,7 +2430,7 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     const cpg3Campaign2Id = await upsertCampaignByKey({
       key: `qoa_seed_universal_flash_${scope}`,
-      name: `Flash Universal (${scope})`,
+      name: `Flash Universal`,
       description: 'Promoción flash quincenal de abarrotes básicos.',
       cpgId: cpg3Id,
       storeAccessMode: 'selected_stores',
@@ -2449,21 +2441,21 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
 
     await upsertRewardByName({
       campaignId: cpg3Campaign1Id,
-      name: `Despensa Básica (${scope})`,
+      name: `Despensa Básica`,
       description: 'Canjeable por productos básicos de la canasta.',
       cost: 20,
       stock: 180,
     });
     await upsertRewardByName({
       campaignId: cpg3Campaign1Id,
-      name: `Despensa Premium (${scope})`,
+      name: `Despensa Premium`,
       description: 'Recompensa de alto valor para consumidores frecuentes.',
       cost: 50,
       stock: 70,
     });
     await upsertRewardByName({
       campaignId: cpg3Campaign2Id,
-      name: `Flash Despensa (${scope})`,
+      name: `Flash Despensa`,
       description: 'Premio especial campaña flash.',
       cost: 30,
       stock: 90,
