@@ -255,7 +255,9 @@ describe('WhatsApp module', () => {
         .orderBy(desc(whatsappMessages.receivedAt))
         .limit(1)) as Array<{ textBody: string | null; payload: string | null }>;
 
-      expect(completionMessage?.textBody).toContain('Ya estás enrolado en el esquema de lealtad de Tienda WhatsApp Uno');
+      expect(completionMessage?.textBody).toContain(
+        'Ya estás enrolado en el esquema de lealtad de Tienda WhatsApp Uno',
+      );
       expect(completionMessage?.textBody).toContain('https://digital-wallet-production-93fb.up.railway.app');
       expect(completionMessage?.payload ?? '').toContain('/v1/whatsapp/cards/');
 

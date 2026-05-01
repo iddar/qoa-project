@@ -163,7 +163,11 @@ export const usersModule = new Elysia({
       }
 
       const deleted = await db.transaction(async (tx) => {
-        const [existing] = (await tx.select({ id: users.id }).from(users).where(eq(users.id, params.id)).limit(1)) as Array<{
+        const [existing] = (await tx
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.id, params.id))
+          .limit(1)) as Array<{
           id: string;
         }>;
 

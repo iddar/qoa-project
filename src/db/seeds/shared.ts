@@ -33,6 +33,8 @@ type SeedUser = {
   tenantType?: 'cpg' | 'store';
 };
 
+type SeedScope = 'development' | 'local' | 'staging' | 'test';
+
 type SeedCatalogItem = {
   brandName: string;
   sku: string;
@@ -745,13 +747,13 @@ const buildAddress = (addr: SeedStoreAddress): string => {
 
 const TOTAL_SEED_STORES = 100;
 const RELATED_SEED_STORES = 50;
-const PRIMARY_STORE_CODES: Record<'development' | 'local' | 'staging' | 'test', string> = {
+const PRIMARY_STORE_CODES: Record<SeedScope, string> = {
   development: 'JUANITA_DEV',
   local: 'JUANITA_LOCAL',
   staging: 'JUANITA_STG',
   test: 'JUANITA_TEST',
 };
-const SECONDARY_STORE_CODES: Record<'development' | 'local' | 'staging' | 'test', string> = {
+const SECONDARY_STORE_CODES: Record<SeedScope, string> = {
   development: 'DON_PEPE_DEV',
   local: 'DON_PEPE_LOCAL',
   staging: 'DON_PEPE_STG',
@@ -853,7 +855,7 @@ const buildSeedStoreVariants = (scope: string, count: number): SeedStorePayload[
   return variants;
 };
 
-const upsertSeedStore = async (scope: string): Promise<string> => {
+const upsertSeedStore = async (scope: SeedScope): Promise<string> => {
   const code = PRIMARY_STORE_CODES[scope];
   const addr = SEED_STORE_ADDRESSES[0]!;
   const name = `Abarrotes Juanita ${scope === 'development' ? 'Demo' : scope}`;
