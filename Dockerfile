@@ -9,6 +9,7 @@ COPY apps/backoffice/package.json apps/backoffice/package.json
 COPY apps/cpg-portal/package.json apps/cpg-portal/package.json
 COPY apps/store-dashboard/package.json apps/store-dashboard/package.json
 COPY apps/digital-wallet/package.json apps/digital-wallet/package.json
+COPY apps/demo-studio/package.json apps/demo-studio/package.json
 COPY packages/api-client/package.json packages/api-client/package.json
 COPY packages/auth-client/package.json packages/auth-client/package.json
 COPY packages/ui/package.json packages/ui/package.json

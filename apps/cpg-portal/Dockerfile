@@ -13,6 +13,7 @@ COPY apps/backoffice/package.json ./apps/backoffice/
 COPY apps/cpg-portal/package.json ./apps/cpg-portal/
 COPY apps/store-dashboard/package.json ./apps/store-dashboard/
 COPY apps/digital-wallet/package.json ./apps/digital-wallet/
+COPY apps/demo-studio/package.json ./apps/demo-studio/
 
 RUN bun install --frozen-lockfile
 
