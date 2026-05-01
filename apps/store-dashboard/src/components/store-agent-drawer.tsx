@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ArrowDown, AudioLines, Bot, Camera, LoaderCircle, MessageSquarePlus, Mic, Paperclip, QrCode, ScanLine, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { ArrowDown, AudioLines, Bot, Camera, LoaderCircle, MessageSquarePlus, Mic, Paperclip, QrCode, ScanLine, SendHorizontal, Sparkles, Trash2, X } from "lucide-react";
 import { getAccessToken } from "@/lib/auth";
 import { createClientId } from "@/lib/id";
 import { getInitialCopilotActions } from "@/lib/store-copilot";
@@ -248,6 +248,8 @@ export function StoreAgentDrawer() {
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingStartedAtRef = useRef<number | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
+  const recordingStopActionRef = useRef<"attach" | "discard" | "send">("attach");
+  const inputRef = useRef("");
   const qrScannerRegionIdRef = useRef(`store-agent-live-qr-${createClientId()}`);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -317,6 +319,10 @@ export function StoreAgentDrawer() {
       mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     };
   }, []);
+
+  useEffect(() => {
+    inputRef.current = input;
+  }, [input]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof navigator === "undefined") {
@@ -761,7 +767,7 @@ export function StoreAgentDrawer() {
 
     if (blob.size === 0) {
       setRecordingError("La nota de voz salió vacía. Intenta grabar otra vez.");
-      return;
+      return null;
     }
 
     if (!signalDetected && durationMs && durationMs > 1500) {
@@ -792,6 +798,8 @@ export function StoreAgentDrawer() {
       current.filter((entry) => entry.kind === "audio").forEach(revokeAttachmentPreviewUrl);
       return [...current.filter((entry) => entry.kind !== "audio"), attachment];
     });
+
+    return attachment;
   };
 
   const startRecording = async () => {
@@ -878,6 +886,8 @@ export function StoreAgentDrawer() {
       };
 
       recorder.onstop = async () => {
+        const stopAction = recordingStopActionRef.current;
+        recordingStopActionRef.current = "attach";
         const contentType = recorder.mimeType || mimeType || "audio/webm";
         const blob = new Blob(audioChunksRef.current, { type: contentType });
         const durationMs = recordingStartedAtRef.current ? Date.now() - recordingStartedAtRef.current : recordingDurationMs;
@@ -903,7 +913,14 @@ export function StoreAgentDrawer() {
         audioContextRef.current = null;
         setRecordingLiveLevel(0);
 
-        await attachAudioBlob(blob, contentType, durationMs);
+        if (stopAction === "discard") {
+          return;
+        }
+
+        const attachment = await attachAudioBlob(blob, contentType, durationMs);
+        if (stopAction === "send" && attachment) {
+          await sendMessage(inputRef.current, [attachment]);
+        }
       };
 
       mediaRecorderRef.current = recorder;
@@ -930,7 +947,8 @@ export function StoreAgentDrawer() {
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (action: "attach" | "discard" | "send" = "attach") => {
+    recordingStopActionRef.current = action;
     mediaRecorderRef.current?.stop();
   };
 
@@ -1224,7 +1242,7 @@ export function StoreAgentDrawer() {
         {recordingError ? <p className="mb-3 text-xs text-red-500">{recordingError}</p> : null}
 
         {isRecording ? (
-          <div className="mb-3 flex items-center justify-between rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse" />
               <div className="min-w-0 flex-1">
@@ -1237,10 +1255,14 @@ export function StoreAgentDrawer() {
                 </div>
               </div>
             </div>
-            <button type="button" onClick={stopRecording} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white">
-              <Square className="h-3.5 w-3.5" />
-              Detener
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button type="button" onClick={() => stopRecording("discard")} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-500" aria-label="Cancelar nota de voz">
+                <X className="h-4 w-4" />
+              </button>
+              <button type="button" onClick={() => stopRecording("send")} className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-500" aria-label="Enviar nota de voz">
+                <SendHorizontal className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         ) : null}
 
