@@ -181,25 +181,63 @@ const nextStatusAction: Partial<
     confirmed: { label: "Activar", action: "activate" },
 };
 
+const campaignStatusLabel: Record<CampaignStatus, string> = {
+    draft: "Borrador",
+    ready_for_review: "Lista para revisión",
+    in_review: "En revisión",
+    rejected: "Rechazada",
+    confirmed: "Confirmada",
+    active: "Activa",
+    paused: "Pausada",
+    ended: "Finalizada",
+};
+
+const periodLabel: Record<PeriodType, string> = {
+    transaction: "transacción",
+    day: "día",
+    week: "semana",
+    month: "mes",
+    lifetime: "vigencia completa",
+};
+
+const scopeTypeLabel: Record<ScopeType, string> = {
+    campaign: "campaña",
+    brand: "marca",
+    product: "producto",
+};
+
+const tierWindowLabel: Record<TierWindowUnit, string> = {
+    day: "día",
+    month: "mes",
+    year: "año",
+};
+
+const qualificationModeLabel: Record<TierQualificationMode, string> = {
+    any: "cualquier requisito",
+    all: "todos los requisitos",
+};
+
 const formatPolicyLabel = (policy: CampaignPolicy) => {
+    const period = periodLabel[policy.period];
+
     if (policy.policyType === "min_amount") {
-        return `Compra mínima de $${policy.value.toLocaleString("es-MX")} por ${policy.period}`;
+        return `Compra mínima de $${policy.value.toLocaleString("es-MX")} por ${period}`;
     }
 
     if (policy.policyType === "min_quantity") {
-        return `Compra mínima de ${policy.value} pieza(s) por ${policy.period}`;
+        return `Compra mínima de ${policy.value} pieza(s) por ${period}`;
     }
 
     if (policy.policyType === "max_accumulations") {
-        return `Máximo ${policy.value} acumulaciones por ${policy.period}`;
+        return `Máximo ${policy.value} acumulaciones por ${period}`;
     }
 
-    return `Enfriamiento de ${policy.value} unidades por ${policy.period}`;
+    return `Enfriamiento de ${policy.value} unidades por ${period}`;
 };
 
 const enrollmentModeLabel: Record<string, string> = {
     open: "Abierta",
-    opt_in: "Por suscripcion",
+    opt_in: "Por suscripción",
     system_universal: "Universal del sistema",
 };
 
@@ -224,9 +262,9 @@ function Modal({
 }) {
     return (
         <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40 px-4">
-            <div className="w-full max-w-xl rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="flex items-center justify-between gap-4">
+                    <h3 className="min-w-0 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {title}
                     </h3>
                     <button
@@ -768,10 +806,10 @@ export default function CampaignDetailPage() {
     };
 
     return (
-        <div className="max-w-6xl space-y-6">
-            <header className="flex items-start justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+        <div className="max-w-6xl min-w-0 space-y-6">
+            <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                    <h1 className="break-words text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                         {campaign?.name ?? "Campaña"}
                     </h1>
                     <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -784,27 +822,27 @@ export default function CampaignDetailPage() {
                         type="button"
                         onClick={() => transitionMutation.mutate(transitionInfo.action)}
                         disabled={transitionMutation.isPending}
-                        className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                        className="shrink-0 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
                     >
                         {transitionMutation.isPending ? "Aplicando..." : transitionInfo.label}
                     </button>
                 )}
             </header>
 
-            <section className="grid gap-4 rounded-xl border border-zinc-200 bg-white p-4 md:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-900/50">
-                <article>
+            <section className="grid min-w-0 gap-4 rounded-xl border border-zinc-200 bg-white p-4 md:grid-cols-3 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <article className="min-w-0">
                     <p className="text-xs uppercase tracking-wide text-zinc-500">Inicio</p>
                     <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {campaignStart ? campaignStart.toLocaleDateString("es-MX") : "Sin fecha"}
                     </p>
                 </article>
-                <article>
+                <article className="min-w-0">
                     <p className="text-xs uppercase tracking-wide text-zinc-500">Fin</p>
                     <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {campaignEnd ? campaignEnd.toLocaleDateString("es-MX") : "Sin fecha"}
                     </p>
                 </article>
-                <article>
+                <article className="min-w-0">
                     <p className="text-xs uppercase tracking-wide text-zinc-500">Estado temporal</p>
                     <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                         {daysRemaining === undefined
@@ -820,41 +858,41 @@ export default function CampaignDetailPage() {
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                     Generales
                 </h2>
-                <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    <article>
-                        <p className="text-xs uppercase tracking-wide text-zinc-500">Descripcion</p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                <div className="mt-3 grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <article className="min-w-0">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Descripción</p>
+                        <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                             {campaign?.description ?? "-"}
                         </p>
                     </article>
-                    <article>
+                    <article className="min-w-0">
                         <p className="text-xs uppercase tracking-wide text-zinc-500">Clave</p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                             {campaign?.key ?? "-"}
                         </p>
                     </article>
-                    <article>
-                        <p className="text-xs uppercase tracking-wide text-zinc-500">Version</p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    <article className="min-w-0">
+                        <p className="text-xs uppercase tracking-wide text-zinc-500">Versión</p>
+                        <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                             v{campaign?.version ?? 1}
                         </p>
                     </article>
-                    <article>
+                    <article className="min-w-0">
                         <p className="text-xs uppercase tracking-wide text-zinc-500">
-                            Modo de inscripcion
+                            Modo de inscripción
                         </p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                             {campaign?.enrollmentMode
                                 ? (enrollmentModeLabel[campaign.enrollmentMode] ??
                                   campaign.enrollmentMode)
                                 : "-"}
                         </p>
                     </article>
-                    <article>
+                    <article className="min-w-0">
                         <p className="text-xs uppercase tracking-wide text-zinc-500">
-                            Modo de acumulacion
+                            Modo de acumulación
                         </p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                             {campaign?.accumulationMode === "amount"
                                 ? "Por monto"
                                 : campaign?.accumulationMode === "count"
@@ -862,63 +900,63 @@ export default function CampaignDetailPage() {
                                   : "-"}
                         </p>
                     </article>
-                    <article>
+                    <article className="min-w-0">
                         <p className="text-xs uppercase tracking-wide text-zinc-500">Estado</p>
-                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                            {campaign?.status ?? "-"}
+                        <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                            {currentStatus ? campaignStatusLabel[currentStatus] : "-"}
                         </p>
                     </article>
                 </div>
             </section>
 
-            <section className="grid grid-cols-2 gap-4 lg:grid-cols-6">
-                <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <section className="grid min-w-0 grid-cols-2 gap-4 lg:grid-cols-6">
+                <article className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">Transacciones</p>
                     <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                         {summaryQuery.data?.data.kpis.transactions ?? 0}
                     </p>
                 </article>
-                <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <article className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">Ventas</p>
                     <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                         ${(summaryQuery.data?.data.kpis.salesAmount ?? 0).toLocaleString("es-MX")}
                     </p>
                 </article>
-                <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <article className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">Acumulaciones</p>
                     <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                         {summaryQuery.data?.data.kpis.accumulations ?? 0}
                     </p>
                 </article>
-                <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <article className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">Canjes</p>
                     <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                         {summaryQuery.data?.data.kpis.redemptions ?? 0}
                     </p>
                 </article>
-                <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                <article className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">Tasa canje</p>
                     <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                         {((summaryQuery.data?.data.kpis.redemptionRate ?? 0) * 100).toFixed(1)}%
                     </p>
                 </article>
-                <article className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Efectividad rewards</p>
-                    <p className="mt-1 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+                <article className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+                    <p className="break-words text-xs text-zinc-500 dark:text-zinc-400">Efectividad de recompensas</p>
+                    <p className="mt-1 break-words text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                         {rewardEffectiveness.toFixed(2)}
                     </p>
-                    <p className="mt-1 text-[11px] text-zinc-400">canjes / recompensa activa</p>
+                    <p className="mt-1 break-words text-[11px] text-zinc-400">canjes por recompensa activa</p>
                 </article>
             </section>
 
-            <section className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-                <div className="space-y-4">
+            <section className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                <div className="min-w-0 space-y-4">
                     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
                         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                             Tendencia diaria
                         </h2>
                         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                            Volumen de transacciones y canjes en los ultimos 30 dias.
+                            Volumen de transacciones y canjes en los últimos 30 días.
                         </p>
 
                         <div className="mt-4 grid gap-2">
@@ -934,7 +972,7 @@ export default function CampaignDetailPage() {
                                 return (
                                     <div
                                         key={`${String(point.date)}-${point.transactions}-${point.redemptions}`}
-                                        className="grid grid-cols-[64px_1fr_1fr] items-center gap-3 text-xs"
+                                        className="grid grid-cols-[64px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 text-xs"
                                     >
                                         <span className="text-zinc-400">
                                             {toDayLabel(point.date)}
@@ -959,11 +997,10 @@ export default function CampaignDetailPage() {
 
                     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
                         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                            Comprobacion
+                            Comprobación
                         </h2>
                         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                            Transacciones de usuarios/campanas asociadas que no generaron
-                            acumulaciones para esta campana.
+                            Transacciones asociadas que no generaron acumulaciones para esta campaña.
                         </p>
                         <p className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-100">
                             {summaryQuery.data?.data.transactionsWithoutAccumulations ?? 0}
@@ -974,17 +1011,17 @@ export default function CampaignDetailPage() {
                     </div>
                 </div>
 
-                <div className="space-y-4">
+                <div className="min-w-0 space-y-4">
                     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="min-w-0 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                                 Alcance de tiendas
                             </h2>
                             <button
                                 type="button"
                                 onClick={openStoreCoverageModal}
                                 disabled={!canEditCampaign}
-                                className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                className="shrink-0 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
                             >
                                 {canEditCampaign ? "Modificar" : "Bloqueada"}
                             </button>
@@ -992,11 +1029,11 @@ export default function CampaignDetailPage() {
                         <div className="mt-3 space-y-3 text-xs">
                             <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900">
                                 <div className="flex items-start justify-between gap-3">
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-zinc-500 dark:text-zinc-400">
                                             Mapa de tiendas participantes
                                         </p>
-                                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                        <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                                             {coverageMapStores.length > 0
                                                 ? `${coverageMapStores.length} tienda(s) con coordenadas visibles`
                                                 : "Sin tiendas con coordenadas para mostrar"}
@@ -1031,7 +1068,7 @@ export default function CampaignDetailPage() {
                                 <p className="text-zinc-500 dark:text-zinc-400">
                                     Modo de cobertura
                                 </p>
-                                <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                                     {campaign?.storeAccessMode
                                         ? storeAccessModeLabel[
                                               campaign.storeAccessMode as StoreAccessMode
@@ -1041,11 +1078,11 @@ export default function CampaignDetailPage() {
                             </div>
                             <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900">
                                 <div className="flex items-start justify-between gap-3">
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="text-zinc-500 dark:text-zinc-400">
                                             Tiendas activas para esta campaña
                                         </p>
-                                        <p className="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                        <p className="mt-1 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                                             {campaign?.storeAccessMode === "all_related_stores"
                                                 ? `${relatedStoreOptions.length} tiendas del CPG`
                                                 : `${targetedStores.length} tienda(s) seleccionada(s)`}
@@ -1094,12 +1131,12 @@ export default function CampaignDetailPage() {
                                                 targetedStores.map((store) => (
                                                     <div
                                                         key={store.storeId}
-                                                        className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-800"
+                                                        className="min-w-0 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-800"
                                                     >
-                                                        <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                                                        <p className="break-words font-medium text-zinc-900 dark:text-zinc-100">
                                                             {store.storeName}
                                                         </p>
-                                                        <p className="mt-1 text-zinc-500 dark:text-zinc-400">
+                                                        <p className="mt-1 break-words text-zinc-500 dark:text-zinc-400">
                                                             {store.storeCode}
                                                             {store.city || store.state
                                                                 ? ` · ${[store.city, store.state]
@@ -1117,15 +1154,15 @@ export default function CampaignDetailPage() {
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                Politicas activas
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="min-w-0 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                Políticas activas
                             </h2>
                             <button
                                 type="button"
                                 onClick={() => setIsPolicyModalOpen(true)}
                                 className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                                aria-label="Agregar politica"
+                                aria-label="Agregar política"
                             >
                                 +
                             </button>
@@ -1133,19 +1170,19 @@ export default function CampaignDetailPage() {
                         <ul className="mt-3 space-y-2">
                             {policies.length === 0 && (
                                 <li className="text-xs text-zinc-500 dark:text-zinc-400">
-                                    Sin politicas.
+                                    Sin políticas.
                                 </li>
                             )}
                             {policies.map((policy: CampaignPolicy) => (
                                 <li
                                     key={policy.id}
-                                    className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+                                    className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
                                 >
-                                    <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                                    <p className="break-words font-medium text-zinc-800 dark:text-zinc-200">
                                         {formatPolicyLabel(policy)}
                                     </p>
-                                    <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
-                                        alcance {policy.scopeType} · periodo {policy.period}
+                                    <p className="mt-0.5 break-words text-zinc-500 dark:text-zinc-400">
+                                        alcance {scopeTypeLabel[policy.scopeType]} · periodo {periodLabel[policy.period]}
                                     </p>
                                 </li>
                             ))}
@@ -1153,15 +1190,15 @@ export default function CampaignDetailPage() {
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                                Tiers por ventana
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="min-w-0 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                                Niveles por ventana
                             </h2>
                             <button
                                 type="button"
                                 onClick={() => setIsTierModalOpen(true)}
                                 className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-zinc-300 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                                aria-label="Agregar tier"
+                                aria-label="Agregar nivel"
                             >
                                 +
                             </button>
@@ -1169,22 +1206,22 @@ export default function CampaignDetailPage() {
                         <ul className="mt-3 space-y-2">
                             {tiers.length === 0 && (
                                 <li className="text-xs text-zinc-500 dark:text-zinc-400">
-                                    Sin tiers configurados.
+                                    Sin niveles configurados.
                                 </li>
                             )}
                             {tiers.map((tier: CampaignTier) => (
                                 <li
                                     key={tier.id}
-                                    className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+                                    className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
                                 >
-                                    <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                                    <p className="break-words font-medium text-zinc-800 dark:text-zinc-200">
                                         Nivel {tier.order}: {tier.name}
                                     </p>
-                                    <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
-                                        ventana {tier.windowValue} {tier.windowUnit}(s) · modo{" "}
-                                        {tier.qualificationMode} · gracia {tier.graceDays} dia(s)
+                                    <p className="mt-0.5 break-words text-zinc-500 dark:text-zinc-400">
+                                        ventana {tier.windowValue} {tierWindowLabel[tier.windowUnit]}(s) · modo{" "}
+                                        {qualificationModeLabel[tier.qualificationMode]} · gracia {tier.graceDays} día(s)
                                     </p>
-                                    <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
+                                    <p className="mt-0.5 break-words text-zinc-500 dark:text-zinc-400">
                                         requisitos:{" "}
                                         {tier.minPurchaseCount
                                             ? `${tier.minPurchaseCount} compras`
@@ -1202,8 +1239,8 @@ export default function CampaignDetailPage() {
                     </div>
 
                     <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                        <div className="flex items-center justify-between gap-3">
+                            <h2 className="min-w-0 break-words text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                                 Reglas de acumulación
                             </h2>
                             <button
@@ -1224,14 +1261,14 @@ export default function CampaignDetailPage() {
                             {accumulationRules.map((rule: CampaignAccumulationRule) => (
                                 <li
                                     key={rule.id}
-                                    className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+                                    className="min-w-0 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
                                 >
-                                    <p className="font-medium text-zinc-800 dark:text-zinc-200">
-                                        scope {rule.scopeType} · x{rule.multiplier} +{" "}
+                                    <p className="break-words font-medium text-zinc-800 dark:text-zinc-200">
+                                        Alcance {scopeTypeLabel[rule.scopeType]} · x{rule.multiplier} +{" "}
                                         {rule.flatBonus} · prioridad {rule.priority}
                                     </p>
-                                    <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
-                                        {rule.scopeId ?? "global campaña"}
+                                    <p className="mt-0.5 break-words text-zinc-500 dark:text-zinc-400">
+                                        {rule.scopeId ?? "Campaña completa"}
                                     </p>
                                 </li>
                             ))}
@@ -1250,7 +1287,7 @@ export default function CampaignDetailPage() {
                         }}
                     >
                         <div className="space-y-2">
-                            <label className="flex items-start gap-3 rounded-lg border border-zinc-200 px-3 py-3 text-sm dark:border-zinc-700">
+                            <label className="flex min-w-0 items-start gap-3 rounded-lg border border-zinc-200 px-3 py-3 text-sm dark:border-zinc-700">
                                 <input
                                     type="radio"
                                     name="store-access-mode"
@@ -1258,17 +1295,17 @@ export default function CampaignDetailPage() {
                                     onChange={() => setStoreAccessModeDraft("all_related_stores")}
                                     className="mt-1"
                                 />
-                                <div>
-                                    <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                <div className="min-w-0">
+                                    <p className="break-words font-semibold text-zinc-900 dark:text-zinc-100">
                                         Todas las tiendas del CPG
                                     </p>
-                                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                    <p className="mt-1 break-words text-xs text-zinc-500 dark:text-zinc-400">
                                         La campaña estará disponible para toda la red activa de
                                         tiendas relacionadas con tu CPG.
                                     </p>
                                 </div>
                             </label>
-                            <label className="flex items-start gap-3 rounded-lg border border-zinc-200 px-3 py-3 text-sm dark:border-zinc-700">
+                            <label className="flex min-w-0 items-start gap-3 rounded-lg border border-zinc-200 px-3 py-3 text-sm dark:border-zinc-700">
                                 <input
                                     type="radio"
                                     name="store-access-mode"
@@ -1276,11 +1313,11 @@ export default function CampaignDetailPage() {
                                     onChange={() => setStoreAccessModeDraft("selected_stores")}
                                     className="mt-1"
                                 />
-                                <div>
-                                    <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                                <div className="min-w-0">
+                                    <p className="break-words font-semibold text-zinc-900 dark:text-zinc-100">
                                         Solo tiendas seleccionadas
                                     </p>
-                                    <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                    <p className="mt-1 break-words text-xs text-zinc-500 dark:text-zinc-400">
                                         Elige manualmente las tiendas relacionadas que podrán ver o
                                         enrolarse en la campaña.
                                     </p>
@@ -1294,7 +1331,7 @@ export default function CampaignDetailPage() {
                                     <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                                         Tiendas disponibles
                                     </p>
-                                    <div className="flex flex-wrap items-center gap-2">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                                         <span className="text-xs text-zinc-400">
                                             {selectedCampaignStoreIds.length} seleccionada(s)
                                         </span>
@@ -1333,13 +1370,13 @@ export default function CampaignDetailPage() {
                                                 setStoreCoverageSearch(event.target.value)
                                             }
                                             placeholder="Buscar por nombre, código o ciudad"
-                                            className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 dark:border-zinc-700 dark:bg-zinc-900"
+                                            className="min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm outline-none transition focus:border-cyan-500 dark:border-zinc-700 dark:bg-zinc-900"
                                         />
                                         <div className="max-h-80 space-y-2 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-700">
                                             {filteredRelatedStoreOptions.map((store) => (
                                                 <label
                                                     key={store.storeId}
-                                                    className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2 text-sm transition hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800"
+                                                    className="flex min-w-0 cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 px-3 py-2 text-sm transition hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800"
                                                 >
                                                     <input
                                                         type="checkbox"
@@ -1380,10 +1417,7 @@ export default function CampaignDetailPage() {
                                 ) : (
                                     <div className="space-y-3">
                                         <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
-                                            El modo mapa agrega a la selección las tiendas que
-                                            queden dentro de un área rectangular, circular o
-                                            multi-puntos. Después puedes ajustar el resultado desde
-                                            la pestaña de lista.
+                                            El mapa agrega a la selección las tiendas dentro de un área rectangular, circular o multipuntos. Después puedes ajustar el resultado desde la lista.
                                         </div>
                                         <CampaignStoreSelectionMap
                                             stores={geoRelatedStoreOptions}
@@ -1429,7 +1463,7 @@ export default function CampaignDetailPage() {
             )}
 
             {isPolicyModalOpen && (
-                <Modal title="Nueva politica" onClose={closePolicyModal}>
+                <Modal title="Nueva política" onClose={closePolicyModal}>
                     <form
                         className="space-y-3"
                         onSubmit={(event) => {
@@ -1437,8 +1471,8 @@ export default function CampaignDetailPage() {
                             createPolicyMutation.mutate();
                         }}
                     >
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Tipo
                                 <select
                                     value={policyForm.policyType}
@@ -1448,17 +1482,17 @@ export default function CampaignDetailPage() {
                                             policyType: event.target.value as PolicyType,
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 >
-                                    <option value="max_accumulations">max_accumulations</option>
-                                    <option value="min_amount">min_amount</option>
-                                    <option value="min_quantity">min_quantity</option>
-                                    <option value="cooldown">cooldown</option>
+                                    <option value="max_accumulations">Máximo de acumulaciones</option>
+                                    <option value="min_amount">Compra mínima por monto</option>
+                                    <option value="min_quantity">Compra mínima por piezas</option>
+                                    <option value="cooldown">Tiempo entre acumulaciones</option>
                                 </select>
                             </label>
 
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                                Scope
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                Alcance
                                 <select
                                     value={policyForm.scopeType}
                                     onChange={(event) =>
@@ -1468,17 +1502,17 @@ export default function CampaignDetailPage() {
                                             scopeId: "",
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 >
-                                    <option value="campaign">campaign</option>
-                                    <option value="brand">brand</option>
-                                    <option value="product">product</option>
+                                    <option value="campaign">Campaña</option>
+                                    <option value="brand">Marca</option>
+                                    <option value="product">Producto</option>
                                 </select>
                             </label>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Periodo
                                 <select
                                     value={policyForm.period}
@@ -1488,17 +1522,17 @@ export default function CampaignDetailPage() {
                                             period: event.target.value as PeriodType,
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 >
-                                    <option value="transaction">transaction</option>
-                                    <option value="day">day</option>
-                                    <option value="week">week</option>
-                                    <option value="month">month</option>
-                                    <option value="lifetime">lifetime</option>
+                                    <option value="transaction">Transacción</option>
+                                    <option value="day">Día</option>
+                                    <option value="week">Semana</option>
+                                    <option value="month">Mes</option>
+                                    <option value="lifetime">Vigencia completa</option>
                                 </select>
                             </label>
 
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Valor
                                 <input
                                     type="number"
@@ -1510,13 +1544,13 @@ export default function CampaignDetailPage() {
                                             value: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
                         </div>
 
                         {policyForm.scopeType !== "campaign" && (
-                            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                            <label className="block min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 {policyForm.scopeType === "brand" ? "Marca" : "Producto"}
                                 <select
                                     required
@@ -1527,7 +1561,7 @@ export default function CampaignDetailPage() {
                                             scopeId: event.target.value,
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 >
                                     <option value="">Selecciona</option>
                                     {scopeOptions.map((option: { id: string; label: string }) => (
@@ -1554,7 +1588,7 @@ export default function CampaignDetailPage() {
                             >
                                 {createPolicyMutation.isPending
                                     ? "Guardando..."
-                                    : "Agregar politica"}
+                                    : "Agregar política"}
                             </button>
                         </div>
                     </form>
@@ -1562,7 +1596,7 @@ export default function CampaignDetailPage() {
             )}
 
             {isTierModalOpen && (
-                <Modal title="Nuevo tier" onClose={closeTierModal}>
+                <Modal title="Nuevo nivel" onClose={closeTierModal}>
                     <form
                         className="space-y-3"
                         onSubmit={(event) => {
@@ -1570,7 +1604,7 @@ export default function CampaignDetailPage() {
                             createTierMutation.mutate();
                         }}
                     >
-                        <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                        <label className="block min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                             Nombre
                             <input
                                 required
@@ -1578,12 +1612,12 @@ export default function CampaignDetailPage() {
                                 onChange={(event) =>
                                     setTierForm((prev) => ({ ...prev, name: event.target.value }))
                                 }
-                                className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                             />
                         </label>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Orden
                                 <input
                                     type="number"
@@ -1595,11 +1629,11 @@ export default function CampaignDetailPage() {
                                             order: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                                Threshold
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                Umbral
                                 <input
                                     type="number"
                                     min={1}
@@ -1610,13 +1644,13 @@ export default function CampaignDetailPage() {
                                             thresholdValue: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Ventana
                                 <select
                                     value={tierForm.windowUnit}
@@ -1626,14 +1660,14 @@ export default function CampaignDetailPage() {
                                             windowUnit: event.target.value as TierWindowUnit,
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 >
-                                    <option value="day">day</option>
-                                    <option value="month">month</option>
-                                    <option value="year">year</option>
+                                    <option value="day">Día</option>
+                                    <option value="month">Mes</option>
+                                    <option value="year">Año</option>
                                 </select>
                             </label>
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Valor ventana
                                 <input
                                     type="number"
@@ -1645,14 +1679,14 @@ export default function CampaignDetailPage() {
                                             windowValue: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                                Min compras
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                Compras mínimas
                                 <input
                                     type="number"
                                     min={0}
@@ -1663,11 +1697,11 @@ export default function CampaignDetailPage() {
                                             minPurchaseCount: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                                Min monto
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                Monto mínimo
                                 <input
                                     type="number"
                                     min={0}
@@ -1678,13 +1712,13 @@ export default function CampaignDetailPage() {
                                             minPurchaseAmount: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Modo
                                 <select
                                     value={tierForm.qualificationMode}
@@ -1695,14 +1729,14 @@ export default function CampaignDetailPage() {
                                                 .value as TierQualificationMode,
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 >
-                                    <option value="any">any</option>
-                                    <option value="all">all</option>
+                                    <option value="any">Cualquier requisito</option>
+                                    <option value="all">Todos los requisitos</option>
                                 </select>
                             </label>
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                                Dias de gracia
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                Días de gracia
                                 <input
                                     type="number"
                                     min={0}
@@ -1714,7 +1748,7 @@ export default function CampaignDetailPage() {
                                             graceDays: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
                         </div>
@@ -1732,7 +1766,7 @@ export default function CampaignDetailPage() {
                                 disabled={createTierMutation.isPending}
                                 className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
                             >
-                                {createTierMutation.isPending ? "Guardando..." : "Agregar tier"}
+                                {createTierMutation.isPending ? "Guardando..." : "Agregar nivel"}
                             </button>
                         </div>
                     </form>
@@ -1740,7 +1774,7 @@ export default function CampaignDetailPage() {
             )}
 
             {isRuleModalOpen && (
-                <Modal title="Nueva regla de acumulacion" onClose={closeRuleModal}>
+                <Modal title="Nueva regla de acumulación" onClose={closeRuleModal}>
                     <form
                         className="space-y-3"
                         onSubmit={(event) => {
@@ -1748,9 +1782,9 @@ export default function CampaignDetailPage() {
                             createAccumulationRuleMutation.mutate();
                         }}
                     >
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                                Scope
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                Alcance
                                 <select
                                     value={accumulationRuleForm.scopeType}
                                     onChange={(event) =>
@@ -1760,14 +1794,14 @@ export default function CampaignDetailPage() {
                                             scopeId: "",
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 >
-                                    <option value="campaign">campaign</option>
-                                    <option value="brand">brand</option>
-                                    <option value="product">product</option>
+                                    <option value="campaign">Campaña</option>
+                                    <option value="brand">Marca</option>
+                                    <option value="product">Producto</option>
                                 </select>
                             </label>
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Prioridad
                                 <input
                                     type="number"
@@ -1780,13 +1814,13 @@ export default function CampaignDetailPage() {
                                             priority: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
                         </div>
 
                         {accumulationRuleForm.scopeType !== "campaign" && (
-                            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                            <label className="block min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 {accumulationRuleForm.scopeType === "brand" ? "Marca" : "Producto"}
                                 <select
                                     required
@@ -1797,7 +1831,7 @@ export default function CampaignDetailPage() {
                                             scopeId: event.target.value,
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 >
                                     <option value="">Selecciona</option>
                                     {accumulationScopeOptions.map(
@@ -1811,8 +1845,8 @@ export default function CampaignDetailPage() {
                             </label>
                         )}
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                        <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Multiplicador
                                 <input
                                     type="number"
@@ -1825,10 +1859,10 @@ export default function CampaignDetailPage() {
                                             multiplier: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
-                            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                            <label className="min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                                 Bono fijo
                                 <input
                                     type="number"
@@ -1840,7 +1874,7 @@ export default function CampaignDetailPage() {
                                             flatBonus: Number(event.target.value),
                                         }))
                                     }
-                                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                                 />
                             </label>
                         </div>
@@ -1869,7 +1903,7 @@ export default function CampaignDetailPage() {
 
             <section className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                    Auditoria
+                    Auditoría
                 </h2>
                 <ul className="mt-3 space-y-2">
                     {auditItems.length === 0 && (
@@ -1878,12 +1912,12 @@ export default function CampaignDetailPage() {
                     {auditItems.map((entry: AuditItem) => (
                         <li
                             key={entry.id}
-                            className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-800"
+                            className="min-w-0 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-800"
                         >
-                            <p className="font-medium text-zinc-700 dark:text-zinc-200">
+                            <p className="break-words font-medium text-zinc-700 dark:text-zinc-200">
                                 {entry.action}
                             </p>
-                            <p className="mt-0.5 text-zinc-500 dark:text-zinc-400">
+                            <p className="mt-0.5 break-words text-zinc-500 dark:text-zinc-400">
                                 {new Date(entry.createdAt).toLocaleString("es-MX")}
                                 {entry.notes ? ` · ${entry.notes}` : ""}
                             </p>

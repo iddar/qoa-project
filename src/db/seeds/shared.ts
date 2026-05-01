@@ -1535,6 +1535,7 @@ const ensureSubscribed = async (userId: string, campaignId: string) => {
       .set({
         status: 'subscribed',
         subscribedAt: new Date(),
+        leftAt: null,
         updatedAt: new Date(),
       })
       .where(eq(campaignSubscriptions.id, existing.id));
@@ -1549,6 +1550,28 @@ const ensureSubscribed = async (userId: string, campaignId: string) => {
     createdAt: new Date(),
     updatedAt: new Date(),
   });
+};
+
+const ensureLeftCampaign = async (userId: string, campaignId: string) => {
+  const [existing] = (await db
+    .select({ id: campaignSubscriptions.id })
+    .from(campaignSubscriptions)
+    .where(and(eq(campaignSubscriptions.userId, userId), eq(campaignSubscriptions.campaignId, campaignId)))) as Array<{
+    id: string;
+  }>;
+
+  if (!existing) {
+    return;
+  }
+
+  await db
+    .update(campaignSubscriptions)
+    .set({
+      status: 'left',
+      leftAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(campaignSubscriptions.id, existing.id));
 };
 
 const addPoints = async (payload: {
@@ -2127,7 +2150,7 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
         campaignId: openCampaignId,
         name: `Reward Open Max (${scope})`,
         description: 'Reward adicional para demostrar variedad.',
-        cost: 45,
+        cost: 120,
         stock: 90,
       }),
       await upsertRewardByName({
@@ -2144,7 +2167,7 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
       policyType: 'min_amount',
       scopeType: 'campaign',
       period: 'transaction',
-      value: 80,
+      value: 1,
     });
     await ensurePolicy({
       campaignId,
@@ -2158,7 +2181,7 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
       policyType: 'min_quantity',
       scopeType: 'campaign',
       period: 'transaction',
-      value: 2,
+      value: 1,
     });
     await ensurePolicy({
       campaignId: openCampaignId,
@@ -2180,7 +2203,8 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
     if (consumerUserId) {
       const ensuredCard = await ensureUserUniversalWalletCard(consumerUserId);
       await ensureSubscribed(consumerUserId, campaignId);
-      await ensureSubscribed(consumerUserId, flashCampaignId);
+      await ensureSubscribed(consumerUserId, openCampaignId);
+      await ensureLeftCampaign(consumerUserId, flashCampaignId);
 
       const [universal] = (await db
         .select({ id: campaigns.id })

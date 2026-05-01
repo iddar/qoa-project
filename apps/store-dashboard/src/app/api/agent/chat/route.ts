@@ -16,6 +16,37 @@ import { createEmptyDraft, getDraftItemCount, getDraftTotal, type AgentAddedItem
 const AUDIO_PLACEHOLDER = "Adjunto una nota de voz.";
 const execFileAsync = promisify(execFile);
 
+const isFixtureDemoRequest = (request: Request) =>
+  process.env.QOA_DEMO_AGENT_MODE === "fixture" ||
+  (process.env.NODE_ENV !== "production" && request.headers.get("x-qoa-demo-agent-mode") === "fixture");
+
+const normalizeDemoText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+const findDemoProduct = (products: StoreProduct[], skuNeedle: string, nameNeedle: string) => {
+  const normalizedNameNeedle = normalizeDemoText(nameNeedle);
+  return products.find((product) => product.sku?.includes(skuNeedle)) ??
+    products.find((product) => normalizeDemoText(product.name).includes(normalizedNameNeedle));
+};
+
+const extractLikelyQrInput = (content: string) => {
+  const jsonPayload = content.match(/\{[\s\S]*\}/)?.[0];
+  if (jsonPayload) {
+    return jsonPayload;
+  }
+
+  const labelledPayload = content.match(/(?:qr|tarjeta|card|codigo|código)\s*:\s*([\s\S]+)/i)?.[1]?.trim();
+  if (labelledPayload) {
+    return labelledPayload;
+  }
+
+  const quotedPayload = content.match(/["“]([^"”]{8,})["”]/)?.[1]?.trim();
+  return quotedPayload ?? "";
+};
+
 const requestSchema = z.object({
   messages: z.array(
           z.object({
@@ -646,6 +677,167 @@ export async function POST(request: Request) {
     return addedItems;
   };
 
+  const buildFixtureResponse = async (
+    content: string,
+    extras?: Partial<Pick<AgentMessage, "addedItems" | "customerCard">>,
+    userMessage: AgentMessage | null = normalizedUserMessage as AgentMessage | null,
+  ) => {
+    const renderedHtml = await renderAssistantMarkdownToHtml(content);
+    return Response.json({
+      message: {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content,
+        renderedHtml: renderedHtml || undefined,
+        actions: buildCopilotActions(workingDraft),
+        ...extras,
+      },
+      userMessage,
+      draft: workingDraft,
+    });
+  };
+
+  const confirmWorkingDraftTransaction = async () => {
+    if (workingDraft.items.length === 0) {
+      throw new Error("EMPTY_DRAFT");
+    }
+
+    const { data, error } = await api.v1.stores[storeId].transactions.post(
+      {
+        userId: workingDraft.customer?.userId,
+        cardId: workingDraft.customer?.cardId,
+        idempotencyKey: `agent-pos-${crypto.randomUUID()}`,
+        items: workingDraft.items.map((item) => ({
+          storeProductId: item.storeProductId,
+          quantity: item.quantity,
+          amount: item.price,
+        })),
+      },
+      { headers: { authorization } },
+    );
+
+    if (error || !data?.data) {
+      const apiMessage = (error?.value as { error?: { code?: string; message?: string } } | undefined)?.error?.message;
+      const apiCode = (error?.value as { error?: { code?: string; message?: string } } | undefined)?.error?.code;
+      const detail = apiMessage ? `${apiCode ? `[${apiCode}] ` : ""}${apiMessage}` : "CONFIRM_FAILED";
+      console.error("[pos-agent] confirmTransaction error", { status: error?.status, code: apiCode, message: apiMessage });
+      throw new Error(detail);
+    }
+
+    const transaction = data.data as DraftTransaction;
+    workingDraft = {
+      items: [],
+      customer: null,
+      lastTransaction: transaction,
+      pendingProductChoices: [],
+      pendingProductContext: null,
+    };
+
+    return transaction;
+  };
+
+  const tryHandleFixtureDemo = async () => {
+    if (!isFixtureDemoRequest(request) || !normalizedUserMessage || normalizedUserMessage.role !== "user") {
+      return null;
+    }
+
+    const latestContent = normalizedUserMessage.content.trim();
+    const normalizedContent = normalizeDemoText(latestContent);
+    const audioAttachments = latestAttachments.filter((attachment) => getAttachmentKind(attachment) === "audio");
+    const imageAttachments = latestAttachments.filter((attachment) => getAttachmentKind(attachment) === "image");
+    const looksLikeVoiceOrder =
+      audioAttachments.length > 0 ||
+      normalizedContent.includes("demo:pos:voice") ||
+      normalizedContent.includes("nota de voz");
+    const wantsCustomerLink =
+      normalizedContent.includes("demo:pos:qr") ||
+      normalizedContent.includes("ligar la tarjeta") ||
+      (normalizedContent.includes("qr") && normalizedContent.includes("cliente"));
+    const wantsConfirmation = /\b(confirmar|confirma|cobrar|cobra|registrar venta|registra venta)\b/i.test(normalizedContent);
+
+    if (wantsConfirmation) {
+      try {
+        const transaction = await confirmWorkingDraftTransaction();
+        const points = transaction.pointsTotal ?? transaction.accumulations.reduce((sum, entry) => sum + entry.accumulated, 0);
+        return await buildFixtureResponse(
+          `Venta registrada por **$${transaction.totalAmount}**. El cliente acumuló **${points} puntos** y ya puede ver el movimiento en su wallet.`,
+        );
+      } catch {
+        return await buildFixtureResponse("No pude registrar la venta de demo. Revisa que el pedido tenga productos y cliente ligado.");
+      }
+    }
+
+    if (wantsCustomerLink) {
+      let resolvedInput = extractLikelyQrInput(latestContent) || process.env.QOA_DEMO_CUSTOMER_INPUT || "";
+      if (!resolvedInput) {
+        for (const attachment of imageAttachments) {
+          resolvedInput = (await decodeQrFromAttachment(attachment)) ?? "";
+          if (resolvedInput) {
+            break;
+          }
+        }
+      }
+
+      if (!resolvedInput) {
+        return await buildFixtureResponse("Necesito el QR o código de tarjeta para ligar al cliente de demo.");
+      }
+
+      const { data, error } = await api.v1.stores[storeId]["customer-resolve"].post(
+        { input: resolvedInput },
+        { headers: { authorization } },
+      );
+      if (error || !data?.data) {
+        return await buildFixtureResponse("No pude ligar la tarjeta de demo. Verifica que `demo:prepare` haya generado un QR vigente.");
+      }
+
+      workingDraft.customer = data.data as DraftCustomer;
+      return await buildFixtureResponse(
+        `Cliente ligado: **${workingDraft.customer.name ?? workingDraft.customer.phone}**. La venta acumulará puntos al confirmar.`,
+        { customerCard: workingDraft.customer },
+      );
+    }
+
+    if (looksLikeVoiceOrder) {
+      const products = await getStoreProducts();
+      const cartSpec = [
+        { product: findDemoProduct(products, "QOA-COLA-600", "refresco cola"), quantity: 2 },
+        { product: findDemoProduct(products, "QOA-PAPAS-45", "papas clasicas"), quantity: 1 },
+        { product: findDemoProduct(products, "QOA-GALLETA-90", "galletas vainilla"), quantity: 1 },
+      ].filter((entry): entry is { product: StoreProduct; quantity: number } => Boolean(entry.product));
+
+      const addedItems: AgentAddedItem[] = [];
+      for (const entry of cartSpec) {
+        const addedProduct = await addProductToDraftById(entry.product.id, entry.quantity);
+        addedItems.push(buildAddedItem(addedProduct, entry.quantity));
+      }
+
+      if (addedItems.length === 0) {
+        return await buildFixtureResponse("No encontré productos seed para armar el pedido de demo.");
+      }
+
+      const userMessageWithTranscript: AgentMessage = {
+        ...(normalizedUserMessage as AgentMessage),
+        attachments: normalizedUserMessage.attachments?.map((attachment) =>
+          getAttachmentKind(attachment) === "audio"
+            ? {
+                ...attachment,
+                transcript: "Agrega dos refrescos de cola, unas papas clásicas y unas galletas de vainilla.",
+                status: "transcribed" as const,
+              }
+            : attachment,
+        ),
+      };
+
+      return await buildFixtureResponse(
+        `${buildAddedItemsMessage(addedItems)}\n\nLa nota de voz quedó convertida en un pedido listo para cobrar.`,
+        { addedItems },
+        userMessageWithTranscript,
+      );
+    }
+
+    return null;
+  };
+
   const tryHandleDeterministicCartBuild = async () => {
     if (!normalizedUserMessage || normalizedUserMessage.role !== "user") {
       return null;
@@ -766,6 +958,11 @@ export async function POST(request: Request) {
   ].join("\n\n");
 
   const deterministicCartBuildResponse = await tryHandleDeterministicCartBuild();
+  const fixtureDemoResponse = await tryHandleFixtureDemo();
+  if (fixtureDemoResponse) {
+    return fixtureDemoResponse;
+  }
+
   if (deterministicCartBuildResponse) {
     return deterministicCartBuildResponse;
   }
@@ -988,39 +1185,7 @@ export async function POST(request: Request) {
           confirmation: z.string().describe("Debe indicar que el tendero pidio confirmar la venta."),
         }),
         execute: async () => {
-          if (workingDraft.items.length === 0) {
-            throw new Error("EMPTY_DRAFT");
-          }
-
-          const { data, error } = await api.v1.stores[storeId].transactions.post(
-            {
-              userId: workingDraft.customer?.userId,
-              cardId: workingDraft.customer?.cardId,
-              idempotencyKey: `agent-pos-${crypto.randomUUID()}`,
-              items: workingDraft.items.map((item) => ({
-                storeProductId: item.storeProductId,
-                quantity: item.quantity,
-                amount: item.price,
-              })),
-            },
-            { headers: { authorization } },
-          );
-
-          if (error || !data?.data) {
-            const apiMessage = (error?.value as { error?: { code?: string; message?: string } } | undefined)?.error?.message;
-            const apiCode = (error?.value as { error?: { code?: string; message?: string } } | undefined)?.error?.code;
-            const detail = apiMessage ? `${apiCode ? `[${apiCode}] ` : ""}${apiMessage}` : "CONFIRM_FAILED";
-            console.error("[pos-agent] confirmTransaction error", { status: error?.status, code: apiCode, message: apiMessage });
-            throw new Error(detail);
-          }
-
-          const transaction = data.data as DraftTransaction;
-          workingDraft = {
-            items: [],
-            customer: null,
-            lastTransaction: transaction,
-            pendingProductChoices: [],
-          };
+          const transaction = await confirmWorkingDraftTransaction();
 
           return {
             transactionId: transaction.id,

@@ -28,7 +28,7 @@ const getInitialAssistantMessage = (mode: "pos" | "inventory"): AgentMessage =>
         id: "store-agent-welcome-inventory",
         role: "assistant",
         content:
-          "Hola, soy tu asistente de inventario. Puedo interpretar listas de proveedor o fotos de notas de entrega, preparar el preview de entrada y ayudarte a confirmar la carga al inventario.\n\nPrueba con:\n- 12 Refresco 600ml\n- Galletas Mantequilla, GAL-001, 6, 30\n- Adjunta una foto de la nota del proveedor\n- Confirma la entrada de inventario actual",
+          "Hola, soy tu asistente de inventario. Puedo interpretar listas de proveedor o fotos de notas de entrega, preparar la vista previa de entrada y ayudarte a confirmar la carga al inventario.\n\nPrueba con:\n- 12 Refresco 600ml\n- Galletas Mantequilla, GAL-001, 6, 30\n- Adjunta una foto de la nota del proveedor\n- Confirma la entrada de inventario actual",
       }
     : {
         id: "store-agent-welcome-pos",
@@ -119,6 +119,21 @@ const formatBytes = (bytes: number) => {
   }
 
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const getDemoAgentHeaders = (): Record<string, string> => {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  const queryMode = new URLSearchParams(window.location.search).get("demoAgentMode");
+  if (queryMode) {
+    window.localStorage.setItem("qoa_demo_agent_mode", queryMode);
+  }
+
+  return (queryMode ?? window.localStorage.getItem("qoa_demo_agent_mode")) === "fixture"
+    ? { "x-qoa-demo-agent-mode": "fixture" }
+    : {};
 };
 
 const revokeAttachmentPreviewUrl = (attachment: AgentAttachment) => {
@@ -419,6 +434,7 @@ export function StoreAgentDrawer() {
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${token}`,
+          ...getDemoAgentHeaders(),
         },
         body: JSON.stringify({
           messages: requestMessages,
@@ -509,7 +525,7 @@ export function StoreAgentDrawer() {
 
     await sendMessage(
       isInventoryMode
-        ? "Quiero preparar un preview de inventario desde esta foto."
+        ? "Quiero preparar una vista previa de inventario desde esta foto."
         : "Quiero ligar la tarjeta del cliente.",
       [
         ...attachments.filter((attachment) => attachment.kind !== "image"),
@@ -951,11 +967,12 @@ export function StoreAgentDrawer() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-600 dark:text-emerald-400">
-              {isInventoryMode ? "Inventory Agent" : "Store Agent"}
+              {isInventoryMode ? "Asistente de inventario" : "Asistente POS"}
             </p>
           </div>
           <button
             type="button"
+            aria-label="Cerrar panel del asistente"
             onClick={() => setAgentOpen(false)}
             className="rounded-full border border-zinc-200 p-2 text-zinc-500 hover:border-zinc-300 hover:text-zinc-900 dark:border-zinc-800 dark:hover:text-zinc-50"
           >
@@ -1102,7 +1119,7 @@ export function StoreAgentDrawer() {
         {pending ? (
           <div className="mr-8 inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-50 px-4 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
             <LoaderCircle className="h-4 w-4 animate-spin" />
-            {isInventoryMode ? "Interpretando imagen y preparando preview..." : "Pensando y operando en caja..."}
+            {isInventoryMode ? "Interpretando imagen y preparando vista previa..." : "Pensando y operando en caja..."}
           </div>
         ) : null}
 
@@ -1179,7 +1196,7 @@ export function StoreAgentDrawer() {
 
             {attachments.filter((attachment) => attachment.kind === "audio").map((attachment) => (
               <div key={`${attachment.id}-preview`} className="rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Preview de nota de voz</p>
+                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Vista previa de nota de voz</p>
                 <audio controls preload="metadata" src={attachment.previewUrl ?? attachment.dataUrl} className="mt-3 w-full max-w-full" />
                 {attachment.debug ? (
                   <div className="mt-3 rounded-2xl bg-white/70 px-3 py-2 text-[11px] text-zinc-500 dark:bg-zinc-950/70 dark:text-zinc-400">
@@ -1197,7 +1214,7 @@ export function StoreAgentDrawer() {
 
             {attachments.filter((attachment) => attachment.kind === "image").map((attachment) => (
               <div key={`${attachment.id}-image-preview`} className="rounded-3xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Preview de imagen</p>
+                <p className="mb-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Vista previa de imagen</p>
                 <Image src={attachment.previewUrl ?? attachment.dataUrl} alt={attachment.name} width={640} height={360} unoptimized className="max-h-64 w-full rounded-2xl object-cover" />
               </div>
             ))}

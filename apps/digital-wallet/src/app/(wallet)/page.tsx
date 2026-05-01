@@ -106,7 +106,19 @@ export default function WalletHomePage() {
         })),
     });
 
+    const earningCampaignIds = new Set(
+        storeBreakdown.flatMap((store) =>
+            store.campaignPoints
+                .filter((campaign) => campaign.points > 0)
+                .map((campaign) => campaign.campaignId),
+        ),
+    );
+
     const nextGoal = campaigns.reduce<NextGoal | null>((currentGoal, campaign, index) => {
+        if (!earningCampaignIds.has(campaign.campaignId)) {
+            return currentGoal;
+        }
+
         const rewards = (
             (rewardQueries[index]?.data?.data as RewardItem[] | undefined) ?? []
         ).filter((entry) => entry.status === "active");

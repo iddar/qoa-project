@@ -153,7 +153,7 @@ export default function CampaignsPage() {
   return (
     <div className="max-w-6xl space-y-6">
       <div className="flex items-start justify-between">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Campañas</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Crea y administra tus programas de lealtad desde un solo lugar.
@@ -184,20 +184,20 @@ export default function CampaignsPage() {
         </article>
       </section>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/50">
           <header className="space-y-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
             <div>
               <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Listado de campañas</h2>
-              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Más contexto operativo para gestionar lifecycle y rendimiento.</p>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Contexto operativo para gestionar estado, cobertura y rendimiento.</p>
             </div>
 
-            <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+            <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar por nombre o descripción"
-                className="rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
+                className="min-w-0 rounded-lg border border-zinc-200 px-3 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
               />
               <select
                 value={statusFilter}
@@ -213,7 +213,7 @@ export default function CampaignsPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-[1.25fr_0.45fr_0.45fr_0.55fr_0.45fr_auto] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+            <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.48fr)_minmax(0,0.48fr)_minmax(0,0.62fr)_minmax(0,0.45fr)_auto] gap-2 px-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
               <span>Campaña</span>
               <span>Estado</span>
               <span>Modo</span>
@@ -251,7 +251,7 @@ export default function CampaignsPage() {
 
                 return (
                 <li key={campaign.id} className="px-5 py-3">
-                  <div className="grid grid-cols-[1.25fr_0.45fr_0.45fr_0.55fr_0.45fr_auto] items-start gap-2">
+                  <div className="grid grid-cols-[minmax(0,1.25fr)_minmax(0,0.48fr)_minmax(0,0.48fr)_minmax(0,0.62fr)_minmax(0,0.45fr)_auto] items-start gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100">{campaign.name}</p>
                       {campaign.description && (
@@ -260,17 +260,19 @@ export default function CampaignsPage() {
                       <p className="mt-1 text-[11px] text-zinc-400">Creada: {new Date(campaign.createdAt).toLocaleDateString("es-MX")}</p>
                     </div>
 
-                    <div>
-                      <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${statusClass[campaign.status]}`}>
+                    <div className="min-w-0">
+                      <span className={`inline-block max-w-full rounded-full px-2.5 py-0.5 text-center text-[10px] font-semibold uppercase leading-tight tracking-wide ${statusClass[campaign.status]}`}>
                         {statusLabel[campaign.status]}
                       </span>
                     </div>
 
-                    <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">{campaign.accumulationMode}</p>
+                    <p className="min-w-0 break-words text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                      {campaign.accumulationMode === "amount" ? "Monto" : "Compras"}
+                    </p>
 
-                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">{periodLabel}</div>
+                    <div className="min-w-0 break-words text-[11px] text-zinc-500 dark:text-zinc-400">{periodLabel}</div>
 
-                    <div className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    <div className="min-w-0 text-[11px] text-zinc-500 dark:text-zinc-400">
                       <p>Tx: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{performance?.transactions ?? 0}</span></p>
                       <p>Canjes: <span className="font-semibold text-zinc-700 dark:text-zinc-200">{performance?.redemptions ?? 0}</span></p>
                     </div>
@@ -301,7 +303,7 @@ export default function CampaignsPage() {
                 createCampaign.mutate();
               }}
             >
-              <label htmlFor="campaign-name" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="campaign-name" className="block min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Nombre
                 <input
                   id="campaign-name"
@@ -309,42 +311,42 @@ export default function CampaignsPage() {
                   minLength={3}
                   value={form.name}
                   onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
               </label>
 
-              <label htmlFor="campaign-description" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label htmlFor="campaign-description" className="block min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Descripción
                 <textarea
                   id="campaign-description"
                   value={form.description}
                   onChange={(event) => setForm((prev) => ({ ...prev, description: event.target.value }))}
-                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
               </label>
 
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                <label className="block min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   Inicio
                   <input
                     type="datetime-local"
                     value={form.startsAt}
                     onChange={(event) => setForm((prev) => ({ ...prev, startsAt: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
                 </label>
-                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                <label className="block min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                   Fin
                   <input
                     type="datetime-local"
                     value={form.endsAt}
                     onChange={(event) => setForm((prev) => ({ ...prev, endsAt: event.target.value }))}
-                    className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                    className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                   />
                 </label>
               </div>
 
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+              <label className="block min-w-0 text-xs font-medium text-zinc-600 dark:text-zinc-400">
                 Modo de acumulación
                 <select
                   value={form.accumulationMode}
@@ -354,10 +356,10 @@ export default function CampaignsPage() {
                       accumulationMode: event.target.value as "count" | "amount",
                     }))
                   }
-                  className="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  className="mt-1 min-w-0 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 >
-                  <option value="count">count (compras/unidades)</option>
-                  <option value="amount">amount (monto)</option>
+                  <option value="count">Compras o unidades</option>
+                  <option value="amount">Monto de compra</option>
                 </select>
               </label>
 
@@ -375,7 +377,7 @@ export default function CampaignsPage() {
             <p className="font-semibold">Siguiente paso recomendado</p>
             <p className="mt-1">
               Abre la campaña recién creada para configurar políticas de acumulación,
-              enviarla a revisión y monitorear su performance.
+              enviarla a revisión y monitorear su rendimiento.
             </p>
           </div>
         </section>
