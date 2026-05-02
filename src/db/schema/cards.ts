@@ -35,6 +35,9 @@ export const cards = pgTable(
   (table: CardsTable) => [
     uniqueIndex('cards_code_key').on(table.code),
     uniqueIndex('cards_user_campaign_key').on(table.userId, table.campaignId, table.storeId),
+    uniqueIndex('cards_user_universal_campaign_key')
+      .on(table.userId, table.campaignId)
+      .where(sql`${table.storeId} is null`),
     index('cards_user_idx').on(table.userId),
     index('cards_campaign_idx').on(table.campaignId),
     index('cards_store_idx').on(table.storeId),

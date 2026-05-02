@@ -1,11 +1,11 @@
 import { and, eq, or } from 'drizzle-orm';
-import { db } from '../db/client';
+import { db, type Database } from '../db/client';
 import { cpgStoreRelations } from '../db/schema';
 
 type CpgStoreRelationSource = 'first_activity' | 'manual' | 'import' | 'capture' | 'organic';
 
-export const isStoreRelatedToCpg = async (storeId: string, cpgId: string) => {
-  const [row] = (await db
+export const isStoreRelatedToCpg = async (storeId: string, cpgId: string, database: Database = db) => {
+  const [row] = (await database
     .select({ id: cpgStoreRelations.id })
     .from(cpgStoreRelations)
     .where(
@@ -20,8 +20,8 @@ export const isStoreRelatedToCpg = async (storeId: string, cpgId: string) => {
   return Boolean(row);
 };
 
-export const getRelatedStoreIdsForCpg = async (cpgId: string) => {
-  const rows = (await db
+export const getRelatedStoreIdsForCpg = async (cpgId: string, database: Database = db) => {
+  const rows = (await database
     .select({ storeId: cpgStoreRelations.storeId })
     .from(cpgStoreRelations)
     .where(and(eq(cpgStoreRelations.cpgId, cpgId), eq(cpgStoreRelations.status, 'active')))) as Array<{
@@ -31,8 +31,8 @@ export const getRelatedStoreIdsForCpg = async (cpgId: string) => {
   return rows.map((row) => row.storeId);
 };
 
-export const getRelatedCpgIdsForStore = async (storeId: string) => {
-  const rows = (await db
+export const getRelatedCpgIdsForStore = async (storeId: string, database: Database = db) => {
+  const rows = (await database
     .select({ cpgId: cpgStoreRelations.cpgId })
     .from(cpgStoreRelations)
     .where(and(eq(cpgStoreRelations.storeId, storeId), eq(cpgStoreRelations.status, 'active')))) as Array<{
@@ -42,20 +42,23 @@ export const getRelatedCpgIdsForStore = async (storeId: string) => {
   return rows.map((row) => row.cpgId);
 };
 
-export const touchStoreCpgRelations = async (payload: {
-  storeId: string;
-  cpgIds: string[];
-  source?: CpgStoreRelationSource;
-  actorUserId?: string | null;
-  touchedAt?: Date;
-}) => {
+export const touchStoreCpgRelations = async (
+  payload: {
+    storeId: string;
+    cpgIds: string[];
+    source?: CpgStoreRelationSource;
+    actorUserId?: string | null;
+    touchedAt?: Date;
+  },
+  database: Database = db,
+) => {
   const uniqueCpgIds = [...new Set(payload.cpgIds.filter(Boolean))];
   if (uniqueCpgIds.length === 0) {
     return;
   }
 
   const now = payload.touchedAt ?? new Date();
-  const existing = (await db
+  const existing = (await database
     .select({ id: cpgStoreRelations.id, cpgId: cpgStoreRelations.cpgId })
     .from(cpgStoreRelations)
     .where(
@@ -73,7 +76,7 @@ export const touchStoreCpgRelations = async (payload: {
   for (const cpgId of uniqueCpgIds) {
     const row = existingByCpgId.get(cpgId);
     if (row) {
-      await db
+      await database
         .update(cpgStoreRelations)
         .set({
           status: 'active',
@@ -84,7 +87,7 @@ export const touchStoreCpgRelations = async (payload: {
       continue;
     }
 
-    await db.insert(cpgStoreRelations).values({
+    await database.insert(cpgStoreRelations).values({
       cpgId,
       storeId: payload.storeId,
       status: 'active',
@@ -98,8 +101,8 @@ export const touchStoreCpgRelations = async (payload: {
   }
 };
 
-export const ensureOrganicRelation = async (storeId: string, cpgId: string) => {
-  const existing = (await db
+export const ensureOrganicRelation = async (storeId: string, cpgId: string, database: Database = db) => {
+  const existing = (await database
     .select({ id: cpgStoreRelations.id, source: cpgStoreRelations.source })
     .from(cpgStoreRelations)
     .where(and(eq(cpgStoreRelations.storeId, storeId), eq(cpgStoreRelations.cpgId, cpgId)))
@@ -110,7 +113,7 @@ export const ensureOrganicRelation = async (storeId: string, cpgId: string) => {
   }
 
   const now = new Date();
-  const [created] = await db
+  const [created] = await database
     .insert(cpgStoreRelations)
     .values({
       storeId,

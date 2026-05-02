@@ -515,7 +515,7 @@ const resolveCardForTransaction = async (payload: { userId?: string; cardId?: st
     return null;
   }
 
-  const ensured = await ensureUserUniversalWalletCard(payload.userId);
+  const ensured = await ensureUserUniversalWalletCard(payload.userId, database);
   return {
     cardId: ensured.cardId,
     baseCampaignId: ensured.campaignId,
@@ -558,6 +558,48 @@ const resolveEligibleCampaignIds = async (
   }
 
   return [...ids];
+};
+
+const executeRows = async <T>(database: Database, query: unknown) => (await database.execute(query)) as T[];
+
+const lockBalanceForCard = async (cardId: string, database: Database) => {
+  await database.execute(sql`
+    insert into balances (card_id, current, lifetime, updated_at)
+    values (${cardId}, 0, 0, ${new Date()})
+    on conflict (card_id) do nothing
+  `);
+
+  const [row] = await executeRows<{ id: string; current: number; lifetime: number }>(
+    database,
+    sql`
+      select id, current, lifetime
+      from balances
+      where card_id = ${cardId}
+      for update
+    `,
+  );
+
+  return row ?? null;
+};
+
+const lockCampaignBalance = async (payload: { cardId: string; campaignId: string }, database: Database) => {
+  await database.execute(sql`
+    insert into campaign_balances (card_id, campaign_id, current, lifetime, updated_at)
+    values (${payload.cardId}, ${payload.campaignId}, 0, 0, ${new Date()})
+    on conflict (card_id, campaign_id) do nothing
+  `);
+
+  const [row] = await executeRows<CampaignBalanceRow>(
+    database,
+    sql`
+      select id, card_id as "cardId", campaign_id as "campaignId", current, lifetime
+      from campaign_balances
+      where card_id = ${payload.cardId} and campaign_id = ${payload.campaignId}
+      for update
+    `,
+  );
+
+  return row ?? null;
 };
 
 export const createOrReplayTransaction = async (
@@ -650,12 +692,15 @@ export const createOrReplayTransaction = async (
     }
   }
   if (touchedCpgIds.size > 0) {
-    await touchStoreCpgRelations({
-      storeId: payload.storeId,
-      cpgIds: [...touchedCpgIds],
-      source: 'first_activity',
-      touchedAt: new Date(),
-    });
+    await touchStoreCpgRelations(
+      {
+        storeId: payload.storeId,
+        cpgIds: [...touchedCpgIds],
+        source: 'first_activity',
+        touchedAt: new Date(),
+      },
+      database,
+    );
   }
 
   await database.insert(transactionItems).values(
@@ -677,15 +722,6 @@ export const createOrReplayTransaction = async (
 
   if (resolvedCard && resolvedUserId) {
     const now = new Date();
-    const [existingBalance] = (await database
-      .select()
-      .from(balances)
-      .where(eq(balances.cardId, resolvedCard.cardId))) as Array<{
-      id: string;
-      current: number;
-      lifetime: number;
-    }>;
-
     const campaignIds = await resolveEligibleCampaignIds(
       {
         userId: resolvedUserId,
@@ -702,12 +738,6 @@ export const createOrReplayTransaction = async (
       accumulationMode: 'count' | 'amount';
     }>;
     const campaignById = new Map(campaignRows.map((entry) => [entry.id, entry]));
-
-    const campaignBalanceRows = (await database
-      .select()
-      .from(campaignBalances)
-      .where(and(eq(campaignBalances.cardId, resolvedCard.cardId)))) as CampaignBalanceRow[];
-    const campaignBalanceById = new Map(campaignBalanceRows.map((row) => [row.campaignId, row]));
 
     const itemBrandByProduct = new Map(
       normalizedItems
@@ -748,10 +778,13 @@ export const createOrReplayTransaction = async (
       }
 
       // Check if store is participating in this campaign
-      const storeParticipating = await isStoreParticipatingInCampaign({
-        campaignId,
-        storeId: payload.storeId,
-      });
+      const storeParticipating = await isStoreParticipatingInCampaign(
+        {
+          campaignId,
+          storeId: payload.storeId,
+        },
+        database,
+      );
       if (!storeParticipating) {
         continue;
       }
@@ -778,7 +811,16 @@ export const createOrReplayTransaction = async (
           and(eq(campaignAccumulationRules.campaignId, campaignId), eq(campaignAccumulationRules.active, true)),
         )) as CampaignAccumulationRuleRow[];
 
-      const existingCampaignBalance = campaignBalanceById.get(campaignId);
+      const existingCampaignBalance = await lockCampaignBalance(
+        {
+          cardId: resolvedCard.cardId,
+          campaignId,
+        },
+        database,
+      );
+      if (!existingCampaignBalance) {
+        throw new Error('CAMPAIGN_BALANCE_LOCK_FAILED');
+      }
       let currentCampaignBalance = existingCampaignBalance?.current ?? 0;
       let lifetimeCampaignBalance = existingCampaignBalance?.lifetime ?? 0;
       const accumulatedByItem = new Map<string, number>();
@@ -960,46 +1002,31 @@ export const createOrReplayTransaction = async (
         });
       }
 
-      if (existingCampaignBalance) {
-        if (campaignAccumulated > 0) {
-          await database
-            .update(campaignBalances)
-            .set({
-              current: currentCampaignBalance,
-              lifetime: lifetimeCampaignBalance,
-              updatedAt: new Date(),
-            })
-            .where(eq(campaignBalances.id, existingCampaignBalance.id));
-        }
-      } else {
-        await database.insert(campaignBalances).values({
-          cardId: resolvedCard.cardId,
-          campaignId,
-          current: currentCampaignBalance,
-          lifetime: lifetimeCampaignBalance,
-          updatedAt: new Date(),
-        });
+      if (campaignAccumulated > 0) {
+        await database
+          .update(campaignBalances)
+          .set({
+            current: currentCampaignBalance,
+            lifetime: lifetimeCampaignBalance,
+            updatedAt: new Date(),
+          })
+          .where(eq(campaignBalances.id, existingCampaignBalance.id));
       }
     }
 
-    const currentTotalBalance = existingBalance?.current ?? 0;
-    const lifetimeTotalBalance = existingBalance?.lifetime ?? 0;
-    if (existingBalance) {
+    if (totalAccumulatedAcrossCampaigns > 0) {
+      const existingBalance = await lockBalanceForCard(resolvedCard.cardId, database);
+      if (!existingBalance) {
+        throw new Error('BALANCE_LOCK_FAILED');
+      }
       await database
         .update(balances)
         .set({
-          current: currentTotalBalance + totalAccumulatedAcrossCampaigns,
-          lifetime: lifetimeTotalBalance + totalAccumulatedAcrossCampaigns,
+          current: existingBalance.current + totalAccumulatedAcrossCampaigns,
+          lifetime: existingBalance.lifetime + totalAccumulatedAcrossCampaigns,
           updatedAt: new Date(),
         })
         .where(eq(balances.id, existingBalance.id));
-    } else {
-      await database.insert(balances).values({
-        cardId: resolvedCard.cardId,
-        current: totalAccumulatedAcrossCampaigns,
-        lifetime: totalAccumulatedAcrossCampaigns,
-        updatedAt: new Date(),
-      });
     }
 
     if (accumulationRows.length > 0) {
@@ -1015,6 +1042,7 @@ export const createOrReplayTransaction = async (
       cardId: resolvedCard.cardId,
       campaignId: resolvedCard.baseCampaignId,
       at: now,
+      database,
     });
   }
 
@@ -1228,10 +1256,15 @@ export const transactionsModule = new Elysia({
         return validation.error;
       }
 
-      const outcome = await createOrReplayTransaction({
-        ...body,
-        catalogItems: validation.catalogItems,
-      });
+      const outcome = await db.transaction((tx) =>
+        createOrReplayTransaction(
+          {
+            ...body,
+            catalogItems: validation.catalogItems,
+          },
+          tx,
+        ),
+      );
       if (!outcome) {
         return status(500, {
           error: {
@@ -1389,10 +1422,31 @@ export const transactionsModule = new Elysia({
         return validation.error;
       }
 
-      const outcome = await createOrReplayTransaction({
-        ...body,
-        idempotencyKey: hash,
-        catalogItems: validation.catalogItems,
+      const outcome = await db.transaction(async (tx) => {
+        const createdOutcome = await createOrReplayTransaction(
+          {
+            ...body,
+            idempotencyKey: hash,
+            catalogItems: validation.catalogItems,
+          },
+          tx,
+        );
+
+        if (!createdOutcome) {
+          return null;
+        }
+
+        await tx.insert(webhookReceipts).values({
+          source: body.source,
+          hash,
+          externalEventId: body.externalEventId ?? null,
+          transactionId: createdOutcome.transaction.id,
+          payload: rawPayload,
+          status: 'processed',
+          processedAt: new Date(),
+        });
+
+        return createdOutcome;
       });
 
       if (!outcome) {
@@ -1403,16 +1457,6 @@ export const transactionsModule = new Elysia({
           },
         });
       }
-
-      await db.insert(webhookReceipts).values({
-        source: body.source,
-        hash,
-        externalEventId: body.externalEventId ?? null,
-        transactionId: outcome.transaction.id,
-        payload: rawPayload,
-        status: 'processed',
-        processedAt: new Date(),
-      });
 
       const namedAccumulations = await attachCampaignNamesToAccumulations(outcome.accumulations);
       return status(outcome.statusCode, {

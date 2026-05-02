@@ -1,5 +1,5 @@
-import { and, desc, eq, gt } from 'drizzle-orm';
-import { db } from '../db/client';
+import { and, desc, eq, gt, or } from 'drizzle-orm';
+import { db, type Database } from '../db/client';
 import { accumulations, campaignTiers, cards, tierBenefits, transactionItems } from '../db/schema';
 
 type TierRow = {
@@ -147,10 +147,12 @@ export const evaluateCardTier = async (params: {
   cardId: string;
   campaignId: string;
   at?: Date;
+  database?: Database;
 }): Promise<TierEvaluationResult> => {
   const now = params.at ?? new Date();
+  const database = params.database ?? db;
 
-  const [card] = (await db
+  const [card] = (await database
     .select({
       id: cards.id,
       currentTierId: cards.currentTierId,
@@ -169,14 +171,14 @@ export const evaluateCardTier = async (params: {
     };
   }
 
-  const tiers = (await db
+  const tiers = (await database
     .select()
     .from(campaignTiers)
     .where(eq(campaignTiers.campaignId, params.campaignId))
     .orderBy(desc(campaignTiers.order), desc(campaignTiers.thresholdValue))) as TierRow[];
 
   if (tiers.length === 0) {
-    await db
+    await database
       .update(cards)
       .set({
         currentTierId: null,
@@ -210,7 +212,7 @@ export const evaluateCardTier = async (params: {
 
   const rangeStart = maxWindowTier ? subtractWindow(now, maxWindowTier.windowUnit, maxWindowTier.windowValue) : now;
   const rangeStartInclusive = new Date(rangeStart.getTime() - 1);
-  const accrualRows = (await db
+  const accrualRows = (await database
     .select({
       transactionItemId: accumulations.transactionItemId,
       createdAt: accumulations.createdAt,
@@ -230,7 +232,7 @@ export const evaluateCardTier = async (params: {
   const itemRows =
     itemIds.length === 0
       ? []
-      : ((await db
+      : ((await database
           .select({
             id: transactionItems.id,
             transactionId: transactionItems.transactionId,
@@ -238,7 +240,7 @@ export const evaluateCardTier = async (params: {
             quantity: transactionItems.quantity,
           })
           .from(transactionItems)
-          .where(and(...itemIds.map((id) => eq(transactionItems.id, id))))) as Array<{
+          .where(or(...itemIds.map((id) => eq(transactionItems.id, id))))) as Array<{
           id: string;
           transactionId: string;
           amount: number;
@@ -300,7 +302,7 @@ export const evaluateCardTier = async (params: {
     nextTierId !== card.currentTierId ||
     (nextGraceUntil?.toISOString() ?? null) !== (card.tierGraceUntil?.toISOString() ?? null);
 
-  await db
+  await database
     .update(cards)
     .set({
       currentTierId: nextTierId,
@@ -310,7 +312,7 @@ export const evaluateCardTier = async (params: {
     .where(eq(cards.id, params.cardId));
 
   const tierBenefitsRows = nextTierId
-    ? ((await db.select().from(tierBenefits).where(eq(tierBenefits.tierId, nextTierId))) as TierBenefitRow[])
+    ? ((await database.select().from(tierBenefits).where(eq(tierBenefits.tierId, nextTierId))) as TierBenefitRow[])
     : [];
   const currentTier = tiers.find((entry) => entry.id === nextTierId) ?? null;
 

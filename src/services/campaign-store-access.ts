@@ -1,5 +1,5 @@
 import { and, eq, or } from 'drizzle-orm';
-import { db } from '../db/client';
+import { db, type Database } from '../db/client';
 import { campaignStoreEnrollments, campaigns } from '../db/schema';
 import { isStoreRelatedToCpg } from './store-cpg-relations';
 
@@ -8,8 +8,11 @@ export type CampaignStoreEnrollmentStatus = 'visible' | 'invited' | 'enrolled' |
 export const STORE_VISIBLE_STATUSES = ['visible', 'invited', 'enrolled'] as const;
 export const STORE_PARTICIPATING_STATUSES = ['enrolled'] as const;
 
-export const isStoreVisibleForCampaign = async (payload: { campaignId: string; storeId: string }) => {
-  const [campaign] = (await db
+export const isStoreVisibleForCampaign = async (
+  payload: { campaignId: string; storeId: string },
+  database: Database = db,
+) => {
+  const [campaign] = (await database
     .select({
       id: campaigns.id,
       cpgId: campaigns.cpgId,
@@ -30,10 +33,10 @@ export const isStoreVisibleForCampaign = async (payload: { campaignId: string; s
   }
 
   if (campaign.storeAccessMode === 'all_related_stores') {
-    return isStoreRelatedToCpg(payload.storeId, campaign.cpgId);
+    return isStoreRelatedToCpg(payload.storeId, campaign.cpgId, database);
   }
 
-  const [enrollment] = (await db
+  const [enrollment] = (await database
     .select({ id: campaignStoreEnrollments.id })
     .from(campaignStoreEnrollments)
     .where(
@@ -48,8 +51,11 @@ export const isStoreVisibleForCampaign = async (payload: { campaignId: string; s
   return Boolean(enrollment);
 };
 
-export const getStoreEnrollmentForCampaign = async (payload: { campaignId: string; storeId: string }) => {
-  const [row] = (await db
+export const getStoreEnrollmentForCampaign = async (
+  payload: { campaignId: string; storeId: string },
+  database: Database = db,
+) => {
+  const [row] = (await database
     .select()
     .from(campaignStoreEnrollments)
     .where(
@@ -78,8 +84,11 @@ export const getStoreEnrollmentForCampaign = async (payload: { campaignId: strin
   return row ?? null;
 };
 
-export const isStoreParticipatingInCampaign = async (payload: { campaignId: string; storeId: string }) => {
-  const [campaign] = (await db
+export const isStoreParticipatingInCampaign = async (
+  payload: { campaignId: string; storeId: string },
+  database: Database = db,
+) => {
+  const [campaign] = (await database
     .select({
       id: campaigns.id,
       cpgId: campaigns.cpgId,
@@ -106,7 +115,7 @@ export const isStoreParticipatingInCampaign = async (payload: { campaignId: stri
   }
 
   if (campaign.storeAccessMode === 'all_related_stores') {
-    const related = await isStoreRelatedToCpg(payload.storeId, campaign.cpgId);
+    const related = await isStoreRelatedToCpg(payload.storeId, campaign.cpgId, database);
     if (!related) {
       return false;
     }
@@ -116,7 +125,7 @@ export const isStoreParticipatingInCampaign = async (payload: { campaignId: stri
     }
   }
 
-  const [enrollment] = (await db
+  const [enrollment] = (await database
     .select({ id: campaignStoreEnrollments.id })
     .from(campaignStoreEnrollments)
     .where(

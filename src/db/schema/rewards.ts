@@ -1,4 +1,4 @@
-import { index, integer, pgEnum, pgTable, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { index, integer, pgEnum, pgTable, text, timestamp, uniqueIndex, uuid, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { campaignTiers } from './campaign-tiers';
 import { campaigns } from './campaigns';
@@ -43,6 +43,7 @@ export const rewards = pgTable(
     index('rewards_campaign_idx').on(table.campaignId),
     index('rewards_status_idx').on(table.status),
     index('rewards_created_at_idx').on(table.createdAt),
+    index('rewards_campaign_status_created_idx').on(table.campaignId, table.status, table.createdAt),
   ],
 );
 
@@ -64,9 +65,11 @@ export const redemptions = pgTable(
     completedAt: timestamp('completed_at', { withTimezone: true }),
   },
   (table: RedemptionsTable) => [
+    uniqueIndex('redemptions_card_reward_key').on(table.cardId, table.rewardId),
     index('redemptions_card_idx').on(table.cardId),
     index('redemptions_reward_idx').on(table.rewardId),
     index('redemptions_status_idx').on(table.status),
     index('redemptions_created_at_idx').on(table.createdAt),
+    index('redemptions_reward_created_idx').on(table.rewardId, table.createdAt),
   ],
 );
