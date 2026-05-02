@@ -748,16 +748,16 @@ const buildAddress = (addr: SeedStoreAddress): string => {
 const TOTAL_SEED_STORES = 100;
 const RELATED_SEED_STORES = 50;
 const PRIMARY_STORE_CODES: Record<SeedScope, string> = {
-  development: 'JUANITA_DEV',
-  local: 'JUANITA_LOCAL',
-  staging: 'JUANITA_STG',
-  test: 'JUANITA_TEST',
+  development: 'JUANITA',
+  local: 'JUANITA',
+  staging: 'JUANITA',
+  test: 'JUANITA',
 };
 const SECONDARY_STORE_CODES: Record<SeedScope, string> = {
-  development: 'DON_PEPE_DEV',
-  local: 'DON_PEPE_LOCAL',
-  staging: 'DON_PEPE_STG',
-  test: 'DON_PEPE_TEST',
+  development: 'DON_PEPE',
+  local: 'DON_PEPE',
+  staging: 'DON_PEPE',
+  test: 'DON_PEPE',
 };
 const SEED_STORE_NAMES = [
   'Abarrotes Juanita',
@@ -834,7 +834,7 @@ const buildSeedStoreVariants = (scope: string, count: number): SeedStorePayload[
     const baseStoreName = SEED_STORE_NAMES[index % SEED_STORE_NAMES.length]!;
 
     variants.push({
-      code: normalizePublicCode(`${scope}_${codeSuffix}_${baseStoreName}`),
+      code: normalizePublicCode(`${baseStoreName}_${codeSuffix}`),
       name: `${baseStoreName} ${codeSuffix}`,
       type: base.type,
       address: buildAddress(storeRecord),
@@ -941,7 +941,7 @@ const upsertSeedBrand = async (scope: string, cpgId: string): Promise<string> =>
 };
 
 const upsertSeedProduct = async (scope: string, brandId: string): Promise<string> => {
-  const sku = `SEED-${scope.toUpperCase()}-001`;
+  const sku = SEED_CATALOG[0]!.sku;
   const seedProduct = SEED_CATALOG[0]!;
 
   const [existing] = (await db
@@ -1301,12 +1301,12 @@ const upsertSeedCatalog = async (scope: string, cpgId: string) => {
 
   for (const item of SEED_CATALOG) {
     const brandId = await upsertBrandByName(cpgId, `${item.brandName}`);
-    const productId = await upsertProductBySku(brandId, `${item.sku}-${scope.toUpperCase()}`, `${item.name}`);
+    const productId = await upsertProductBySku(brandId, item.sku, `${item.name}`);
 
     catalogEntries.push({
       productId,
       brandId,
-      sku: `${item.sku}-${scope.toUpperCase()}`,
+      sku: item.sku,
       name: `${item.name}`,
       price: item.price,
     });
@@ -2272,35 +2272,23 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
     const cpg2BrandId = await upsertBrandByName(cpg2Id, `Bebidas Norte`);
     const cpg2Catalog = [
       {
-        productId: await upsertProductBySku(
-          cpg2BrandId,
-          `RDN-MINERAL-500-${scope.toUpperCase()}`,
-          `Agua Mineral 500 ml`,
-        ),
+        productId: await upsertProductBySku(cpg2BrandId, 'RDN-MINERAL-500', `Agua Mineral 500 ml`),
         brandId: cpg2BrandId,
-        sku: `RDN-MINERAL-500-${scope.toUpperCase()}`,
+        sku: 'RDN-MINERAL-500',
         name: `Agua Mineral 500 ml`,
         price: 12,
       },
       {
-        productId: await upsertProductBySku(
-          cpg2BrandId,
-          `RDN-JUGO-NARANJA-330-${scope.toUpperCase()}`,
-          `Jugo Naranja 330 ml`,
-        ),
+        productId: await upsertProductBySku(cpg2BrandId, 'RDN-JUGO-NARANJA-330', `Jugo Naranja 330 ml`),
         brandId: cpg2BrandId,
-        sku: `RDN-JUGO-NARANJA-330-${scope.toUpperCase()}`,
+        sku: 'RDN-JUGO-NARANJA-330',
         name: `Jugo Naranja 330 ml`,
         price: 22,
       },
       {
-        productId: await upsertProductBySku(
-          cpg2BrandId,
-          `RDN-ISOTONIC-600-${scope.toUpperCase()}`,
-          `Bebida Isotónica 600 ml`,
-        ),
+        productId: await upsertProductBySku(cpg2BrandId, 'RDN-ISOTONIC-600', `Bebida Isotónica 600 ml`),
         brandId: cpg2BrandId,
-        sku: `RDN-ISOTONIC-600-${scope.toUpperCase()}`,
+        sku: 'RDN-ISOTONIC-600',
         name: `Bebida Isotónica 600 ml`,
         price: 28,
       },
@@ -2372,42 +2360,30 @@ export const seedUsers = async (scope: 'development' | 'local' | 'staging' | 'te
     const cpg3BrandId = await upsertBrandByName(cpg3Id, `Abarrotes Universal`);
     const cpg3Catalog = [
       {
-        productId: await upsertProductBySku(cpg3BrandId, `GAU-ARROZ-1KG-${scope.toUpperCase()}`, `Arroz Blanco 1 kg`),
+        productId: await upsertProductBySku(cpg3BrandId, 'GAU-ARROZ-1KG', `Arroz Blanco 1 kg`),
         brandId: cpg3BrandId,
-        sku: `GAU-ARROZ-1KG-${scope.toUpperCase()}`,
+        sku: 'GAU-ARROZ-1KG',
         name: `Arroz Blanco 1 kg`,
         price: 28,
       },
       {
-        productId: await upsertProductBySku(
-          cpg3BrandId,
-          `GAU-FRIJOL-900G-${scope.toUpperCase()}`,
-          `Frijol Negro 900 g`,
-        ),
+        productId: await upsertProductBySku(cpg3BrandId, 'GAU-FRIJOL-900G', `Frijol Negro 900 g`),
         brandId: cpg3BrandId,
-        sku: `GAU-FRIJOL-900G-${scope.toUpperCase()}`,
+        sku: 'GAU-FRIJOL-900G',
         name: `Frijol Negro 900 g`,
         price: 34,
       },
       {
-        productId: await upsertProductBySku(
-          cpg3BrandId,
-          `GAU-ACEITE-900ML-${scope.toUpperCase()}`,
-          `Aceite Vegetal 900 ml`,
-        ),
+        productId: await upsertProductBySku(cpg3BrandId, 'GAU-ACEITE-900ML', `Aceite Vegetal 900 ml`),
         brandId: cpg3BrandId,
-        sku: `GAU-ACEITE-900ML-${scope.toUpperCase()}`,
+        sku: 'GAU-ACEITE-900ML',
         name: `Aceite Vegetal 900 ml`,
         price: 42,
       },
       {
-        productId: await upsertProductBySku(
-          cpg3BrandId,
-          `GAU-AZUCAR-1KG-${scope.toUpperCase()}`,
-          `Azúcar Estándar 1 kg`,
-        ),
+        productId: await upsertProductBySku(cpg3BrandId, 'GAU-AZUCAR-1KG', `Azúcar Estándar 1 kg`),
         brandId: cpg3BrandId,
-        sku: `GAU-AZUCAR-1KG-${scope.toUpperCase()}`,
+        sku: 'GAU-AZUCAR-1KG',
         name: `Azúcar Estándar 1 kg`,
         price: 26,
       },
